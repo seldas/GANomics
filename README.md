@@ -2,7 +2,7 @@
 
 GANomics is a Generative Adversarial Network (GAN) framework designed for bidirectional translation between legacy (Microarray) and modern (RNA-seq) transcriptomic platforms. By integrating paired and unpaired samples through a novel **pair-aware feedback loss**, GANomics enforces one-to-one transcript mappings while preserving global gene expression distributions.
 
-This repository contains the refactored, modular Python implementation supporting the methodologies and results described in the manuscript: **"GANomics: Bridging Legacy and Modern Transcriptomic Platforms for Clinical Applications"**.
+This repository contains the refactored, modular Python implementation supporting the methodologies and results described in the manuscript: **"GANomics: Bridging Legacy and Modern Transcriptomic Platforms for Clinical Applications"**. [under review]
 
 ---
 
@@ -84,10 +84,31 @@ python scripts/preprocess.py --datasets NB METSIM
 
 ### 2. Train GANomics
 ```bash
+# Neuroblastoma (NB)
 python scripts/train.py --config configs/nb_config.yaml
+
+# METSIM
+python scripts/train.py --config configs/metsim_config.yaml
+
+# NCI60
+python scripts/train.py --config configs/nci60_1_config.yaml
 ```
 
-### 3. Evaluate and Generate Sync Data
+### 3. Ablation Study (Sample Size)
+A key finding in the GANomics paper is the relationship between the number of available paired samples and translation accuracy. The `scripts/run_ablation.py` script automates this study by training multiple models with varying subset sizes (e.g., 10 to 400 samples).
+
+To reproduce this experiment:
+```bash
+python scripts/run_ablation.py --config configs/nb_config.yaml --sizes 10 20 50 100 400
+```
+
+**What this script does:**
+- **Dynamic Epoch Scaling:** Automatically increases `n_epochs` for smaller sample sizes (e.g., 500 epochs for 10 samples vs. 100 epochs for 400 samples) to ensure convergence.
+- **Isolated Checkpoints:** Saves distinct model weights for each size in `results/checkpoints/NB_GANomics_{size}/`.
+- **Systematic Naming:** Overrides the configuration names to match the sample size being tested.
+
+### 4. Evaluate and Generate Sync Data
+
 ```bash
 python scripts/test_sync.py --config configs/nb_config.yaml --checkpoint results/checkpoints/NB_GANomics_50/net_latest.pth
 ```

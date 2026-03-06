@@ -1,0 +1,38 @@
+# GANomics Training Configuration for METSIM Dataset
+
+# Model Parameters
+model:
+  input_nc: 6801
+  output_nc: 6801
+  lambda_A: 10.0
+  lambda_B: 10.0
+  lambda_feedback: 10.0
+  lambda_idt: 0.5
+  gan_mode: 'lsgan'
+
+# Optimizer Parameters
+optimizer:
+  lr: 0.0002
+  beta1: 0.5
+  beta2: 0.999
+
+# Training Parameters
+train:
+  n_epochs: 100
+  n_epochs_decay: 100
+  batch_size: 1
+  device: 'cuda:0'
+  seed: 42
+  print_freq: 10
+  save_epoch_freq: 20
+
+# Dataset Parameters
+dataset:
+  path_A: 'data/processed/METSIM_A.csv'
+  path_B: 'data/processed/METSIM_B.csv'
+
+# Output Parameters
+output:
+  checkpoints_dir: 'results/checkpoints'
+  name: 'METSIM_GANomics'
+  logs_dir: 'results/logs'

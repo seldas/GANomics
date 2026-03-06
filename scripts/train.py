@@ -10,12 +10,26 @@ from src.models.ganomics_model import GANomicsModel
 def parse_args():
     parser = argparse.ArgumentParser(description="Train GANomics Model")
     parser.add_argument("--config", type=str, required=True, help="Path to YAML configuration file")
+    parser.add_argument("--max_samples", type=int, help="Override max_samples in config")
+    parser.add_argument("--name", type=str, help="Override output name in config")
+    parser.add_argument("--n_epochs", type=int, help="Override n_epochs in config")
+    parser.add_argument("--n_epochs_decay", type=int, help="Override n_epochs_decay in config")
     return parser.parse_args()
 
 def train():
     args = parse_args()
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
+
+    # CLI Overrides
+    if args.max_samples:
+        config['dataset']['max_samples'] = args.max_samples
+    if args.name:
+        config['output']['name'] = args.name
+    if args.n_epochs:
+        config['train']['n_epochs'] = args.n_epochs
+    if args.n_epochs_decay:
+        config['train']['n_epochs_decay'] = args.n_epochs_decay
 
     # Set device
     device = torch.device(config['train'].get('device', 'cpu') if torch.cuda.is_available() else 'cpu')
