@@ -1,0 +1,5 @@
+File description
+NB_AG_121.txt: Microarray dataset (10042 by 498, normalized data)
+NB_NGS_121.txt: RNA-seq dataset (10042 by 498, normalized data)
+NBT_1ma_1ngs.txt: the mapping between 10042 microarray probes and RNA-seq reads
+SEQC_NB_249_ValidationSamples_ClinicalInfo_20121128.txt: clinical information about 498 samples. 
