@@ -72,34 +72,52 @@ def train():
     explosion_factor = config['train'].get('explosion_factor', 3.0)
     
     best_loss = float('inf')
+    loss_history = []
     
-    for epoch in range(1, total_epochs + 1):
+    epoch = 1
+    while epoch <= total_epochs:
         epoch_start_time = time.time()
         
         for i, data in enumerate(dataloader):
             model.set_input(data)
             model.optimize_parameters()
             
+            losses = model.get_current_losses()
+            curr_total = losses.get('G_total', 0)
+            loss_history.append(curr_total)
+            
+            # explosion check (vs rolling mean of last 50 iters)
+            if len(loss_history) > 50:
+                avg_recent = sum(loss_history[-50:]) / 50
+                if curr_total > explosion_factor * avg_recent:
+                    print(f"!!! Loss explosion detected (G_total={curr_total:.2f}, avg={avg_recent:.2f})")
+                    print(f"!!! Rolling back to net_latest.pth and resuming...")
+                    
+                    # Rollback
+                    latest_path = os.path.join(save_dir, "net_latest.pth")
+                    if os.path.exists(latest_path):
+                        model.load_networks(latest_path)
+                        # Optional: reduce LR
+                        for optimizer in [model.optimizer_G, model.optimizer_D]:
+                            for param_group in optimizer.param_groups:
+                                param_group['lr'] *= 0.5
+                                
+                        loss_history = [] # reset history
+                        # We don't increment epoch; we just restart this epoch or continue
+                        continue 
+
             if i % config['train']['print_freq'] == 0:
-                losses = model.get_current_losses()
-                curr_total = losses.get('G_total', 0)
                 print(f"Epoch {epoch}/{total_epochs}, Iter {i}, G_total: {curr_total:.4f}")
                 
-                # Simple explosion check (from original logic)
-                if curr_total > explosion_factor * best_loss and best_loss != float('inf'):
-                    print(f"Warning: Loss explosion detected at Epoch {epoch} Iter {i}!")
-                    # In a real scenario, we might reload 'latest' here.
-                    
-                if curr_total < best_loss:
-                    best_loss = curr_total
-
         print(f"End of epoch {epoch} / {total_epochs} \t Time Taken: {time.time() - epoch_start_time:.2f} sec")
 
         if epoch % config['train']['save_epoch_freq'] == 0:
             save_path = os.path.join(save_dir, f"net_epoch_{epoch}.pth")
             model.save_networks(save_path)
             model.save_networks(os.path.join(save_dir, "net_latest.pth"))
-            print(f"Saved checkpoint to {save_path}")
+            print(f"Saved stable checkpoint to {save_path}")
+        
+        epoch += 1 # Only increment if successful
 
 if __name__ == "__main__":
     train()
