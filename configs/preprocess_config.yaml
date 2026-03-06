@@ -1,0 +1,40 @@
+# Configuration for Data Preprocessing (Starting from Raw GEO/Synapse-like files)
+
+output_root: 'dataset'
+
+datasets:
+  NB:
+    path_A: 'dataset/RAW/GSE49710_series_matrix.txt'
+    path_B: 'dataset/RAW/GSE49711_series_matrix.txt'
+    output_subfolder: 'NB'
+    # annotation_A: 'dataset/RAW/GPL16876.txt'
+    # probe_col_A: 'ID'
+    # symbol_col_A: 'GeneSymbol'
+
+  METSIM:
+    path_A: 'dataset/RAW/GSE70353_series_matrix.txt'
+    path_B: 'dataset/RAW/GSE135134_series_matrix.txt'
+    output_subfolder: 'METSIM'
+
+  NCI60_1:
+    path_A: 'dataset/RAW/RNA__Affy_HG_U133_Plus_2.0_RMA.xls'
+    path_B: 'dataset/RAW/RNA__RNA_seq_composite_expression.xls'
+    output_subfolder: 'NCI60'
+    probe_col_A: 'Probe id'
+    symbol_col_A: 'Gene name d'
+    probe_col_B: 'Probe id'
+    symbol_col_B: 'Gene name d'
+
+  NCI60_2:
+    path_A: 'dataset/RAW/NCI60_U133(A_B).xls'
+    path_B: 'dataset/RAW/NCI60_NGS.xls'
+    output_subfolder: 'NCI60'
+    probe_col_A: 'Probe id'
+    symbol_col_A: 'Gene name d'
+
+  NCI60_3:
+    path_A: 'dataset/RAW/NCI60_U95(A_E).xls'
+    path_B: 'dataset/RAW/NCI60_NGS.xls'
+    output_subfolder: 'NCI60'
+    probe_col_A: 'Entrez gene id e'
+    symbol_col_A: 'Gene name d'

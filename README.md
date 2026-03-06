@@ -2,7 +2,7 @@
 
 GANomics is a Generative Adversarial Network (GAN) framework designed for bidirectional translation between legacy (Microarray) and modern (RNA-seq) transcriptomic platforms. By integrating paired and unpaired samples through a novel **pair-aware feedback loss**, GANomics enforces one-to-one transcript mappings while preserving global gene expression distributions.
 
-This repository contains the refactored, modular Python implementation supporting the methodologies and results described in the manuscript: **"GANomics: Bridging Legacy and Modern Transcriptomic Platforms for Clinical Applications"**. [under review]
+This repository contains the refactored, modular Python implementation supporting the methodologies and results described in the manuscript: **"GANomics: Bridging Legacy and Modern Transcriptomic Platforms for Clinical Applications"**.
 
 ---
 
@@ -14,12 +14,43 @@ This repository contains the refactored, modular Python implementation supportin
 
 ---
 
+## 📊 Datasets & Data Sources
+
+GANomics has been validated across multiple benchmark cohorts. Raw and processed gene expression profiles can be retrieved from the following sources:
+
+### 1. Neuroblastoma (NB)
+The primary benchmark dataset curated by the MAQC/SEQC consortium, consisting of 498 primary samples.
+- **Microarray:** [GEO GSE49710](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE49710)
+- **RNA-seq:** [GEO GSE49711](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE49711)
+
+### 2. TCGA (BRCA, LUSC, LAML)
+Validation on The Cancer Genome Atlas cohorts retrieved via Synapse.
+- **BRCA Microarray:** [syn2319914](https://www.synapse.org/#!Synapse:syn2319914)
+- **BRCA RNA-seq:** [syn2320006](https://www.synapse.org/#!Synapse:syn2320006) and [syn2320114](https://www.synapse.org/#!Synapse:syn2320114)
+- **LUSC/LAML:** Retrieved from Synapse (Search by cohort ID).
+
+### 3. NCI-60
+A panel of 60 human cancer cell lines with multiple platform profiles.
+- **Platforms:** Affymetrix HG-U133 Plus 2.0, HG-U133(A-B), and HG-U95(A-E).
+- **Source:** [NCI CellMiner](https://discover.nci.nih.gov/cellminer/loadDownload.do)
+
+### 4. METSIM
+Adipose tissue gene expression from the Metabolic Syndrome in Men cohort.
+- **Microarray:** [GEO GSE70353](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE70353)
+- **RNA-seq:** [GEO GSE135134](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE135134)
+
+---
+
 ## 📁 Project Structure
 
 ```text
 GANomics/
-├── configs/            # YAML configurations for experiments (e.g., nb_config.yaml)
-├── data/               # Raw and processed genomic datasets
+├── configs/            # YAML configurations for experiments and preprocessing
+├── dataset/            # Genomic data root
+│   ├── RAW/            # Raw GEO/Synapse downloads (GSExxxx_series_matrix.txt, etc.)
+│   ├── NB/             # Processed Neuroblastoma dataset (CSV/TSV)
+│   ├── METSIM/         # Processed METSIM dataset (CSV/TSV)
+│   └── NCI60/          # Processed NCI-60 dataset (CSV/TSV)
 ├── results/            # Systematic output storage
 │   ├── checkpoints/    # Trained model weights (.pth)
 │   ├── figures/        # Manuscript-ready plots (PDF/PNG)
@@ -38,85 +69,41 @@ GANomics/
 
 ## 🛠️ Pipeline & Manuscript Alignment
 
-The following four scripts form the core GANomics pipeline. Each script is directly responsible for generating specific results found in the manuscript.
-
 ### 1. Data Preprocessing (`scripts/preprocess.py`)
-**Function:** Normalizes raw GEO/Synapse data and aligns Microarray/RNA-seq platforms.
-- **Manuscript Support:** 
-  - Generates **Table 1** (Dataset Overview for NB, TCGA, NCI-60, METSIM).
-  - Generates **Figure S1** (Normalization impact on METSIM).
+**Function:** Ingests raw files from `dataset/RAW`, aligns platforms, handles probe-to-symbol mapping, and saves processed matrices into cohort-specific folders (e.g., `dataset/NB/`).
+```bash
+python scripts/preprocess.py --config configs/preprocess_config.yaml
+```
+- **Note:** The files currently in `dataset/NB`, `dataset/METSIM`, and `dataset/NCI60` are already processed and ready for immediate use.
+- **Manuscript Support:** Generates **Table 1** (Dataset Overview) and **Figure S1**.
 
 ### 2. Model Training (`scripts/train.py`)
-**Function:** Executes GANomics training using the pair-aware feedback loss. Supports variable sample sizes (10, 50, 100).
-- **Manuscript Support:** 
-  - Generates **Figure 2** (Loss convergence and L1 distance monitoring).
-  - Supports **Figure 3** (Sample size requirement analysis).
-  - Supports **Figure 4** (Benchmarking against standard CycleGAN).
-
-### 3. Testing & Sync Generation (`scripts/test_sync.py`)
-**Function:** Generates synthetic "Sync Data" and benchmarks against legacy methods (TDM, QN, ComBat, etc.).
-- **Manuscript Support:** 
-  - Generates **Table 2 & 3** (Global performance metrics).
-  - Generates **Figure 5 & 6** (Concordance and cross-dataset generalization).
-  - Generates **Figure 7 & S2** (t-SNE co-localization plots).
-  - Generates **Figure 8** (PAM50 clinical signature alignment).
-
-### 4. Biomarker Discovery & Modeling (`scripts/biomarker.py`)
-**Function:** Performs DEG analysis, Pathway Enrichment, and Cross-Platform Classifier validation.
-- **Manuscript Support:** 
-  - Generates **Figure 9** (DEG overlaps and KEGG/Hallmark pathway enrichment).
-  - Generates **Figure 10** (Random Forest MCC performance histograms).
-  - Generates **Table 4 & S1** (Classifier diagnostic metrics: Recall, Precision, MCC).
-
----
-
-## ⚙️ Quick Start
-
-### Installation
+**Function:** Bidirectional training using pair-aware feedback loss.
 ```bash
-pip install -r requirements.txt
-```
-
-### 1. Preprocess Data
-```bash
-python scripts/preprocess.py --datasets NB METSIM
-```
-
-### 2. Train GANomics
-```bash
-# Neuroblastoma (NB)
 python scripts/train.py --config configs/nb_config.yaml
-
-# METSIM
-python scripts/train.py --config configs/metsim_config.yaml
-
-# NCI60
-python scripts/train.py --config configs/nci60_1_config.yaml
 ```
+- **Manuscript Support:** Generates **Figure 2** (Loss curves) and **Figure 4** (CycleGAN benchmark).
 
-### 3. Ablation Study (Sample Size)
-A key finding in the GANomics paper is the relationship between the number of available paired samples and translation accuracy. The `scripts/run_ablation.py` script automates this study by training multiple models with varying subset sizes (e.g., 10 to 400 samples).
-
-To reproduce this experiment:
+### 3. Ablation Study (`scripts/run_ablation.py`)
+**Function:** Investigates performance across multiple training sample sizes (10 to 400).
 ```bash
 python scripts/run_ablation.py --config configs/nb_config.yaml --sizes 10 20 50 100 400
 ```
+- **Manuscript Support:** Generates **Figure 3** and **Table 3**.
 
-**What this script does:**
-- **Dynamic Epoch Scaling:** Automatically increases `n_epochs` for smaller sample sizes (e.g., 500 epochs for 10 samples vs. 100 epochs for 400 samples) to ensure convergence.
-- **Isolated Checkpoints:** Saves distinct model weights for each size in `results/checkpoints/NB_GANomics_{size}/`.
-- **Systematic Naming:** Overrides the configuration names to match the sample size being tested.
-
-### 4. Evaluate and Generate Sync Data
-
+### 4. Testing & Sync Generation (`scripts/test_sync.py`)
+**Function:** Generates synthetic profiles and benchmarks against legacy methods.
 ```bash
-python scripts/test_sync.py --config configs/nb_config.yaml --checkpoint results/checkpoints/NB_GANomics_50/net_latest.pth
+python scripts/test_sync.py --config configs/nb_config.yaml --checkpoint results/checkpoints/NB_GANomics/net_latest.pth
 ```
+- **Manuscript Support:** Generates **Table 2** and **Figures 5, 6, 7, S2**.
 
-### 4. Run Biomarker Analysis
+### 5. Biomarker Discovery (`scripts/biomarker.py`)
+**Function:** DEG analysis, Pathway Enrichment (Hallmark/KEGG), and Classifier validation.
 ```bash
-python scripts/biomarker.py --real_A data/processed/NB_A.csv --syn_A results/tables/NB_syn_A.csv --labels dataset/NB/clinical_info.csv
+python scripts/biomarker.py --real_A data/processed/NB_A.csv ... --gmt datasets/h.all.v2023.gmt
 ```
+- **Manuscript Support:** Generates **Table 4** and **Figures 9, 10**.
 
 ---
 
