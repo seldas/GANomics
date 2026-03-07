@@ -20,6 +20,10 @@ Training the bidirectional translation model using the pair-aware feedback loss.
   ```bash
   python scripts/train.py --config configs/nb_config.yaml --name NB_Full_Training
   ```
+
+  ```bash
+  python scripts/run_ablation.py --config configs/nb_config.yaml --sizes 50 --repeats 1
+  ```
 - **Audit:** Verify `net_latest.pth` and `train_samples.txt` are created in `results/checkpoints/NB_Full_Training/`.
 
 ---

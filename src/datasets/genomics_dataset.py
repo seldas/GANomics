@@ -24,6 +24,12 @@ class GenomicsDataset(Dataset):
         self.df_A = self._load_df(path_A)
         self.df_B = self._load_df(path_B)
         
+        # Auto-transpose if Genes x Samples (Heuristic: Rows > Cols)
+        if self.df_A.shape[0] > self.df_A.shape[1]:
+            self.df_A = self.df_A.T
+        if self.df_B.shape[0] > self.df_B.shape[1]:
+            self.df_B = self.df_B.T
+        
         if self.force_index_mapping:
             if len(self.df_A.columns) != len(self.df_B.columns):
                 raise ValueError(f"Forced index mapping requires same number of genes. "
