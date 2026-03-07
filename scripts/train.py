@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument("--direction", type=str, default="both", choices=['both', 'AtoB', 'BtoA'], 
                         help="Training direction: both (bidirectional), AtoB (MA->RS), BtoA (RS->MA)")
     parser.add_argument("--seed", type=int, help="Random seed for data shuffling")
+    parser.add_argument("--device", type=str, help="Override device (e.g. cpu, cuda:0)")
     return parser.parse_args()
 
 def train():
