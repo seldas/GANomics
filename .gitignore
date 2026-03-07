@@ -1,6 +1,4 @@
-dataset/TCGA/*/*.tsv
-dataset/*/*.xlsx
-dataset/NB/*.txt
+dataset/
 venv/
 
 *.docx
@@ -9,3 +7,4 @@ results/logs/*
 results/sync_data/*
 
 __pycache__/
+results_old/
