@@ -51,7 +51,8 @@ def main():
     dataset = GenomicsDataset(
         config['dataset']['path_A'], 
         config['dataset']['path_B'], 
-        is_train=False
+        is_train=False,
+        force_index_mapping=config['dataset'].get('force_index_mapping', False)
     )
     
     genes = dataset.df_A.columns

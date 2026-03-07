@@ -48,14 +48,23 @@ def normalize_genomics(df, log2_transform=True, min_max=False):
         df = (df - df.min()) / (df.max() - df.min())
     return df
 
-def align_platforms(df_A, df_B):
+def align_platforms(df_A, df_B, force_index_mapping=True):
     """
     Align by common samples and common genes.
     """
-    # Common Genes (columns if transposed, but usually genes are indices initially)
-    common_genes = sorted(list(set(df_A.index) & set(df_B.index)))
-    df_A = df_A.loc[common_genes]
-    df_B = df_B.loc[common_genes]
+    if force_index_mapping:
+        if len(df_A) != len(df_B):
+            raise ValueError(f"Forced index mapping requires same number of genes. "
+                             f"A has {len(df_A)}, B has {len(df_B)}")
+        # Assume same order, rename B to A for consistency
+        df_B.index = df_A.index
+    else:
+        # Common Genes (columns if transposed, but usually genes are indices initially)
+        common_genes = sorted(list(set(df_A.index) & set(df_B.index)))
+        if len(common_genes) == 0:
+            raise ValueError("No common genes found. If they are already aligned by index, set force_index_mapping=True.")
+        df_A = df_A.loc[common_genes]
+        df_B = df_B.loc[common_genes]
     
     # Transpose for GANomics (Samples x Genes)
     df_A, df_B = df_A.T, df_B.T
@@ -89,7 +98,8 @@ def full_preprocess_pipeline(path_A, path_B, output_dir, name, config=None):
     df_B = handle_duplicates(df_B)
     
     # Align
-    df_A, df_B = align_platforms(df_A, df_B)
+    force_index_mapping = config.get('force_index_mapping', True) if config else True
+    df_A, df_B = align_platforms(df_A, df_B, force_index_mapping=force_index_mapping)
     
     # Normalize
     df_A = normalize_genomics(df_A)

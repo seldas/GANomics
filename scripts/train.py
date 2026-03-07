@@ -71,7 +71,8 @@ def train():
         config['dataset']['path_B'], 
         is_train=True,
         max_samples=config['dataset'].get('max_samples'),
-        random_seed=seed
+        random_seed=seed,
+        force_index_mapping=config['dataset'].get('force_index_mapping', False)
     )
     dataloader = DataLoader(dataset, batch_size=config['train']['batch_size'], shuffle=True)
     

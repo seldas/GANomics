@@ -9,23 +9,34 @@ class GenomicsDataset(Dataset):
     Dataset for genomic expression data (Microarray and RNA-seq).
     Supports loading from CSV/TSV files and provides paired/unpaired sampling.
     """
-    def __init__(self, path_A, path_B, is_train=True, max_samples=None, random_seed=None):
+    def __init__(self, path_A, path_B, is_train=True, max_samples=None, random_seed=None, force_index_mapping=True):
         """
         path_A: Path to domain A (e.g. Microarray) CSV/TSV
         path_B: Path to domain B (e.g. RNA-seq) CSV/TSV
         is_train: Whether in training mode (affects sampling)
         random_seed: Optional seed for reproducible shuffling of samples
+        force_index_mapping: If True, assume genes are already aligned by index
         """
         self.is_train = is_train
+        self.force_index_mapping = force_index_mapping
         
         # Load data (assuming CSV with index as sample IDs and columns as genes)
         self.df_A = self._load_df(path_A)
         self.df_B = self._load_df(path_B)
         
-        # Ensure genes are aligned
-        common_genes = self.df_A.columns.intersection(self.df_B.columns)
-        self.df_A = self.df_A[common_genes]
-        self.df_B = self.df_B[common_genes]
+        if self.force_index_mapping:
+            if len(self.df_A.columns) != len(self.df_B.columns):
+                raise ValueError(f"Forced index mapping requires same number of genes. "
+                                 f"A has {len(self.df_A.columns)}, B has {len(self.df_B.columns)}")
+            # Use columns from A for both
+            self.df_B.columns = self.df_A.columns
+        else:
+            # Ensure genes are aligned
+            common_genes = self.df_A.columns.intersection(self.df_B.columns)
+            if len(common_genes) == 0:
+                raise ValueError("No common genes found. If they are already aligned by index, set force_index_mapping=True.")
+            self.df_A = self.df_A[common_genes]
+            self.df_B = self.df_B[common_genes]
         
         # Randomize samples if seed provided
         all_samples = self.df_A.index.tolist()

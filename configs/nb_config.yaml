@@ -32,6 +32,7 @@ dataset:
   path_A: 'dataset/NB/NB_AG.csv'
   path_B: 'dataset/NB/NB_NGS.csv'
   max_samples: 500
+  force_index_mapping: true
 
 # Output Parameters
 output:
