@@ -82,14 +82,14 @@ def run_ablation():
     if args.betas:
         for beta in args.betas:
             base_name = f"{project_name}_Sensitivity_Beta_{beta}"
-            cmd = ["scripts/train.py", "--config", args.config, "--max_samples", "50", "--lambda_feedback", str(beta)]
+            cmd = ["scripts/train.py", "--config", args.config, "--max_samples", "50", "--n_epochs", "250", "--n_epochs_decay", "250", "--lambda_feedback", str(beta)]
             queue_repeats(cmd, base_name, f"Size: 50 | Beta: {beta}")
 
     # 3. Lambda Sensitivity
     if args.lambdas:
         for lam in args.lambdas:
             base_name = f"{project_name}_Sensitivity_Lambda_{lam}"
-            cmd = ["scripts/train.py", "--config", args.config, "--max_samples", "50", "--lambda_cycle", str(lam)]
+            cmd = ["scripts/train.py", "--config", args.config, "--max_samples", "50", "--n_epochs", "250", "--n_epochs_decay", "250", "--lambda_cycle", str(lam)]
             queue_repeats(cmd, base_name, f"Size: 50 | Lambda: {lam}")
 
     # 4. Architecture Ablation

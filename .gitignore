@@ -3,7 +3,6 @@ venv/
 
 *.docx
 results/checkpoints/*
-results/logs/*
 results/sync_data/*
 
 __pycache__/
