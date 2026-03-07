@@ -1,3 +1,4 @@
 dataset/TCGA/*/*.tsv
 dataset/*/*.xlsx
 dataset/NB/*.txt
+venv/
