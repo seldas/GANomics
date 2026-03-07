@@ -64,6 +64,13 @@ def train():
     os.makedirs(config['output']['checkpoints_dir'], exist_ok=True)
     save_dir = os.path.join(config['output']['checkpoints_dir'], config['output']['name'])
     os.makedirs(save_dir, exist_ok=True)
+    
+    log_dir = config['output'].get('logs_dir', 'results/logs')
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f"{config['output']['name']}_log.txt")
+    
+    with open(log_file, 'a') as f:
+        f.write(f"================ Training Loss ({time.ctime()}) ================\n")
 
     # Training Loop
     n_epochs = config['train']['n_epochs']
@@ -71,16 +78,20 @@ def train():
     total_epochs = n_epochs + n_epochs_decay
     explosion_factor = config['train'].get('explosion_factor', 3.0)
     
-    best_loss = float('inf')
     loss_history = []
-    
     epoch = 1
     while epoch <= total_epochs:
         epoch_start_time = time.time()
+        iter_data_time = time.time()
         
         for i, data in enumerate(dataloader):
+            iter_start_time = time.time()
+            t_data = iter_start_time - iter_data_time
+            
             model.set_input(data)
             model.optimize_parameters()
+            
+            t_comp = (time.time() - iter_start_time) / config['train']['batch_size']
             
             losses = model.get_current_losses()
             curr_total = losses.get('G_total', 0)
@@ -92,22 +103,28 @@ def train():
                 if curr_total > explosion_factor * avg_recent:
                     print(f"!!! Loss explosion detected (G_total={curr_total:.2f}, avg={avg_recent:.2f})")
                     print(f"!!! Rolling back to net_latest.pth and resuming...")
-                    
-                    # Rollback
                     latest_path = os.path.join(save_dir, "net_latest.pth")
                     if os.path.exists(latest_path):
                         model.load_networks(latest_path)
-                        # Optional: reduce LR
                         for optimizer in [model.optimizer_G, model.optimizer_D]:
                             for param_group in optimizer.param_groups:
                                 param_group['lr'] *= 0.5
-                                
-                        loss_history = [] # reset history
-                        # We don't increment epoch; we just restart this epoch or continue
+                        loss_history = []
                         continue 
 
             if i % config['train']['print_freq'] == 0:
-                print(f"Epoch {epoch}/{total_epochs}, Iter {i}, G_total: {curr_total:.4f}")
+                # Format log like example.txt
+                # (epoch: 2, iters: 50, time: 0.089, data: 0.182) D_A: 22.749 ...
+                log_msg = f"(epoch: {epoch}, iters: {i}, time: {t_comp:.3f}, data: {t_data:.3f}) "
+                for name in model.loss_names:
+                    val = losses.get(name, 0)
+                    log_msg += f"{name}: {val:.3f} "
+                
+                print(log_msg)
+                with open(log_file, 'a') as f:
+                    f.write(log_msg + "\n")
+            
+            iter_data_time = time.time()
                 
         print(f"End of epoch {epoch} / {total_epochs} \t Time Taken: {time.time() - epoch_start_time:.2f} sec")
 
