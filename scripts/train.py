@@ -166,11 +166,18 @@ def train():
                 
         print(f"End of epoch {epoch} / {total_epochs} \t Time Taken: {time.time() - epoch_start_time:.2f} sec")
 
-        if epoch % config['train']['save_epoch_freq'] == 0:
-            save_path = os.path.join(save_dir, f"net_epoch_{epoch}.pth")
+        if epoch % config['train']['save_epoch_freq'] == 0 or epoch == total_epochs:
+            save_path = os.path.join(save_dir, "net_latest.pth")
             model.save_networks(save_path)
-            model.save_networks(os.path.join(save_dir, "net_latest.pth"))
-            print(f"Saved stable checkpoint to {save_path}")
+            
+            # Save metadata about the run
+            info_path = os.path.join(save_dir, "training_info.txt")
+            with open(info_path, 'w') as f:
+                f.write(f"last_epoch: {epoch}\n")
+                f.write(f"total_epochs: {total_epochs}\n")
+                f.write(f"status: {'completed' if epoch == total_epochs else 'training'}\n")
+            
+            print(f"Updated latest checkpoint at epoch {epoch}")
         
         epoch += 1 # Only increment if successful
 
