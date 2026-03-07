@@ -3,6 +3,7 @@ dataset/*/*.xlsx
 dataset/NB/*.txt
 venv/
 
+*.docx
 results/checkpoints/*
 results/logs/*
 results/sync_data/*
