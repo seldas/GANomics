@@ -9,11 +9,12 @@ class GenomicsDataset(Dataset):
     Dataset for genomic expression data (Microarray and RNA-seq).
     Supports loading from CSV/TSV files and provides paired/unpaired sampling.
     """
-    def __init__(self, path_A, path_B, is_train=True, max_samples=None):
+    def __init__(self, path_A, path_B, is_train=True, max_samples=None, random_seed=None):
         """
         path_A: Path to domain A (e.g. Microarray) CSV/TSV
         path_B: Path to domain B (e.g. RNA-seq) CSV/TSV
         is_train: Whether in training mode (affects sampling)
+        random_seed: Optional seed for reproducible shuffling of samples
         """
         self.is_train = is_train
         
@@ -26,6 +27,13 @@ class GenomicsDataset(Dataset):
         self.df_A = self.df_A[common_genes]
         self.df_B = self.df_B[common_genes]
         
+        # Randomize samples if seed provided
+        all_samples = self.df_A.index.tolist()
+        if random_seed is not None:
+            random.Random(random_seed).shuffle(all_samples)
+            self.df_A = self.df_A.loc[all_samples]
+            self.df_B = self.df_B.loc[all_samples]
+
         if max_samples:
             self.df_A = self.df_A.head(max_samples)
             self.df_B = self.df_B.head(max_samples)

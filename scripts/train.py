@@ -14,6 +14,11 @@ def parse_args():
     parser.add_argument("--name", type=str, help="Override output name in config")
     parser.add_argument("--n_epochs", type=int, help="Override n_epochs in config")
     parser.add_argument("--n_epochs_decay", type=int, help="Override n_epochs_decay in config")
+    parser.add_argument("--lambda_cycle", type=float, help="Override cycle consistency weight (lambda)")
+    parser.add_argument("--lambda_feedback", type=float, help="Override feedback loss weight (beta)")
+    parser.add_argument("--direction", type=str, default="both", choices=['both', 'AtoB', 'BtoA'], 
+                        help="Training direction: both (bidirectional), AtoB (MA->RS), BtoA (RS->MA)")
+    parser.add_argument("--seed", type=int, help="Random seed for data shuffling")
     return parser.parse_args()
 
 def train():
@@ -30,19 +35,41 @@ def train():
         config['train']['n_epochs'] = args.n_epochs
     if args.n_epochs_decay:
         config['train']['n_epochs_decay'] = args.n_epochs_decay
+    if args.lambda_cycle is not None:
+        config['model']['lambda_A'] = args.lambda_cycle
+        config['model']['lambda_B'] = args.lambda_cycle
+    if args.lambda_feedback is not None:
+        config['model']['lambda_feedback'] = args.lambda_feedback
+    if args.seed is not None:
+        config['train']['seed'] = args.seed
+    
+    direction = args.direction
 
     # Set device
     device = torch.device(config['train'].get('device', 'cpu') if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
+
+    # Set Global Seeds
+    seed = config['train'].get('seed', 42)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
     # Create Dataset and DataLoader
     dataset = GenomicsDataset(
         config['dataset']['path_A'], 
         config['dataset']['path_B'], 
         is_train=True,
-        max_samples=config['dataset'].get('max_samples')
+        max_samples=config['dataset'].get('max_samples'),
+        random_seed=seed
     )
     dataloader = DataLoader(dataset, batch_size=config['train']['batch_size'], shuffle=True)
+    
+    # Audit Trail: Save training sample IDs
+    save_dir = os.path.join(config['output']['checkpoints_dir'], config['output']['name'])
+    os.makedirs(save_dir, exist_ok=True)
+    with open(os.path.join(save_dir, "train_samples.txt"), 'w') as f:
+        f.write("\n".join(dataset.samples_A))
     
     print(f"Number of training samples: {len(dataset)}")
 
@@ -57,7 +84,8 @@ def train():
         lambda_feedback=config['model']['lambda_feedback'],
         lambda_idt=config['model']['lambda_idt'],
         gan_mode=config['model']['gan_mode'],
-        device=device
+        device=device,
+        direction=direction
     )
 
     # Create Output Directories

@@ -73,24 +73,40 @@ def main():
     # 5. Save Sync Data
     # Convention: results/sync_data/{Project}_{sample_size}_{run_id}/
     sync_dir = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}")
-    os.makedirs(sync_dir, exist_ok=True)
     
-    df_real_A = pd.DataFrame(real_A, index=sample_names, columns=genes)
-    df_fake_A = pd.DataFrame(fake_A, index=sample_names, columns=genes)
-    df_real_B = pd.DataFrame(real_B, index=sample_names, columns=genes)
-    df_fake_B = pd.DataFrame(fake_B, index=sample_names, columns=genes)
+    # Automatic Train/Test Identification
+    train_samples_path = os.path.join(checkpoint_dir, "train_samples.txt")
+    if os.path.exists(train_samples_path):
+        with open(train_samples_path, 'r') as f:
+            train_ids = [line.strip() for line in f]
+        test_ids = [s for s in sample_names if s not in train_ids]
+        print(f"Audit Trail Found: {len(train_ids)} train samples, {len(test_ids)} unseen test samples.")
+    else:
+        # Fallback to simple split if audit trail missing
+        train_ids = sample_names[:args.sample_size].tolist()
+        test_ids = sample_names[args.sample_size:].tolist()
+        print(f"Warning: No audit trail found. Using default split at index {args.sample_size}.")
+
+    def save_subset(ids, subfolder):
+        if not ids: return
+        out_dir = os.path.join(sync_dir, subfolder)
+        os.makedirs(out_dir, exist_ok=True)
+        
+        pd.DataFrame(real_A, index=sample_names, columns=genes).loc[ids].to_csv(os.path.join(out_dir, "microarray_real.csv"))
+        pd.DataFrame(fake_A, index=sample_names, columns=genes).loc[ids].to_csv(os.path.join(out_dir, "microarray_fake.csv"))
+        pd.DataFrame(real_B, index=sample_names, columns=genes).loc[ids].to_csv(os.path.join(out_dir, "rnaseq_real.csv"))
+        pd.DataFrame(fake_B, index=sample_names, columns=genes).loc[ids].to_csv(os.path.join(out_dir, "rnaseq_fake.csv"))
+        print(f"Saved {subfolder} sync data ({len(ids)} samples) to {out_dir}")
+
+    save_subset(train_ids, "train")
+    save_subset(test_ids, "test")
     
-    df_real_A.to_csv(os.path.join(sync_dir, "microarray_real.csv"))
-    df_fake_A.to_csv(os.path.join(sync_dir, "microarray_fake.csv"))
-    df_real_B.to_csv(os.path.join(sync_dir, "rnaseq_real.csv"))
-    df_fake_B.to_csv(os.path.join(sync_dir, "rnaseq_fake.csv"))
-    
-    print(f"Sync data saved to {sync_dir}")
-    
-    # 6. Optional: Quick benchmark print
-    results_df = benchmark_all_methods(real_A, real_B, fake_A, fake_B)
-    print("\nSample Benchmarks:")
-    print(results_df)
+    # 6. Optional: Quick benchmark on UNSEEN samples
+    if test_ids:
+        test_idx = [list(sample_names).index(i) for i in test_ids]
+        results_df = benchmark_all_methods(real_A[test_idx], real_B[test_idx], fake_A[test_idx], fake_B[test_idx])
+        print("\nBenchmarks on UNSEEN samples:")
+        print(results_df)
 
 if __name__ == "__main__":
     main()

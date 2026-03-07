@@ -8,34 +8,32 @@ class GANomicsModel:
     """
     GANomics: A generative framework for bidirectional translation between 
     microarray and RNA-seq data using paired-aware feedback loss.
+    Supports 'bidirectional' (default) and 'one_way' modes.
     """
     def __init__(self, input_nc, output_nc, lr=0.0002, betas=(0.5, 0.999), 
                  lambda_A=10.0, lambda_B=10.0, lambda_feedback=10.0, 
-                 lambda_idt=0.5, gan_mode='lsgan', device='cpu'):
+                 lambda_idt=0.5, gan_mode='lsgan', device='cpu', direction='both'):
         
         self.device = device
+        self.direction = direction # 'both', 'AtoB', or 'BtoA'
         self.lambda_A = lambda_A
         self.lambda_B = lambda_B
         self.lambda_feedback = lambda_feedback
         self.lambda_idt = lambda_idt
         
         # Define Networks
-        # G_A: A -> B (Microarray -> RNA-seq)
-        # G_B: B -> A (RNA-seq -> Microarray)
-        self.netG_A = FullyConnectedGenerator(input_nc, output_nc)
-        self.netG_B = FullyConnectedGenerator(output_nc, input_nc)
+        self.netG_A = None
+        self.netG_B = None
+        self.netD_A = None
+        self.netD_B = None
+
+        if direction in ['both', 'AtoB']:
+            self.netG_A = setup_net(FullyConnectedGenerator(input_nc, output_nc), device=device)
+            self.netD_A = setup_net(FullyConnectedDiscriminator(output_nc), device=device)
         
-        self.netG_A = setup_net(self.netG_A, device=device)
-        self.netG_B = setup_net(self.netG_B, device=device)
-        
-        # Discriminators
-        # D_A: G_A(A) vs B
-        # D_B: G_B(B) vs A
-        self.netD_A = FullyConnectedDiscriminator(output_nc)
-        self.netD_B = FullyConnectedDiscriminator(input_nc)
-        
-        self.netD_A = setup_net(self.netD_A, device=device)
-        self.netD_B = setup_net(self.netD_B, device=device)
+        if direction in ['both', 'BtoA']:
+            self.netG_B = setup_net(FullyConnectedGenerator(output_nc, input_nc), device=device)
+            self.netD_B = setup_net(FullyConnectedDiscriminator(input_nc), device=device)
         
         # Losses
         self.criterionGAN = GANLoss(gan_mode).to(device)
@@ -44,32 +42,25 @@ class GANomicsModel:
         self.criterionFeedback = nn.L1Loss()
         
         # Optimizers
-        self.optimizer_G = torch.optim.Adam(
-            itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()),
-            lr=lr, betas=betas
-        )
-        self.optimizer_D = torch.optim.Adam(
-            itertools.chain(self.netD_A.parameters(), self.netD_B.parameters()),
-            lr=lr, betas=betas
-        )
+        g_params = []
+        d_params = []
+        if self.netG_A: g_params += list(self.netG_A.parameters())
+        if self.netG_B: g_params += list(self.netG_B.parameters())
+        if self.netD_A: d_params += list(self.netD_A.parameters())
+        if self.netD_B: d_params += list(self.netD_B.parameters())
+
+        self.optimizer_G = torch.optim.Adam(g_params, lr=lr, betas=betas)
+        self.optimizer_D = torch.optim.Adam(d_params, lr=lr, betas=betas)
         
         self.loss_names = ['G_A', 'G_B', 'D_A', 'D_B', 'cycle_A', 'cycle_B', 'feedback_A', 'feedback_B', 'idt_A', 'idt_B']
-        self.losses = {}
+        self.losses = {name: 0.0 for name in self.loss_names}
 
     def set_input(self, input):
-        """
-        input dict contains:
-        'A': source sample
-        'B': target sample (unpaired)
-        'medianB': paired target for A
-        'medianA': paired source for B
-        """
         self.real_A = input['A'].to(self.device)
         self.real_B = input['B'].to(self.device)
-        self.paired_B = input['medianB'].to(self.device) # paired counterpart for A
-        self.paired_A = input['medianA'].to(self.device) # paired counterpart for B
+        self.paired_B = input['medianB'].to(self.device) 
+        self.paired_A = input['medianA'].to(self.device) 
         
-        # Ensure correct dimensions for 1x1 convolutions (batch, channels, 1, 1)
         if self.real_A.dim() == 2:
             self.real_A = self.real_A.unsqueeze(-1).unsqueeze(-1)
             self.real_B = self.real_B.unsqueeze(-1).unsqueeze(-1)
@@ -77,96 +68,80 @@ class GANomicsModel:
             self.paired_A = self.paired_A.unsqueeze(-1).unsqueeze(-1)
 
     def forward(self):
-        # Forward cycles
-        self.fake_B = self.netG_A(self.real_A)  # G_A(A) -> B'
-        self.rec_A = self.netG_B(self.fake_B)   # G_B(G_A(A)) -> A''
+        if self.direction in ['both', 'AtoB']:
+            self.fake_B = self.netG_A(self.real_A)
+            if self.direction == 'both':
+                self.rec_A = self.netG_B(self.fake_B)
         
-        self.fake_A = self.netG_B(self.real_B)  # G_B(B) -> A'
-        self.rec_B = self.netG_A(self.fake_A)   # G_A(G_B(B)) -> B''
-
-    def backward_D_basic(self, netD, real, fake):
-        # Real
-        pred_real = netD(real)
-        loss_D_real = self.criterionGAN(pred_real, True)
-        # Fake
-        pred_fake = netD(fake.detach())
-        loss_D_fake = self.criterionGAN(pred_fake, False)
-        # Combined
-        loss_D = (loss_D_real + loss_D_fake) * 0.5
-        loss_D.backward()
-        return loss_D
+        if self.direction in ['both', 'BtoA']:
+            self.fake_A = self.netG_B(self.real_B)
+            if self.direction == 'both':
+                self.rec_B = self.netG_A(self.fake_A)
 
     def backward_D(self):
-        self.losses['D_A'] = self.backward_D_basic(self.netD_A, self.real_B, self.fake_B)
-        self.losses['D_B'] = self.backward_D_basic(self.netD_B, self.real_A, self.fake_A)
+        if self.netD_A:
+            self.losses['D_A'] = self.backward_D_basic(self.netD_A, self.real_B, self.fake_B)
+        if self.netD_B:
+            self.losses['D_B'] = self.backward_D_basic(self.netD_B, self.real_A, self.fake_A)
 
     def backward_G(self):
-        # Identity loss (optional)
-        if self.lambda_idt > 0:
-            # G_A should be identity if real_B is fed: ||G_A(B) - B||
-            self.idt_A = self.netG_A(self.real_B)
-            self.losses['idt_A'] = self.criterionIdt(self.idt_A, self.real_B) * self.lambda_B * self.lambda_idt
-            # G_B should be identity if real_A is fed: ||G_B(A) - A||
-            self.idt_B = self.netG_B(self.real_A)
-            self.losses['idt_B'] = self.criterionIdt(self.idt_B, self.real_A) * self.lambda_A * self.lambda_idt
-        else:
-            self.losses['idt_A'] = 0
-            self.losses['idt_B'] = 0
+        loss_G = 0
+        
+        # 1. AtoB Direction
+        if self.direction in ['both', 'AtoB']:
+            # GAN & Feedback
+            self.losses['G_A'] = self.criterionGAN(self.netD_A(self.fake_B), True)
+            self.losses['feedback_B'] = self.criterionFeedback(self.fake_B, self.paired_B) * self.lambda_feedback
+            loss_G += self.losses['G_A'] + self.losses['feedback_B']
+            
+            # Cycle & Identity (Only in bidirectional mode)
+            if self.direction == 'both':
+                self.losses['cycle_A'] = self.criterionCycle(self.rec_A, self.real_A) * self.lambda_A
+                loss_G += self.losses['cycle_A']
+                if self.lambda_idt > 0:
+                    self.losses['idt_A'] = self.criterionIdt(self.netG_A(self.real_B), self.real_B) * self.lambda_B * self.lambda_idt
+                    loss_G += self.losses['idt_A']
 
-        # GAN loss
-        self.losses['G_A'] = self.criterionGAN(self.netD_A(self.fake_B), True)
-        self.losses['G_B'] = self.criterionGAN(self.netD_B(self.fake_A), True)
-        
-        # Cycle loss
-        self.losses['cycle_A'] = self.criterionCycle(self.rec_A, self.real_A) * self.lambda_A
-        self.losses['cycle_B'] = self.criterionCycle(self.rec_B, self.real_B) * self.lambda_B
-        
-        # Feedback (Paired) loss - the GANomics innovation
-        self.losses['feedback_B'] = self.criterionFeedback(self.fake_B, self.paired_B) * self.lambda_feedback
-        self.losses['feedback_A'] = self.criterionFeedback(self.fake_A, self.paired_A) * self.lambda_feedback
-        
-        # Combined loss
-        loss_G = sum(self.losses[name] for name in ['G_A', 'G_B', 'cycle_A', 'cycle_B', 'feedback_A', 'feedback_B', 'idt_A', 'idt_B'])
+        # 2. BtoA Direction
+        if self.direction in ['both', 'BtoA']:
+            # GAN & Feedback
+            self.losses['G_B'] = self.criterionGAN(self.netD_B(self.fake_A), True)
+            self.losses['feedback_A'] = self.criterionFeedback(self.fake_A, self.paired_A) * self.lambda_feedback
+            loss_G += self.losses['G_B'] + self.losses['feedback_A']
+            
+            # Cycle & Identity (Only in bidirectional mode)
+            if self.direction == 'both':
+                self.losses['cycle_B'] = self.criterionCycle(self.rec_B, self.real_B) * self.lambda_B
+                loss_G += self.losses['cycle_B']
+                if self.lambda_idt > 0:
+                    self.losses['idt_B'] = self.criterionIdt(self.netG_B(self.real_A), self.real_A) * self.lambda_A * self.lambda_idt
+                    loss_G += self.losses['idt_B']
+
         loss_G.backward()
         self.losses['G_total'] = loss_G
 
     def optimize_parameters(self):
         self.forward()
-        
-        # Update G
-        self.set_requires_grad([self.netD_A, self.netD_B], False)
+        self.set_requires_grad([n for n in [self.netD_A, self.netD_B] if n], False)
         self.optimizer_G.zero_grad()
         self.backward_G()
         self.optimizer_G.step()
-        
-        # Update D
-        self.set_requires_grad([self.netD_A, self.netD_B], True)
+        self.set_requires_grad([n for n in [self.netD_A, self.netD_B] if n], True)
         self.optimizer_D.zero_grad()
         self.backward_D()
         self.optimizer_D.step()
 
-    def set_requires_grad(self, nets, requires_grad=False):
-        if not isinstance(nets, list):
-            nets = [nets]
-        for net in nets:
-            if net is not None:
-                for param in net.parameters():
-                    param.requires_grad = requires_grad
-
-    def get_current_losses(self):
-        return {k: v.item() if torch.is_tensor(v) else v for k, v in self.losses.items()}
-
     def save_networks(self, save_path):
-        torch.save({
-            'G_A': self.netG_A.state_dict(),
-            'G_B': self.netG_B.state_dict(),
-            'D_A': self.netD_A.state_dict(),
-            'D_B': self.netD_B.state_dict(),
-        }, save_path)
+        state = {}
+        if self.netG_A: state['G_A'] = self.netG_A.state_dict()
+        if self.netG_B: state['G_B'] = self.netG_B.state_dict()
+        if self.netD_A: state['D_A'] = self.netD_A.state_dict()
+        if self.netD_B: state['D_B'] = self.netD_B.state_dict()
+        torch.save(state, save_path)
 
     def load_networks(self, load_path):
         checkpoint = torch.load(load_path, map_location=self.device)
-        self.netG_A.load_state_dict(checkpoint['G_A'])
-        self.netG_B.load_state_dict(checkpoint['G_B'])
-        self.netD_A.load_state_dict(checkpoint['D_A'])
-        self.netD_B.load_state_dict(checkpoint['D_B'])
+        if self.netG_A and 'G_A' in checkpoint: self.netG_A.load_state_dict(checkpoint['G_A'])
+        if self.netG_B and 'G_B' in checkpoint: self.netG_B.load_state_dict(checkpoint['G_B'])
+        if self.netD_A and 'D_A' in checkpoint: self.netD_A.load_state_dict(checkpoint['D_A'])
+        if self.netD_B and 'D_B' in checkpoint: self.netD_B.load_state_dict(checkpoint['D_B'])

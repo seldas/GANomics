@@ -38,18 +38,25 @@ Training the bidirectional translation model using the pair-aware feedback loss.
 
 ---
 
-## Step 3: Ablation Study (Sample Size)
-Evaluating GANomics performance with training subsets of 10, 20, 50, 100, and 400 samples.
+## Step 3: Ablation & Sensitivity Studies
+Investigating model behavior across sample sizes and hyperparameter settings (beta and lambda).
 
-- **Inputs:**
-  - `configs/nb_config.yaml`
+### A. Sample Size Study
 - **Command:**
   ```bash
   python scripts/run_ablation.py --config configs/nb_config.yaml --sizes 10 20 50 100 400
   ```
-- **Expected Outputs:**
-  - Multiple checkpoint folders in `results/checkpoints/` (e.g., `NB_GANomics_10`, `NB_GANomics_400`).
-- **Manuscript Alignment:** Supports **Figure 3** and **Table 3**.
+
+### B. Hyperparameter Sensitivity (Reviewer Request)
+To examine the impact of feedback weight ($\beta$) and cycle weight ($\lambda$):
+```bash
+# Beta Sensitivity (varying feedback contribution)
+python scripts/run_ablation.py --config configs/nb_config.yaml --betas 1.0 5.0 10.0 50.0
+
+# Lambda Sensitivity (varying cycle consistency contribution)
+python scripts/run_ablation.py --config configs/nb_config.yaml --lambdas 1.0 5.0 10.0 50.0
+```
+- **Expected Outputs:** Unique checkpoints in `results/checkpoints/` for each parameter value, allowing for comparative performance plotting.
 
 ---
 
