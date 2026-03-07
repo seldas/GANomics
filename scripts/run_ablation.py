@@ -10,7 +10,7 @@ def run_trial(args_tuple):
     # Override device for this specific run and add quiet mode
     cmd = cmd + ["--device", device_str, "--quiet"]
     
-    progress_dict[run_name] = "Starting..."
+    progress_dict[run_name] = f"Starting on {device_str}..."
     
     # Run the process and capture output line by line
     process = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -18,7 +18,7 @@ def run_trial(args_tuple):
     for line in process.stdout:
         line = line.strip()
         if line.startswith("[PROGRESS]"):
-            progress_dict[run_name] = line.replace("[PROGRESS] ", "")
+            progress_dict[run_name] = f"Epoch: {line.replace('[PROGRESS] ', '')}"
         elif "Traceback" in line or "Error" in line:
             # If there's an error, we probably want to see it or note it
             progress_dict[run_name] = "Error"
@@ -60,12 +60,14 @@ def run_ablation():
         n_workers = 1
     
     tasks = []
+    task_features = {}
 
-    def queue_repeats(base_cmd, base_name):
+    def queue_repeats(base_cmd, base_name, features_str):
         for r in range(args.repeats):
             run_name = f"{base_name}_Run_{r}"
             cmd = [python_exe] + base_cmd + ["--name", run_name, "--seed", str(42 + r)]
             tasks.append((cmd, run_name))
+            task_features[run_name] = f"{features_str} | Repeat: {r}"
 
     # 1. Sample Size Study
     if args.sizes:
@@ -74,32 +76,32 @@ def run_ablation():
             cmd = ["scripts/train.py", "--config", args.config, "--max_samples", str(size)]
             if size <= 50: cmd += ["--n_epochs", "250", "--n_epochs_decay", "250"]
             else: cmd += ["--n_epochs", "50", "--n_epochs_decay", "50"]
-            queue_repeats(cmd, base_name)
+            queue_repeats(cmd, base_name, f"Size: {size}")
 
     # 2. Beta Sensitivity
     if args.betas:
         for beta in args.betas:
             base_name = f"{project_name}_Sensitivity_Beta_{beta}"
             cmd = ["scripts/train.py", "--config", args.config, "--max_samples", "50", "--lambda_feedback", str(beta)]
-            queue_repeats(cmd, base_name)
+            queue_repeats(cmd, base_name, f"Size: 50 | Beta: {beta}")
 
     # 3. Lambda Sensitivity
     if args.lambdas:
         for lam in args.lambdas:
             base_name = f"{project_name}_Sensitivity_Lambda_{lam}"
             cmd = ["scripts/train.py", "--config", args.config, "--max_samples", "50", "--lambda_cycle", str(lam)]
-            queue_repeats(cmd, base_name)
+            queue_repeats(cmd, base_name, f"Size: 50 | Lambda: {lam}")
 
     # 4. Architecture Ablation
     if args.config and not (args.sizes or args.betas or args.lambdas):
         for direction in ['AtoB', 'BtoA']:
             base_name = f"{project_name}_Ablation_Architecture_{direction}"
             cmd = ["scripts/train.py", "--config", args.config, "--max_samples", "50", "--direction", direction]
-            queue_repeats(cmd, base_name)
+            queue_repeats(cmd, base_name, f"Size: 50 | Direction: {direction}")
 
     # Execute Tasks in Parallel
     if tasks:
-        print(f"\n🚀 Launching {len(tasks)} tasks across {n_workers} workers: {devices}")
+        print(f"\n🚀 Launching {len(tasks)} tasks across {n_workers} workers: {devices}\n")
         
         manager = Manager()
         progress_dict = manager.dict()
@@ -113,16 +115,28 @@ def run_ablation():
         with Pool(processes=n_workers) as pool:
             result = pool.map_async(run_trial, worker_args)
             
+            num_lines_printed = 0
             while not result.ready():
                 active_tasks = {k: v for k, v in progress_dict.items() if v not in ("Completed", "Failed", "Error")}
-                if active_tasks:
-                    status_parts = [f"{k.split('_')[-2]}_{k.split('_')[-1]}: {v}" for k, v in active_tasks.items()]
-                    status_str = " | ".join(status_parts)
-                    # Use carriage return and clear to end of line to overwrite the same line
-                    print(f"\r\033[K{status_str}", end="", flush=True)
+                
+                # Move cursor up to overwrite previous lines, then clear to end of screen
+                if num_lines_printed > 0:
+                    sys.stdout.write(f"\033[{num_lines_printed}A")
+                sys.stdout.write("\033[J")
+                
+                lines_to_print = []
+                for name, status in active_tasks.items():
+                    features = task_features.get(name, "")
+                    lines_to_print.append(f"\033[K🟢 {name} [{features}] => {status}")
+                
+                for line in lines_to_print:
+                    sys.stdout.write(line + "\n")
+                
+                sys.stdout.flush()
+                num_lines_printed = len(lines_to_print)
                 time.sleep(0.5)
                 
-        print("\n\n✅ All parallel trials completed.")
+        print("\n✅ All parallel trials completed.")
         for k, v in progress_dict.items():
             if v in ("Failed", "Error"):
                 print(f"⚠️ {k} finished with status: {v}")
