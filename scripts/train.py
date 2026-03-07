@@ -22,6 +22,7 @@ def parse_args():
                         help="Training direction: both (bidirectional), AtoB (MA->RS), BtoA (RS->MA)")
     parser.add_argument("--seed", type=int, help="Random seed for data shuffling")
     parser.add_argument("--device", type=str, help="Override device (e.g. cpu, cuda:0)")
+    parser.add_argument("--quiet", action="store_true", help="Suppress detailed console output")
     return parser.parse_args()
 
 def train():
@@ -57,7 +58,8 @@ def train():
     else:
         device = torch.device('cpu')
     
-    print(f"Using device: {device}")
+    if not args.quiet:
+        print(f"Using device: {device}")
 
     # Set Global Seeds
     seed = config['train'].get('seed', 42)
@@ -82,7 +84,8 @@ def train():
     with open(os.path.join(save_dir, "train_samples.txt"), 'w') as f:
         f.write("\n".join(dataset.samples_A))
     
-    print(f"Number of training samples: {len(dataset)}")
+    if not args.quiet:
+        print(f"Number of training samples: {len(dataset)}")
 
     # Initialize Model
     model = GANomicsModel(
@@ -140,8 +143,9 @@ def train():
             if len(loss_history) > 50:
                 avg_recent = sum(loss_history[-50:]) / 50
                 if curr_total > explosion_factor * avg_recent:
-                    print(f"!!! Loss explosion detected (G_total={curr_total:.2f}, avg={avg_recent:.2f})")
-                    print(f"!!! Rolling back to net_latest.pth and resuming...")
+                    if not args.quiet:
+                        print(f"!!! Loss explosion detected (G_total={curr_total:.2f}, avg={avg_recent:.2f})")
+                        print(f"!!! Rolling back to net_latest.pth and resuming...")
                     latest_path = os.path.join(save_dir, "net_latest.pth")
                     if os.path.exists(latest_path):
                         model.load_networks(latest_path)
@@ -159,13 +163,18 @@ def train():
                     val = losses.get(name, 0)
                     log_msg += f"{name}: {val:.3f} "
                 
-                print(log_msg)
+                if not args.quiet:
+                    print(log_msg)
                 with open(log_file, 'a') as f:
                     f.write(log_msg + "\n")
             
             iter_data_time = time.time()
+        
+        # Report progress dynamically
+        print(f"[PROGRESS] {epoch}/{total_epochs}", flush=True)
                 
-        print(f"End of epoch {epoch} / {total_epochs} \t Time Taken: {time.time() - epoch_start_time:.2f} sec")
+        if not args.quiet:
+            print(f"End of epoch {epoch} / {total_epochs} \t Time Taken: {time.time() - epoch_start_time:.2f} sec")
 
         if epoch % config['train']['save_epoch_freq'] == 0 or epoch == total_epochs:
             save_path = os.path.join(save_dir, "net_latest.pth")
@@ -178,7 +187,8 @@ def train():
                 f.write(f"total_epochs: {total_epochs}\n")
                 f.write(f"status: {'completed' if epoch == total_epochs else 'training'}\n")
             
-            print(f"Updated latest checkpoint at epoch {epoch}")
+            if not args.quiet:
+                print(f"Updated latest checkpoint at epoch {epoch}")
         
         epoch += 1 # Only increment if successful
 

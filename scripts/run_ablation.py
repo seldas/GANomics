@@ -2,15 +2,32 @@ import subprocess
 import os
 import argparse
 import sys
+import time
 from multiprocessing import Pool, Manager
 
 def run_trial(args_tuple):
-    cmd, run_name, device_str, env = args_tuple
-    # Override device for this specific run
-    cmd = cmd + ["--device", device_str]
-    print(f"\n>>> [{device_str}] Starting: {run_name}")
-    subprocess.run(cmd, env=env)
-    print(f">>> [{device_str}] Finished: {run_name}")
+    cmd, run_name, device_str, env, progress_dict = args_tuple
+    # Override device for this specific run and add quiet mode
+    cmd = cmd + ["--device", device_str, "--quiet"]
+    
+    progress_dict[run_name] = "Starting..."
+    
+    # Run the process and capture output line by line
+    process = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    
+    for line in process.stdout:
+        line = line.strip()
+        if line.startswith("[PROGRESS]"):
+            progress_dict[run_name] = line.replace("[PROGRESS] ", "")
+        elif "Traceback" in line or "Error" in line:
+            # If there's an error, we probably want to see it or note it
+            progress_dict[run_name] = "Error"
+
+    process.wait()
+    if process.returncode != 0 and progress_dict[run_name] != "Error":
+        progress_dict[run_name] = "Failed"
+    elif progress_dict[run_name] != "Error":
+        progress_dict[run_name] = "Completed"
 
 def run_ablation():
     parser = argparse.ArgumentParser(description="Run GANomics Ablation & Sensitivity Study")
@@ -83,18 +100,32 @@ def run_ablation():
     # Execute Tasks in Parallel
     if tasks:
         print(f"\n🚀 Launching {len(tasks)} tasks across {n_workers} workers: {devices}")
+        
+        manager = Manager()
+        progress_dict = manager.dict()
+        
         # Assign tasks to devices in a round-robin fashion
         worker_args = []
         for i, (cmd, name) in enumerate(tasks):
             device_str = devices[i % n_workers]
-            worker_args.append((cmd, name, device_str, env))
+            worker_args.append((cmd, name, device_str, env, progress_dict))
             
         with Pool(processes=n_workers) as pool:
-            pool.map(run_trial, worker_args)
-        print("\n✅ All parallel trials completed.")
-
-if __name__ == "__main__":
-    run_ablation()
+            result = pool.map_async(run_trial, worker_args)
+            
+            while not result.ready():
+                active_tasks = {k: v for k, v in progress_dict.items() if v not in ("Completed", "Failed", "Error")}
+                if active_tasks:
+                    status_parts = [f"{k.split('_')[-2]}_{k.split('_')[-1]}: {v}" for k, v in active_tasks.items()]
+                    status_str = " | ".join(status_parts)
+                    # Use carriage return and clear to end of line to overwrite the same line
+                    print(f"\r\033[K{status_str}", end="", flush=True)
+                time.sleep(0.5)
+                
+        print("\n\n✅ All parallel trials completed.")
+        for k, v in progress_dict.items():
+            if v in ("Failed", "Error"):
+                print(f"⚠️ {k} finished with status: {v}")
 
 if __name__ == "__main__":
     run_ablation()
