@@ -46,13 +46,14 @@ def train():
     if args.seed is not None:
         config['train']['seed'] = args.seed
     
+    direction = args.direction
+    
     # Set device from CLI or Config
-    device_str = config['train'].get('device', 'cpu')
-    if torch.cuda.is_available():
-        if device_str.startswith('cuda'):
-            device = torch.device(device_str)
-        else:
-            device = torch.device('cuda:0')
+    device_str = args.device if args.device else config['train'].get('device', 'cpu')
+    if device_str.startswith('cuda') and torch.cuda.is_available():
+        device = torch.device(device_str)
+    elif torch.cuda.is_available() and device_str != 'cpu':
+        device = torch.device('cuda:0')
     else:
         device = torch.device('cpu')
     
