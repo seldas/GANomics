@@ -78,6 +78,18 @@ class GANomicsModel:
             if self.direction == 'both':
                 self.rec_B = self.netG_A(self.fake_A)
 
+    def backward_D_basic(self, netD, real, fake):
+        # Real
+        pred_real = netD(real)
+        loss_D_real = self.criterionGAN(pred_real, True)
+        # Fake
+        pred_fake = netD(fake.detach())
+        loss_D_fake = self.criterionGAN(pred_fake, False)
+        # Combined
+        loss_D = (loss_D_real + loss_D_fake) * 0.5
+        loss_D.backward()
+        return loss_D
+
     def backward_D(self):
         if self.netD_A:
             self.losses['D_A'] = self.backward_D_basic(self.netD_A, self.real_B, self.fake_B)
@@ -130,6 +142,17 @@ class GANomicsModel:
         self.optimizer_D.zero_grad()
         self.backward_D()
         self.optimizer_D.step()
+
+    def set_requires_grad(self, nets, requires_grad=False):
+        if not isinstance(nets, list):
+            nets = [nets]
+        for net in nets:
+            if net is not None:
+                for param in net.parameters():
+                    param.requires_grad = requires_grad
+
+    def get_current_losses(self):
+        return {k: v.item() if torch.is_tensor(v) else v for k, v in self.losses.items()}
 
     def save_networks(self, save_path):
         state = {}

@@ -28,8 +28,8 @@ train:
 
 # Dataset Parameters
 dataset:
-  path_A: 'data/processed/NCI60_1_A.csv'
-  path_B: 'data/processed/NCI60_1_B.csv'
+  path_A: 'dataset/NCI60/NCI601_ag.tsv'
+  path_B: 'dataset/NCI60/NCI601_rs.tsv'
 
 # Output Parameters
 output:

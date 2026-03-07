@@ -3,6 +3,8 @@ import time
 import argparse
 import yaml
 import torch
+import numpy as np
+import random
 from torch.utils.data import DataLoader
 from src.datasets.genomics_dataset import GenomicsDataset
 from src.models.ganomics_model import GANomicsModel
@@ -43,10 +45,16 @@ def train():
     if args.seed is not None:
         config['train']['seed'] = args.seed
     
-    direction = args.direction
-
-    # Set device
-    device = torch.device(config['train'].get('device', 'cpu') if torch.cuda.is_available() else 'cpu')
+    # Set device from CLI or Config
+    device_str = config['train'].get('device', 'cpu')
+    if torch.cuda.is_available():
+        if device_str.startswith('cuda'):
+            device = torch.device(device_str)
+        else:
+            device = torch.device('cuda:0')
+    else:
+        device = torch.device('cpu')
+    
     print(f"Using device: {device}")
 
     # Set Global Seeds
