@@ -231,3 +231,69 @@ Mon Mar  9 16:08:53 2026 | File "C:\Users\lanse\AppData\Local\Programs\Python\Py
 Mon Mar  9 16:08:53 2026 | return codecs.charmap_encode(input,self.errors,encoding_table)[0]
 Mon Mar  9 16:08:53 2026 | ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Mon Mar  9 16:08:53 2026 | UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f680' in position 0: character maps to <undefined>
+Mon Mar  9 16:08:57 2026 | INFO:     Started server process [59404]
+Mon Mar  9 16:08:57 2026 | INFO:     Waiting for application startup.
+Mon Mar  9 16:08:57 2026 | INFO:     Application startup complete.
+Mon Mar  9 16:08:57 2026 | INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Mon Mar  9 16:09:00 2026 | BACKEND_DIR: D:\Coding\GANomics\dashboard\backend
+Mon Mar  9 16:09:00 2026 | RESULTS_DIR: D:\Coding\GANomics\dashboard\backend\results
+Mon Mar  9 16:09:00 2026 | LOGS_DIR: D:\Coding\GANomics\dashboard\backend\results\1_Training\logs
+Mon Mar  9 16:09:00 2026 | LOGS EXISTS: True
+Mon Mar  9 16:09:00 2026 | INFO:     127.0.0.1:49674 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:00 2026 | INFO:     127.0.0.1:63914 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:01 2026 | INFO:     127.0.0.1:53407 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:01 2026 | INFO:     127.0.0.1:49674 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:02 2026 | INFO:     127.0.0.1:63914 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:02 2026 | INFO:     127.0.0.1:53407 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:04 2026 | INFO:     127.0.0.1:53407 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:04 2026 | INFO:     127.0.0.1:63914 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:12 2026 | Starting training command: D:\Coding\GANomics\venv\Scripts\python.exe D:\Coding\GANomics\dashboard\backend\scripts\run_ablation.py --config D:\Coding\GANomics\dashboard\backend\dataset\NB\nb_config.yaml --repeats 1 --sizes 20 --betas 10.0 --lambdas 10.0
+Mon Mar  9 16:09:12 2026 | INFO:     127.0.0.1:62891 - "POST /api/train HTTP/1.1" 200 OK
+Mon Mar  9 16:09:24 2026 | INFO:     127.0.0.1:52070 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:24 2026 | INFO:     127.0.0.1:49970 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:27 2026 | INFO:     127.0.0.1:52070 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:27 2026 | INFO:     127.0.0.1:49970 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:32 2026 | INFO:     127.0.0.1:49970 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:32 2026 | INFO:     127.0.0.1:52070 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:35 2026 | INFO:     127.0.0.1:63558 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:35 2026 | INFO:     127.0.0.1:49970 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:39 2026 | INFO:     127.0.0.1:49970 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:39 2026 | INFO:     127.0.0.1:63558 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:49 2026 | INFO:     127.0.0.1:53438 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:49 2026 | INFO:     127.0.0.1:52248 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:09:59 2026 | INFO:     127.0.0.1:59705 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:09:59 2026 | INFO:     127.0.0.1:55456 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:10:09 2026 | INFO:     127.0.0.1:58829 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:10:09 2026 | INFO:     127.0.0.1:50263 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:10:19 2026 | INFO:     127.0.0.1:49674 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:10:19 2026 | INFO:     127.0.0.1:59100 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:10:29 2026 | INFO:     127.0.0.1:55433 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:10:29 2026 | INFO:     127.0.0.1:63964 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:10:39 2026 | INFO:     127.0.0.1:50168 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:10:39 2026 | INFO:     127.0.0.1:58924 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:10:45 2026 | Starting training command: D:\Coding\GANomics\venv\Scripts\python.exe D:\Coding\GANomics\dashboard\backend\scripts\run_ablation.py --config D:\Coding\GANomics\dashboard\backend\dataset\METSIM\metsim_config.yaml --repeats 1 --sizes 20 --betas 10.0 --lambdas 10.0
+Mon Mar  9 16:10:45 2026 | INFO:     127.0.0.1:50982 - "POST /api/train HTTP/1.1" 200 OK
+Mon Mar  9 16:10:49 2026 | INFO:     127.0.0.1:50982 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:10:49 2026 | INFO:     127.0.0.1:58453 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:11:01 2026 | INFO:     127.0.0.1:49993 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:11:01 2026 | INFO:     127.0.0.1:52682 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:11:12 2026 | INFO:     127.0.0.1:61009 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:11:12 2026 | INFO:     127.0.0.1:58074 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:11:22 2026 | INFO:     127.0.0.1:51282 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:11:22 2026 | INFO:     127.0.0.1:57872 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:11:31 2026 | INFO:     127.0.0.1:56127 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:11:31 2026 | INFO:     127.0.0.1:65410 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:11:41 2026 | INFO:     127.0.0.1:52141 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:11:41 2026 | INFO:     127.0.0.1:50867 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:11:51 2026 | INFO:     127.0.0.1:53078 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:11:51 2026 | INFO:     127.0.0.1:58802 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:12:00 2026 | INFO:     127.0.0.1:55947 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:12:00 2026 | INFO:     127.0.0.1:54630 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:12:10 2026 | INFO:     127.0.0.1:60469 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:12:10 2026 | INFO:     127.0.0.1:58486 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:12:20 2026 | INFO:     127.0.0.1:64647 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:12:20 2026 | INFO:     127.0.0.1:54540 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:12:30 2026 | INFO:     127.0.0.1:56223 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:12:30 2026 | INFO:     127.0.0.1:60348 - "GET /api/results HTTP/1.1" 200 OK
+Mon Mar  9 16:12:41 2026 | INFO:     127.0.0.1:61195 - "GET /api/projects HTTP/1.1" 200 OK
+Mon Mar  9 16:12:41 2026 | INFO:     127.0.0.1:55490 - "GET /api/results HTTP/1.1" 200 OK
