@@ -66,6 +66,13 @@ python scripts/biomarker.py \
     --syn_A results/sync_data/NB_50_0/algorithms/microarray_fake_tdm.csv \
     --syn_B results/sync_data/NB_50_0/algorithms/rnaseq_fake_tdm.csv
 
+python scripts/biomarker.py \
+    --real_A results/sync_data/NB_Sensitivity_Beta_0.0_Run_0/test/microarray_real.csv \
+    --real_B results/sync_data/NB_Sensitivity_Beta_0.0_Run_0/test/rnaseq_real.csv \
+    --syn_A results/sync_data/NB_Sensitivity_Beta_0.0_Run_0/test/microarray_fake.csv \
+    --syn_B results/sync_data/NB_Sensitivity_Beta_0.0_Run_0/test/rnaseq_fake.csv
+
+
 # 3. Generate plots
 python scripts/plot.py --type comparative_fidelity --table results/tables/Comparative_Biological_Fidelity.csv
 ```

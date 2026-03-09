@@ -92,12 +92,6 @@ def main():
     deg_rA = run_deg_analysis(df_rA, y)
     deg_sA = run_deg_analysis(df_sA, y)
     
-    print("DEG Analysis Results:")
-    print(deg_rA.head())
-    print(deg_rA.columns)
-    print(deg_sA.head())
-    print(deg_sA.columns)
-    
     # Jaccard overlap curve (Fig 9a)
     jac_curve = jaccard_threshold_curve(deg_rA, deg_sA)
     jac_curve.to_csv("results/tables/Table_Fig9a_Jaccard_Curve.csv", index=False)
