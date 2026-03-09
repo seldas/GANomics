@@ -10,26 +10,44 @@ def run_deg_analysis(df, labels, group1='Favorable', group2='Unfavorable'):
     """
     g1_data = df.loc[labels == group1]
     g2_data = df.loc[labels == group2]
-    
-    p_values = []
+
+    # Precompute sizes for Cohen's d
+    n1 = len(g1_data)
+    n2 = len(g2_data)
+    s1 = g1_data.std(ddof=1)
+    s2 = g2_data.std(ddof=1)
+    s_pooled = np.sqrt(((n1-1)*s1**2 + (n2-1)*s2**2) / (n1+n2-2))
+
     t_stats = []
-    
+    p_values = []
+    cohen_ds = []
+
     for gene in df.columns:
-        t, p = stats.ttest_ind(g1_data[gene], g2_data[gene], equal_var=False)
-        p_values.append(p)
-        t_stats.append(t)
+        g1_mean = g1_data[gene].mean()
+        g2_mean = g2_data[gene].mean()
         
+        # Cohen's d (using pooled SD)
+        cohen_d = (g1_mean - g2_mean) / s_pooled[gene]
+        
+        t, p = stats.ttest_ind(g1_data[gene], g2_data[gene], equal_var=False)
+        
+        t_stats.append(t)
+        p_values.append(p)
+        cohen_ds.append(cohen_d)
+
     results = pd.DataFrame({
         'gene': df.columns,
         't_stat': t_stats,
-        'p_value': p_values
+        'p_value': p_values,
+        'cohen_d': cohen_ds  # Add Cohen's d
     })
-    
+
     # Benjamini-Hochberg correction
     results = results.sort_values('p_value')
     results['fdr'] = results['p_value'] * len(results) / np.arange(1, len(results) + 1)
     results['fdr'] = np.minimum.accumulate(results['fdr'][::-1])[::-1]
     results['fdr'] = np.minimum(results['fdr'], 1.0)
+    results.set_index('gene', inplace=True)  # Set 'gene' as index for consistency
     
     return results
 

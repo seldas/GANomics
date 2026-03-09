@@ -93,8 +93,8 @@ def jaccard_threshold_curve(deg_real, deg_syn, thresholds=[1e-4, 1e-3, 1e-2, 0.0
     """
     results = []
     for tau in thresholds:
-        set_real = set(deg_real[deg_real['q'] <= tau].index)
-        set_syn = set(deg_syn[deg_syn['q'] <= tau].index)
+        set_real = set(deg_real[deg_real['fdr'] <= tau].index)
+        set_syn = set(deg_syn[deg_syn['fdr'] <= tau].index)
         
         inter = len(set_real & set_syn)
         union = len(set_real | set_syn)

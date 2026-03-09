@@ -53,12 +53,18 @@ Develop/Run `scripts/comparative_biomarker.py` to:
 python scripts/comparative_analysis.py --config configs/nb_config.yaml --sample_size 50 --save_full
 
 # 2. Run the comparative biomarker analysis
-python scripts/biomarker.py `
-    --real_A dataset/NB/NB_AG.csv `
-    --real_B dataset/NB/NB_NGS.csv `
-    --syn_dir results/sync_data/baselines/NB_50_0/ `
-    --gmt dataset/RAW/h.all.v2025.1.Hs.symbols.gmt `
-    --out results/tables/Comparative_Biological_Fidelity.csv
+python scripts/biomarker.py \
+    --real_A results/sync_data/NB_50_0/test/microarray_real.csv \
+    --real_B results/sync_data/NB_50_0/test/rnaseq_real.csv \
+    --syn_A results/sync_data/NB_50_0/test/microarray_fake.csv \
+    --syn_B results/sync_data/NB_50_0/test/rnaseq_fake.csv \
+    --gmt dataset/RAW/h.all.v2025.1.Hs.symbols.gmt
+
+python scripts/biomarker.py \
+    --real_A results/sync_data/NB_50_0/test/microarray_real.csv \
+    --real_B results/sync_data/NB_50_0/test/rnaseq_real.csv \
+    --syn_A results/sync_data/NB_50_0/algorithms/microarray_fake_tdm.csv \
+    --syn_B results/sync_data/NB_50_0/algorithms/rnaseq_fake_tdm.csv
 
 # 3. Generate plots
 python scripts/plot.py --type comparative_fidelity --table results/tables/Comparative_Biological_Fidelity.csv

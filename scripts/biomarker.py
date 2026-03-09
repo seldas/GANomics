@@ -1,14 +1,17 @@
 import os
+import sys
 import argparse
 import pandas as pd
 import numpy as np
+
+# Add the parent directory to sys.path to make 'src' importable
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.core.analysis import run_deg_analysis, train_eval_rf
 from src.core.pathway import load_gmt, run_permutation_test, jaccard_threshold_curve
 
 def main():
     parser = argparse.ArgumentParser(description="Biomarker and Cross-Platform Modeling")
-    parser.add_argument("--data", type=str, required=True, help="data folder to the paired datasets (real, fake), (ag, ngs)")
-    parser.add_argument("--real_A", type=str, default='', help="Path to Real Domain A")
+    parser.add_argument("--real_A", type=str, required=True, help="Path to Real Domain A")
     parser.add_argument("--real_B", type=str, required=True, help="Path to Real Domain B")
     parser.add_argument("--syn_A", type=str, required=True, help="Path to Synthetic Domain A (from B)")
     parser.add_argument("--syn_B", type=str, required=True, help="Path to Synthetic Domain B (from A)")
@@ -88,6 +91,12 @@ def main():
     print("\nRunning DEG and Pathway Validation...")
     deg_rA = run_deg_analysis(df_rA, y)
     deg_sA = run_deg_analysis(df_sA, y)
+    
+    print("DEG Analysis Results:")
+    print(deg_rA.head())
+    print(deg_rA.columns)
+    print(deg_sA.head())
+    print(deg_sA.columns)
     
     # Jaccard overlap curve (Fig 9a)
     jac_curve = jaccard_threshold_curve(deg_rA, deg_sA)
