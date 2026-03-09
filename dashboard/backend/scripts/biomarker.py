@@ -83,8 +83,9 @@ def main():
         results.append(metrics)
         
     table_4 = pd.DataFrame(results)
-    os.makedirs("results/tables", exist_ok=True)
-    table_4.to_csv("results/tables/Table_4_Classifier_Performance.csv", index=False)
+    pred_dir = "results/4_Biomarkers/Prediction"
+    os.makedirs(pred_dir, exist_ok=True)
+    table_4.to_csv(os.path.join(pred_dir, "Table_4_Classifier_Performance.csv"), index=False)
     print(table_4)
 
     # 3. Pathway & DEG Validation (Figure 9)
@@ -94,7 +95,9 @@ def main():
     
     # Jaccard overlap curve (Fig 9a)
     jac_curve = jaccard_threshold_curve(deg_rA, deg_sA)
-    jac_curve.to_csv("results/tables/Table_Fig9a_Jaccard_Curve.csv", index=False)
+    deg_dir = "results/4_Biomarkers/DEG"
+    os.makedirs(deg_dir, exist_ok=True)
+    jac_curve.to_csv(os.path.join(deg_dir, "Table_Fig9a_Jaccard_Curve.csv"), index=False)
     
     if args.gmt:
         gene_sets = load_gmt(args.gmt)
@@ -102,7 +105,9 @@ def main():
         print(f"Pathway Rank Concordance (Spearman rho): {obs_rho:.3f}, p-value: {p_val:.4f}")
         
         # Save null distribution for Fig 9b-e
-        pd.Series(null_dist).to_csv("results/tables/Table_Fig9_Null_Dist.csv", index=False)
+        pathway_dir = "results/4_Biomarkers/Pathway"
+        os.makedirs(pathway_dir, exist_ok=True)
+        pd.Series(null_dist).to_csv(os.path.join(pathway_dir, "Table_Fig9_Null_Dist.csv"), index=False)
 
 if __name__ == "__main__":
     main()

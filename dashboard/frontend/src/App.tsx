@@ -37,6 +37,7 @@ interface Project {
   genes: number;
   samples: number;
   config_path: string;
+  config?: any;
 }
 
 interface LogResponse {
@@ -64,7 +65,62 @@ const App: React.FC = () => {
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [selectedSizes, setSelectedSizes] = useState<number[]>([50]);
   const [selectedBetas, setSelectedBetas] = useState<number[]>([10.0]);
-  const [resultsStatus, setResultsStatus] = useState<{checkpoints: string[], logs: string[]}>({checkpoints: [], logs: []});
+  const [selectedLambdas, setSelectedLambdas] = useState<number[]>([10.0]);
+  const [resultsStatus, setResultsStatus] = useState<{
+    checkpoints: string[], 
+    logs: string[],
+    run_statuses?: Record<string, {
+      training: boolean,
+      sync: boolean,
+      comparative: boolean,
+      deg: boolean,
+      pathway: boolean,
+      pred_model: boolean
+    }>
+  }>({checkpoints: [], logs: []});
+
+  const StatusButton = ({ label, active }: { label: string, active: boolean }) => (
+    <div className={`status-badge ${active ? 'status-success' : 'status-error'}`} 
+         style={{ 
+           fontSize: '0.65rem', 
+           padding: '2px 6px', 
+           borderRadius: '4px',
+           whiteSpace: 'nowrap',
+           opacity: active ? 1 : 0.6,
+           border: active ? 'none' : '1px solid #ff4d4f',
+           background: active ? '#52c41a' : 'transparent',
+           color: active ? 'white' : '#ff4d4f'
+         }}>
+      {label}
+    </div>
+  );
+
+  const renderProjectStatus = () => {
+    const projectLogs = resultsStatus.logs
+      .filter(l => l.startsWith(selectedProject))
+      .map(l => l.replace("_log.txt", ""));
+    
+    return (
+      <div className="queue-list">
+        {projectLogs.map(runId => {
+          const status = resultsStatus.run_statuses?.[runId];
+          return (
+            <div key={runId} className="queue-item" onClick={() => fetchLogs(runId)} style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+              <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{runId}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                <StatusButton label="Training" active={status?.training || false} />
+                <StatusButton label="Sync Data" active={status?.sync || false} />
+                <StatusButton label="Comparative" active={status?.comparative || false} />
+                <StatusButton label="DEG" active={status?.deg || false} />
+                <StatusButton label="Pathway" active={status?.pathway || false} />
+                <StatusButton label="Pred. Model" active={status?.pred_model || false} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
   const [metrics, setMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -81,6 +137,25 @@ const App: React.FC = () => {
 
   const sizes = [10, 20, 50, 100, 200];
   const betas = [0.0, 1.0, 5.0, 10.0, 50.0];
+  const lambdas = [0.0, 1.0, 5.0, 10.0, 50.0];
+
+  const handleStartSession = async () => {
+    const project = projects.find(p => p.id === selectedProject);
+    if (!project) return;
+    try {
+      await axios.post(`${API_BASE}/train`, {
+        config_path: project.config_path,
+        sizes: selectedSizes,
+        betas: selectedBetas,
+        lambdas: selectedLambdas,
+        repeats: 1
+      });
+      alert("Training session started!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to start session");
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -176,7 +251,7 @@ const App: React.FC = () => {
             <p>{currentProj ? `Project: ${currentProj.name}` : 'Select a project.'}</p>
           </div>
           {activeTab === 'train' && (
-            <button className="chip selected" style={{ borderRadius: '8px', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center' }} onClick={() => alert("Started")}>
+            <button className="chip selected" style={{ borderRadius: '8px', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center' }} onClick={handleStartSession}>
               <Play size={16} style={{ marginRight: '8px' }} /> Start Session
             </button>
           )}
@@ -198,25 +273,50 @@ const App: React.FC = () => {
                     <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Sizes (N)</label>
                     <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{sizes.map(s => (<div key={s} className={`chip ${selectedSizes.includes(s) ? 'selected' : ''}`} onClick={() => toggleSelection(s, selectedSizes, setSelectedSizes)}>N={s}</div>))}</div>
                   </div>
-                  <div>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Weights (β)</label>
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Weights (β)</label>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Bio-Feedback Alignment</span>
+                    </div>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem', lineHeight: '1.2' }}>
+                      Controls the strength of the biological feedback loss, ensuring genes maintain their relative expression patterns across platforms.
+                    </p>
                     <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{betas.map(b => (<div key={b} className={`chip ${selectedBetas.includes(b) ? 'selected' : ''}`} onClick={() => toggleSelection(b, selectedBetas, setSelectedBetas)}>β={b.toFixed(1)}</div>))}</div>
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Weights (λ)</label>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Cycle Reconstruction</span>
+                    </div>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem', lineHeight: '1.2' }}>
+                      Controls the cycle-consistency weight, enforcing that translating back to the original platform reproduces the input.
+                    </p>
+                    <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{lambdas.map(l => (<div key={l} className={`chip ${selectedLambdas.includes(l) ? 'selected' : ''}`} onClick={() => toggleSelection(l, selectedLambdas, setSelectedLambdas)}>λ={l.toFixed(1)}</div>))}</div>
                   </div>
                 </section>
                 <section className="card">
                   <h3>Project Status</h3>
-                  <div className="queue-list">
-                    {resultsStatus.checkpoints.filter(c => c.startsWith(selectedProject)).map(cp => (<div key={cp} className="queue-item" onClick={() => fetchLogs(cp)} style={{ cursor: 'pointer' }}><div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{cp}</div><span className="status-badge status-success">Completed</span></div>))}
-                    {resultsStatus.logs.filter(l => l.startsWith(selectedProject) && !resultsStatus.checkpoints.includes(l.replace("_log.txt", ""))).map(log => (<div key={log} className="queue-item" onClick={() => fetchLogs(log)} style={{ cursor: 'pointer' }}><div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{log.replace("_log.txt", "")}</div><span className="status-badge status-running">In Progress</span></div>))}
-                  </div>
+                  {renderProjectStatus()}
                 </section>
               </div>
               <section className="card">
                 <h3>Quick Config</h3>
-                <div className="config-form" style={{ gridTemplateColumns: '1fr' }}>
-                  <div className="form-group"><label>Epochs</label><input type="number" defaultValue={250} /></div>
-                  <div className="form-group"><label>Learning Rate</label><input type="text" defaultValue="0.0002" /></div>
-                  <div className="form-group"><label>Batch Size</label><input type="number" defaultValue={1} /></div>
+                <div className="config-form" style={{ gridTemplateColumns: '1fr', gap: '1rem' }}>
+                  <div className="form-group"><label>Epochs</label><input type="number" defaultValue={currentProj?.config?.train?.n_epochs || 250} /></div>
+                  <div className="form-group"><label>Learning Rate</label><input type="text" defaultValue={currentProj?.config?.optimizer?.lr || "0.0002"} /></div>
+                  <div className="form-group"><label>Batch Size</label><input type="number" defaultValue={currentProj?.config?.train?.batch_size || 1} /></div>
+                  
+                  {currentProj?.config && (
+                    <div style={{ marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem', display: 'block' }}>Read-only Parameters</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.7rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Input NC</span><span style={{ fontWeight: '600' }}>{currentProj.config.model?.input_nc}</span></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Output NC</span><span style={{ fontWeight: '600' }}>{currentProj.config.model?.output_nc}</span></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>λ IDT</span><span style={{ fontWeight: '600' }}>{currentProj.config.model?.lambda_idt}</span></div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>GAN Mode</span><span style={{ fontWeight: '600' }}>{currentProj.config.model?.gan_mode}</span></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </section>
             </div>

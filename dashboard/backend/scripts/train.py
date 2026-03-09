@@ -103,11 +103,11 @@ def train():
     )
 
     # Create Output Directories
-    os.makedirs(config['output']['checkpoints_dir'], exist_ok=True)
-    save_dir = os.path.join(config['output']['checkpoints_dir'], config['output']['name'])
+    os.makedirs(config['output'].get('checkpoints_dir', 'results/1_Training/checkpoints'), exist_ok=True)
+    save_dir = os.path.join(config['output'].get('checkpoints_dir', 'results/1_Training/checkpoints'), config['output']['name'])
     os.makedirs(save_dir, exist_ok=True)
     
-    log_dir = config['output'].get('logs_dir', 'results/logs')
+    log_dir = config['output'].get('logs_dir', 'results/1_Training/logs')
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"{config['output']['name']}_log.txt")
     

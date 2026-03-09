@@ -26,8 +26,15 @@ DATASET_DIR = os.path.join(BACKEND_DIR, "dataset")
 RESULTS_DIR = os.path.join(BACKEND_DIR, "results")
 SCRIPTS_DIR = os.path.join(BACKEND_DIR, "scripts")
 
-LOGS_DIR = os.path.join(RESULTS_DIR, "logs")
-CHECKPOINTS_DIR = os.path.join(RESULTS_DIR, "checkpoints")
+# Redesigned Structure
+TRAINING_DIR = os.path.join(RESULTS_DIR, "1_Training")
+LOGS_DIR = os.path.join(TRAINING_DIR, "logs")
+CHECKPOINTS_DIR = os.path.join(TRAINING_DIR, "checkpoints")
+
+SYNC_DATA_DIR = os.path.join(RESULTS_DIR, "2_SyncData")
+COMPARATIVE_DIR = os.path.join(RESULTS_DIR, "3_ComparativeAnalysis")
+BIOMARKERS_DIR = os.path.join(RESULTS_DIR, "4_Biomarkers")
+FIGURES_DIR = os.path.join(RESULTS_DIR, "5_Figures")
 
 print(f"BACKEND_DIR: {BACKEND_DIR}")
 print(f"RESULTS_DIR: {RESULTS_DIR}")
@@ -40,6 +47,7 @@ class ProjectInfo(BaseModel):
     genes: int
     samples: int
     config_path: str
+    config: Optional[dict] = None
 
 class TrainRequest(BaseModel):
     config_path: str
@@ -94,19 +102,57 @@ async def list_projects():
                 full_path = os.path.join(root, file)
                 pid = os.path.basename(root).upper()
                 genes, samples = get_project_stats(full_path)
-                projects.append(ProjectInfo(id=pid, name=pid, genes=genes, samples=samples, config_path=full_path))
+                
+                config_data = {}
+                try:
+                    with open(full_path, 'r') as f:
+                        config_data = yaml.safe_load(f)
+                except: pass
+                
+                projects.append(ProjectInfo(id=pid, name=pid, genes=genes, samples=samples, config_path=full_path, config=config_data))
     return projects
 
 @app.get("/api/results")
 async def get_results_status():
+    checkpoints = os.listdir(CHECKPOINTS_DIR) if os.path.exists(CHECKPOINTS_DIR) else []
+    logs = [l.replace("_log.txt", "") for l in os.listdir(LOGS_DIR) if l.endswith("_log.txt")]
+    
+    # Define status for each log (run)
+    run_statuses = {}
+    for run_id in logs:
+        parts = run_id.split("_")
+        project = parts[0]
+        
+        size = "50" # default
+        run_idx = "0"
+        if "Size" in parts:
+            size = parts[parts.index("Size") + 1]
+        if "Run" in parts:
+            run_idx = parts[parts.index("Run") + 1]
+            
+        sync_folder = f"{project}_{size}_{run_idx}"
+        sync_path = os.path.join(SYNC_DATA_DIR, sync_folder, "test", "microarray_fake.csv")
+        
+        run_statuses[run_id] = {
+            "training": run_id in checkpoints,
+            "sync": os.path.exists(sync_path),
+            "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, f"Table_2_Comparison_{project}.csv")),
+            "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", "Table_Fig9a_Jaccard_Curve.csv")),
+            "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", "Table_Fig9_Null_Dist.csv")),
+            "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", "Table_4_Classifier_Performance.csv")),
+        }
+
     return {
-        "checkpoints": os.listdir(CHECKPOINTS_DIR) if os.path.exists(CHECKPOINTS_DIR) else [],
-        "logs": os.listdir(LOGS_DIR) if os.path.exists(LOGS_DIR) else []
+        "checkpoints": checkpoints,
+        "logs": logs,
+        "run_statuses": run_statuses
     }
 
 @app.post("/api/train")
 async def start_training(req: TrainRequest, background_tasks: BackgroundTasks):
     run_ablation_script = os.path.join(SCRIPTS_DIR, "run_ablation.py")
+    # Add new directory structure arguments if script supports them, 
+    # otherwise we'll update the script to use TRAIN_DIR etc.
     cmd = ["python", run_ablation_script, "--config", req.config_path, "--repeats", str(req.repeats)]
     if req.sizes: cmd += ["--sizes"] + [str(s) for s in req.sizes]
     if req.betas: cmd += ["--betas"] + [str(b) for b in req.betas]
@@ -159,7 +205,7 @@ async def stream_run_logs(run_id: str):
 
 @app.get("/api/metrics/{project_id}")
 async def get_project_metrics(project_id: str):
-    table_path = os.path.join(RESULTS_DIR, "tables", f"Table_2_Comparison_{project_id.upper()}.csv")
+    table_path = os.path.join(COMPARATIVE_DIR, f"Table_2_Comparison_{project_id.upper()}.csv")
     if not os.path.exists(table_path): return []
     try:
         df = pd.read_csv(table_path)

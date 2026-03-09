@@ -79,8 +79,8 @@ def main():
         fake_A = model.netG_B(tensor_B).cpu().numpy().squeeze()
         
     # 5. Save Sync Data
-    # Convention: results/sync_data/{Project}_{sample_size}_{run_id}/
-    sync_dir = os.path.join("results", "sync_data", f"{args.exp}")
+    # Convention: results/2_SyncData/{exp_name}/
+    sync_dir = os.path.join("results", "2_SyncData", f"{args.exp}")
     
     # Automatic Train/Test Identification
     train_samples_path = os.path.join(checkpoint_dir, "train_samples.txt")

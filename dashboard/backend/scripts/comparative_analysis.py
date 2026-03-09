@@ -54,15 +54,15 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     # 1. Load Data and Split
-    train_dir = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}", "train")
+    train_dir = os.path.join("results", "2_SyncData", f"{args.project}_{args.sample_size}_{args.run_id}", "train")
     train_ag = pd.read_csv(os.path.join(train_dir, "microarray_real.csv"), index_col=0)
     train_ngs = pd.read_csv(os.path.join(train_dir, "rnaseq_real.csv"), index_col=0)
-    test_dir = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}", "test")
+    test_dir = os.path.join("results", "2_SyncData", f"{args.project}_{args.sample_size}_{args.run_id}", "test")
     test_ag = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
     test_ngs = pd.read_csv(os.path.join(test_dir, "rnaseq_real.csv"), index_col=0)
     
     # 2. GANomics Results
-    sync_dir = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}", "test")
+    sync_dir = os.path.join("results", "2_SyncData", f"{args.project}_{args.sample_size}_{args.run_id}", "test")
     df_ma_fake = pd.read_csv(os.path.join(sync_dir, "microarray_fake.csv"), index_col=0)
     df_rs_fake = pd.read_csv(os.path.join(sync_dir, "rnaseq_fake.csv"), index_col=0)
     
@@ -96,9 +96,9 @@ def main():
     df_rs_qn = res_qn['microarray_to_rnaseq']
 
     # save fake data of all algorithm into the sync_data folder:
-    sync_dir_fake = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}", "algorithms")
+    sync_dir_fake = os.path.join("results", "2_SyncData", f"{args.project}_{args.sample_size}_{args.run_id}", "algorithms")
     if not os.path.exists(sync_dir_fake):
-        os.system(f'mkdir -p {sync_dir_fake}')
+        os.makedirs(sync_dir_fake, exist_ok=True)
 
     df_ma_combat.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_combat.csv'))
     df_ma_yugene.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_yugene.csv'))
@@ -136,7 +136,8 @@ def main():
         final_results.append(perf)
         
     df_final = pd.DataFrame(final_results)
-    output_path = os.path.join("results", "tables", f"Table_2_Comparison_{args.project}.csv")
+    output_path = os.path.join("results", "3_ComparativeAnalysis", f"Table_2_Comparison_{args.project}.csv")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df_final.to_csv(output_path, index=False)
     print(f"\nComparative analysis saved to {output_path}")
     print(df_final[['Algorithm', 'Pearson', 'Spearman', 'L1']])
