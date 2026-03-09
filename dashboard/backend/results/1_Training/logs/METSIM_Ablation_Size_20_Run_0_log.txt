@@ -20,3 +20,15 @@
 (epoch: 10, iters: 0, time: 0.644, data: 0.006) G_A: 1.485 G_B: 2868.854 D_A: 121862.289 D_B: 1381.528 cycle_A: 3.741 cycle_B: 366.910 feedback_A: 1651.163 feedback_B: 382.753 idt_A: 232.227 idt_B: 2.450 
 (epoch: 10, iters: 10, time: 0.698, data: 0.009) G_A: 17.681 G_B: 266776.281 D_A: 11664.302 D_B: 133905.344 cycle_A: 4.968 cycle_B: 377.923 feedback_A: 1387.408 feedback_B: 321.867 idt_A: 151.542 idt_B: 5.094 
 (epoch: 11, iters: 0, time: 0.636, data: 0.009) G_A: 32.310 G_B: 160384.344 D_A: 24193.059 D_B: 79792.188 cycle_A: 3.890 cycle_B: 369.329 feedback_A: 1665.944 feedback_B: 491.091 idt_A: 207.568 idt_B: 2.882 
+(epoch: 11, iters: 10, time: 0.611, data: 0.007) G_A: 0.157 G_B: 28482.305 D_A: 1300.562 D_B: 14410.433 cycle_A: 4.486 cycle_B: 318.758 feedback_A: 1158.232 feedback_B: 379.165 idt_A: 164.672 idt_B: 3.633 
+(epoch: 12, iters: 0, time: 0.541, data: 0.008) G_A: 121.555 G_B: 86299.711 D_A: 133154.719 D_B: 42856.609 cycle_A: 8.045 cycle_B: 457.188 feedback_A: 1742.045 feedback_B: 362.365 idt_A: 213.618 idt_B: 2.421 
+(epoch: 12, iters: 10, time: 0.603, data: 0.007) G_A: 3.680 G_B: 518070.719 D_A: 157402.266 D_B: 258316.125 cycle_A: 4.204 cycle_B: 472.838 feedback_A: 1660.823 feedback_B: 491.606 idt_A: 208.321 idt_B: 5.292 
+(epoch: 13, iters: 0, time: 0.584, data: 0.009) G_A: 1.118 G_B: 118291.516 D_A: 567.321 D_B: 58802.375 cycle_A: 4.110 cycle_B: 419.775 feedback_A: 1582.343 feedback_B: 334.859 idt_A: 201.742 idt_B: 3.884 
+(epoch: 13, iters: 10, time: 0.592, data: 0.008) G_A: 4.477 G_B: 251525.031 D_A: 134103.125 D_B: 126264.602 cycle_A: 3.599 cycle_B: 365.008 feedback_A: 1514.695 feedback_B: 370.580 idt_A: 158.703 idt_B: 4.636 
+(epoch: 14, iters: 0, time: 0.560, data: 0.008) G_A: 0.005 G_B: 3352.358 D_A: 6550.658 D_B: 1618.884 cycle_A: 3.622 cycle_B: 470.682 feedback_A: 1569.189 feedback_B: 321.573 idt_A: 213.125 idt_B: 2.995 
+(epoch: 14, iters: 10, time: 0.574, data: 0.007) G_A: 3.540 G_B: 1155.961 D_A: 20250.232 D_B: 612.504 cycle_A: 2.833 cycle_B: 318.758 feedback_A: 1079.911 feedback_B: 415.166 idt_A: 141.446 idt_B: 3.074 
+(epoch: 15, iters: 0, time: 0.581, data: 0.008) G_A: 9.154 G_B: 35563.121 D_A: 304026.250 D_B: 17593.480 cycle_A: 3.687 cycle_B: 466.365 feedback_A: 1530.496 feedback_B: 369.792 idt_A: 166.516 idt_B: 2.766 
+(epoch: 15, iters: 10, time: 0.550, data: 0.005) G_A: 0.490 G_B: 10027.957 D_A: 2744.916 D_B: 5114.700 cycle_A: 3.503 cycle_B: 367.357 feedback_A: 1269.771 feedback_B: 489.303 idt_A: 161.012 idt_B: 2.949 
+(epoch: 16, iters: 0, time: 0.547, data: 0.007) G_A: 4.833 G_B: 299165.125 D_A: 86643.891 D_B: 150130.625 cycle_A: 3.114 cycle_B: 448.092 feedback_A: 1384.403 feedback_B: 333.339 idt_A: 208.761 idt_B: 2.714 
+(epoch: 16, iters: 10, time: 0.552, data: 0.007) G_A: 0.110 G_B: 45653.559 D_A: 238326.438 D_B: 23041.244 cycle_A: 2.807 cycle_B: 454.430 feedback_A: 1543.242 feedback_B: 360.312 idt_A: 193.273 idt_B: 2.332 
+(epoch: 17, iters: 0, time: 0.535, data: 0.010) G_A: 4.529 G_B: 319.013 D_A: 16968.295 D_B: 142.173 cycle_A: 3.141 cycle_B: 391.682 feedback_A: 1060.369 feedback_B: 420.624 idt_A: 184.873 idt_B: 2.302 

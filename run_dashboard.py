@@ -28,7 +28,7 @@ def main():
     root_dir = os.path.abspath(os.path.dirname(__file__))
     
     # Create logs directory
-    logs_dir = os.path.join(root_dir, "logs")
+    logs_dir = os.path.join(root_dir, "app_logs")
     os.makedirs(logs_dir, exist_ok=True)
     
     backend_log = os.path.join(logs_dir, "backend.log")

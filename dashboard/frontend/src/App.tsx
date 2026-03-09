@@ -17,7 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  ArrowLeft
 } from 'lucide-react';
 import {
   LineChart,
@@ -66,6 +67,13 @@ const App: React.FC = () => {
   const [selectedSizes, setSelectedSizes] = useState<number[]>([50]);
   const [selectedBetas, setSelectedBetas] = useState<number[]>([10.0]);
   const [selectedLambdas, setSelectedLambdas] = useState<number[]>([10.0]);
+  const [selectedRepeats, setSelectedRepeats] = useState<number>(1);
+  const [selectedEpochs, setSelectedEpochs] = useState<number | 'custom'>(500);
+  const [customEpochs, setCustomEpochs] = useState<number>(500);
+  const [ablationType, setAblationType] = useState<'size' | 'beta' | 'lambda'>('size');
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [taskView, setTaskView] = useState<'overview' | 'training'>('overview');
+  
   const [resultsStatus, setResultsStatus] = useState<{
     checkpoints: string[], 
     logs: string[],
@@ -79,62 +87,6 @@ const App: React.FC = () => {
     }>
   }>({checkpoints: [], logs: []});
 
-  const StatusButton = ({ label, status }: { label: string, status: 'running' | 'completed' | 'idle' | boolean }) => {
-    let className = "status-badge ";
-    let style: React.CSSProperties = {
-      fontSize: '0.65rem',
-      padding: '2px 6px',
-      borderRadius: '4px',
-      whiteSpace: 'nowrap',
-    };
-
-    if (status === 'running') {
-      className += "status-running";
-      style = { ...style, background: '#1890ff', color: 'white', animation: 'pulse 1.5s infinite' };
-    } else if (status === 'completed' || status === true) {
-      className += "status-success";
-      style = { ...style, background: '#52c41a', color: 'white' };
-    } else {
-      className += "status-error";
-      style = { ...style, border: '1px solid #ff4d4f', color: '#ff4d4f', opacity: 0.6 };
-    }
-
-    return (
-      <div className={className} style={style}>
-        {label}
-      </div>
-    );
-  };
-
-  const renderProjectStatus = () => {
-    const projectLogs = resultsStatus.logs
-      .filter(l => l.startsWith(selectedProject))
-      .map(l => l.replace("_log.txt", ""));
-    
-    return (
-      <div className="queue-list">
-        {projectLogs.map(runId => {
-          const status = resultsStatus.run_statuses?.[runId];
-          return (
-            <div key={runId} className="queue-item" onClick={() => fetchLogs(runId)} style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
-              <div style={{ fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {runId}
-                {status?.training === 'running' && <Loader2 size={12} className="animate-spin" style={{ color: '#1890ff' }} />}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                <StatusButton label="Training" status={status?.training || 'idle'} />
-                <StatusButton label="Sync Data" status={status?.sync || false} />
-                <StatusButton label="Comparative" status={status?.comparative || false} />
-                <StatusButton label="DEG" status={status?.deg || false} />
-                <StatusButton label="Pathway" status={status?.pathway || false} />
-                <StatusButton label="Pred. Model" status={status?.pred_model || false} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
   const [metrics, setMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -156,14 +108,19 @@ const App: React.FC = () => {
   const handleStartSession = async () => {
     const project = projects.find(p => p.id === selectedProject);
     if (!project) return;
+    
+    // In one-dimensional ablation, only the active type has multiple values
+    const payload = {
+      config_path: project.config_path,
+      sizes: ablationType === 'size' ? selectedSizes : [50],
+      betas: ablationType === 'beta' ? selectedBetas : [10.0],
+      lambdas: ablationType === 'lambda' ? selectedLambdas : [10.0],
+      repeats: selectedRepeats,
+      epochs: selectedEpochs === 'custom' ? customEpochs : selectedEpochs
+    };
+
     try {
-      await axios.post(`${API_BASE}/train`, {
-        config_path: project.config_path,
-        sizes: selectedSizes,
-        betas: selectedBetas,
-        lambdas: selectedLambdas,
-        repeats: 1
-      });
+      await axios.post(`${API_BASE}/train`, payload);
       alert("Training session started!");
     } catch (err) {
       console.error(err);
@@ -188,7 +145,7 @@ const App: React.FC = () => {
       }
     };
     fetchData();
-    const interval = setInterval(fetchData, 10000); // Refresh every 10 seconds
+    const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, [selectedProject]);
 
@@ -245,6 +202,285 @@ const App: React.FC = () => {
 
   const totalPages = Math.ceil(filteredData.length / pageSize);
 
+  const StatusButton = ({ label, status }: { label: string, status: 'running' | 'completed' | 'idle' | boolean }) => {
+    let className = "status-badge ";
+    let style: React.CSSProperties = {
+      fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap',
+    };
+    if (status === 'running') {
+      className += "status-running";
+      style = { ...style, background: '#1890ff', color: 'white', animation: 'pulse 1.5s infinite' };
+    } else if (status === 'completed' || status === true) {
+      className += "status-success";
+      style = { ...style, background: '#52c41a', color: 'white' };
+    } else {
+      className += "status-error";
+      style = { ...style, border: '1px solid #ff4d4f', color: '#ff4d4f', opacity: 0.6 };
+    }
+    return <div className={className} style={style}>{label}</div>;
+  };
+
+  const renderLogViewer = () => {
+    if (!logData) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
+    
+    // Meta-panel calculation
+    const first = logData.structured[0] || {};
+    const last = logData.structured[logData.structured.length - 1] || {};
+    const sampleSizeMatch = viewingLog?.match(/Size_(\d+)/);
+    const sampleSize = sampleSizeMatch ? sampleSizeMatch[1] : "N/A";
+
+    const getLossValue = (row: any, key: string) => {
+      if (['G_A', 'G_B', 'D_A', 'D_B'].includes(key)) return row[key];
+      if (key === 'Cycle') return (row.cycle_A || 0) + (row.cycle_B || 0);
+      if (key === 'Feedback') return (row.feedback_A || 0) + (row.feedback_B || 0);
+      if (key === 'IDT') return (row.idt_A || 0) + (row.idt_B || 0);
+      return 0;
+    };
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        {/* Meta Panel */}
+        <section className="card" style={{ padding: '1rem' }}>
+          <h3 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Training Process Summary</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
+            <div style={{ padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>SAMPLES (N)</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{sampleSize}</div>
+            </div>
+            <div style={{ padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>TOTAL EPOCHS</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{last.epoch || 0}</div>
+            </div>
+            <div style={{ padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>ITERATIONS</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{logData.total_lines}</div>
+            </div>
+          </div>
+          
+          <div style={{ marginTop: '1rem', overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '0.75rem', textAlign: 'left', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <th style={{ padding: '0.5rem' }}>Loss Metric</th>
+                  <th style={{ padding: '0.5rem' }}>Initial (E{first.epoch})</th>
+                  <th style={{ padding: '0.5rem' }}>Final (E{last.epoch})</th>
+                  <th style={{ padding: '0.5rem' }}>Improvement</th>
+                </tr>
+              </thead>
+              <tbody>
+                {LOSS_METRICS.map(m => {
+                  const vInit = getLossValue(first, m.key);
+                  const vFinal = getLossValue(last, m.key);
+                  const diff = vInit - vFinal;
+                  const pct = vInit !== 0 ? ((diff / vInit) * 100).toFixed(1) : "0.0";
+                  return (
+                    <tr key={m.key} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                      <td style={{ padding: '0.5rem', fontWeight: '600' }}>{m.label}</td>
+                      <td style={{ padding: '0.5rem' }}>{vInit?.toFixed(4)}</td>
+                      <td style={{ padding: '0.5rem', fontWeight: 'bold', color: m.color }}>{vFinal?.toFixed(4)}</td>
+                      <td style={{ padding: '0.5rem', color: diff >= 0 ? 'var(--success-color)' : '#dc3545' }}>
+                        {diff >= 0 ? '↓' : '↑'} {Math.abs(diff).toFixed(4)} ({pct}%)
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* Existing Charts/Tables */}
+        <section className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="chip-grid">
+              <div className={`chip ${logMode === 'chart' ? 'selected' : ''}`} style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem' }} onClick={() => setLogMode('chart')}><LineChartIcon size={12} /> Figure</div>
+              <div className={`chip ${logMode === 'structured' ? 'selected' : ''}`} style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem' }} onClick={() => setLogMode('structured')}><TableIcon size={12} /> Table</div>
+            </div>
+          </div>
+
+          <div style={{ borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: '#fff', display: 'flex', flexDirection: 'column' }}>
+            {logMode === 'chart' ? (
+              <div style={{ width: '100%', height: '400px', padding: '1.5rem' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" interval="preserveStartEnd" minTickGap={50} fontSize={10} />
+                    <YAxis domain={['auto', 'auto']} fontSize={10} />
+                    <Tooltip />
+                    <Legend iconSize={10} wrapperStyle={{fontSize: '10px'}} />
+                    {LOSS_METRICS.map(m => visibleMetrics.includes(m.key) && (<Line key={m.key} type="monotone" dataKey={m.key} stroke={m.color} dot={false} strokeWidth={1.5} animationDuration={300} isAnimationActive={chartData.length < 1000} />))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <>
+                <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '1rem', alignItems: 'center', backgroundColor: '#fdfdfd' }}>
+                  <div style={{ position: 'relative', flex: 1, maxWidth: '300px' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input 
+                      type="text" placeholder="Search epoch or iteration..." 
+                      style={{ padding: '0.4rem 0.75rem 0.4rem 2rem', width: '100%', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} 
+                      value={searchTerm} onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}}
+                    />
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Page {currentPage} of {totalPages || 1}</div>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '400px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}><tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border-color)' }}><th style={{ padding: '0.4rem' }}>Epoch</th><th style={{ padding: '0.4rem' }}>Iters</th><th style={{ padding: '0.4rem' }}>G_A</th><th style={{ padding: '0.4rem' }}>G_B</th><th style={{ padding: '0.4rem' }}>D_A</th><th style={{ padding: '0.4rem' }}>D_B</th><th style={{ padding: '0.4rem' }}>Cycle</th><th style={{ padding: '0.4rem' }}>Feedback</th></tr></thead>
+                    <tbody>{tableData.map((row, i) => (<tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}><td style={{ padding: '0.4rem', fontWeight: '600' }}>{row.epoch}</td><td style={{ padding: '0.4rem' }}>{row.iters}</td><td style={{ padding: '0.4rem' }}>{row.G_A?.toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{row.G_B?.toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{row.D_A?.toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{row.D_B?.toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{((row.cycle_A || 0) + (row.cycle_B || 0)).toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{((row.feedback_A || 0) + (row.feedback_B || 0)).toFixed(3)}</td></tr>))}</tbody>
+                  </table>
+                </div>
+                <div style={{ padding: '0.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center', gap: '0.5rem', backgroundColor: '#fdfdfd' }}>
+                  <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft size={14} /></button>
+                  <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}><ChevronLeft size={14} /></button>
+                  <span style={{ display: 'flex', alignItems: 'center', paddingLeft: '1rem', paddingRight: '1rem', fontSize: '0.85rem' }}>{currentPage} / {totalPages || 1}</span>
+                  <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}><ChevronRight size={14} /></button>
+                  <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight size={14} /></button>
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const [statusFilters, setStatusFilters] = useState({ architecture: 'all', size: 'all', sensitivity: 'all' });
+
+  const renderProjectStatus = () => {
+    const projectLogs = resultsStatus.logs
+      .filter(l => l.startsWith(selectedProject))
+      .map(l => l.replace("_log.txt", ""));
+    
+    const categories = {
+      architecture: projectLogs.filter(id => id.includes("Architecture")),
+      size: projectLogs.filter(id => id.includes("Size") && !id.includes("Architecture")),
+      sensitivity: projectLogs.filter(id => id.includes("Sensitivity")),
+      other: projectLogs.filter(id => !id.includes("Architecture") && !id.includes("Size") && !id.includes("Sensitivity"))
+    };
+
+    const SubPanel = ({ title, items, filterKey }: { title: string, items: string[], filterKey: keyof typeof statusFilters }) => {
+      if (items.length === 0) return null;
+      
+      const filteredItems = items.filter(id => {
+        if (statusFilters[filterKey] === 'all') return true;
+        const status = resultsStatus.run_statuses?.[id];
+        if (statusFilters[filterKey] === 'running') return status?.training === 'running';
+        if (statusFilters[filterKey] === 'completed') return status?.training === 'completed';
+        if (statusFilters[filterKey] === 'pending') return status?.training === 'idle';
+        return true;
+      });
+
+      return (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem' }}>
+            <h4 style={{ margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</h4>
+            <select 
+              value={statusFilters[filterKey]} 
+              onChange={(e) => setStatusFilters({ ...statusFilters, [filterKey]: e.target.value })}
+              style={{ fontSize: '0.7rem', padding: '2px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+            >
+              <option value="all">All Status</option>
+              <option value="running">Running</option>
+              <option value="completed">Completed</option>
+              <option value="pending">Pending</option>
+            </select>
+          </div>
+          <div className="queue-list">
+            {filteredItems.map(runId => {
+              const status = resultsStatus.run_statuses?.[runId];
+              return (
+                <div key={runId} className="queue-item" onClick={() => { setSelectedRunId(runId); setTaskView('overview'); }} style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+                  <div style={{ fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {runId}
+                    {status?.training === 'running' && <Loader2 size={12} className="animate-spin" style={{ color: '#1890ff' }} />}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    <StatusButton label="Training" status={status?.training || 'idle'} />
+                    <StatusButton label="Sync Data" status={status?.sync || false} />
+                    <StatusButton label="Comparative" status={status?.comparative || false} />
+                    <StatusButton label="DEG" status={status?.deg || false} />
+                    <StatusButton label="Pathway" status={status?.pathway || false} />
+                    <StatusButton label="Pred. Model" status={status?.pred_model || false} />
+                  </div>
+                </div>
+              );
+            })}
+            {filteredItems.length === 0 && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>No runs matching filter.</div>}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div>
+        <SubPanel title="🏗️ Architecture" items={categories.architecture} filterKey="architecture" />
+        <SubPanel title="📏 Sample Size" items={categories.size} filterKey="size" />
+        <SubPanel title="⚙️ Sensitivity" items={categories.sensitivity} filterKey="sensitivity" />
+        <SubPanel title="📦 Other Runs" items={categories.other} filterKey="architecture" />
+      </div>
+    );
+  };
+
+  const renderTaskDashboard = () => {
+    if (!selectedRunId) return null;
+    const status = resultsStatus.run_statuses?.[selectedRunId];
+    
+    if (taskView === 'training') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="chip" onClick={() => { setTaskView('overview'); setViewingLog(null); }} style={{ padding: '0.5rem' }}>
+              <ArrowLeft size={18} />
+            </button>
+            <h2 style={{ margin: 0 }}>Training Performance: {selectedRunId}</h2>
+          </div>
+          {renderLogViewer()}
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button className="chip" onClick={() => setSelectedRunId(null)} style={{ padding: '0.5rem' }}>
+            <ArrowLeft size={18} />
+          </button>
+          <h2 style={{ margin: 0 }}>Task: {selectedRunId}</h2>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>1. Training</div>
+            <StatusButton label={status?.training === 'running' ? 'Running' : (status?.training === 'completed' ? 'Completed' : 'Idle')} status={status?.training || 'idle'} />
+            <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => { setTaskView('training'); fetchLogs(selectedRunId); }}>View Performance</button>
+          </section>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>2. Sync Data</div>
+            <StatusButton label={status?.sync ? 'Generated' : 'Pending'} status={status?.sync || false} />
+          </section>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>3. Comparative</div>
+            <StatusButton label={status?.comparative ? 'Done' : 'Pending'} status={status?.comparative || false} />
+          </section>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>4. DEG</div>
+            <StatusButton label={status?.deg ? 'Done' : 'Pending'} status={status?.deg || false} />
+          </section>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>5. Pathway</div>
+            <StatusButton label={status?.pathway ? 'Done' : 'Pending'} status={status?.pathway || false} />
+          </section>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>6. Pred. Model</div>
+            <StatusButton label={status?.pred_model ? 'Done' : 'Pending'} status={status?.pred_model || false} />
+          </section>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) return <div style={{ padding: '2rem' }}>Loading Dashboard...</div>;
   const currentProj = projects.find(p => p.id === selectedProject);
 
@@ -253,178 +489,144 @@ const App: React.FC = () => {
       <aside className="sidebar">
         <div className="sidebar-header"><Activity size={24} /><span>GANomics Dashboard</span></div>
         <nav className="nav-menu">
-          <a className={`nav-item ${activeTab === 'train' ? 'active' : ''}`} onClick={() => setActiveTab('train')}><LayoutDashboard size={20} /> Training</a>
-          <a className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}><BarChart3 size={20} /> Analysis</a>
+          <a className={`nav-item ${activeTab === 'train' ? 'active' : ''}`} onClick={() => { setActiveTab('train'); setSelectedRunId(null); }}><LayoutDashboard size={20} /> Training</a>
+          <a className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => { setActiveTab('analysis'); setSelectedRunId(null); }}><BarChart3 size={20} /> Analysis</a>
           <a className="nav-item"><Database size={20} /> Datasets</a>
           <a className="nav-item"><Settings size={20} /> Configuration</a>
         </nav>
       </aside>
 
       <main className="main-content">
-        <header className="header">
-          <div className="header-info">
-            <h1>{activeTab === 'train' ? 'Model Training' : 'Performance Analysis'}</h1>
-            <p>{currentProj ? `Project: ${currentProj.name}` : 'Select a project.'}</p>
-          </div>
-          {activeTab === 'train' && (
-            <button className="chip selected" style={{ borderRadius: '8px', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center' }} onClick={handleStartSession}>
-              <Play size={16} style={{ marginRight: '8px' }} /> Start Session
-            </button>
-          )}
-        </header>
-
-        {activeTab === 'train' ? (
+        {selectedRunId ? (
+          renderTaskDashboard()
+        ) : (
           <>
-            <section className="card">
-              <h3>Project Selection</h3>
-              <div className="chip-grid">
-                {projects.map(p => (<div key={p.id} className={`chip ${selectedProject === p.id ? 'selected' : ''}`} onClick={() => setSelectedProject(p.id)}>{p.name}</div>))}
+            <header className="header">
+              <div className="header-info">
+                <h1>{activeTab === 'train' ? 'Model Training' : 'Performance Analysis'}</h1>
+                <p>{currentProj ? `Project: ${currentProj.name}` : 'Select a project.'}</p>
               </div>
-            </section>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              {activeTab === 'train' && (
+                <button className="chip selected" style={{ borderRadius: '8px', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center' }} onClick={handleStartSession}>
+                  <Play size={16} style={{ marginRight: '8px' }} /> Start Session
+                </button>
+              )}
+            </header>
+
+            {activeTab === 'train' ? (
+              <>
                 <section className="card">
-                  <h3>Ablation Matrix</h3>
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Sizes (N)</label>
-                    <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{sizes.map(s => (<div key={s} className={`chip ${selectedSizes.includes(s) ? 'selected' : ''}`} onClick={() => toggleSelection(s, selectedSizes, setSelectedSizes)}>N={s}</div>))}</div>
-                  </div>
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Weights (β)</label>
-                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Bio-Feedback Alignment</span>
-                    </div>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem', lineHeight: '1.2' }}>
-                      Controls the strength of the biological feedback loss, ensuring genes maintain their relative expression patterns across platforms.
-                    </p>
-                    <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{betas.map(b => (<div key={b} className={`chip ${selectedBetas.includes(b) ? 'selected' : ''}`} onClick={() => toggleSelection(b, selectedBetas, setSelectedBetas)}>β={b.toFixed(1)}</div>))}</div>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Weights (λ)</label>
-                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Cycle Reconstruction</span>
-                    </div>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem', lineHeight: '1.2' }}>
-                      Controls the cycle-consistency weight, enforcing that translating back to the original platform reproduces the input.
-                    </p>
-                    <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{lambdas.map(l => (<div key={l} className={`chip ${selectedLambdas.includes(l) ? 'selected' : ''}`} onClick={() => toggleSelection(l, selectedLambdas, setSelectedLambdas)}>λ={l.toFixed(1)}</div>))}</div>
+                  <h3>Project Selection</h3>
+                  <div className="chip-grid">
+                    {projects.map(p => (<div key={p.id} className={`chip ${selectedProject === p.id ? 'selected' : ''}`} onClick={() => setSelectedProject(p.id)}>{p.name}</div>))}
                   </div>
                 </section>
-                <section className="card">
-                  <h3>Project Status</h3>
-                  {renderProjectStatus()}
-                </section>
-              </div>
-              <section className="card">
-                <h3>Quick Config</h3>
-                <div className="config-form" style={{ gridTemplateColumns: '1fr', gap: '1rem' }}>
-                  <div className="form-group"><label>Epochs</label><input type="number" defaultValue={currentProj?.config?.train?.n_epochs || 250} /></div>
-                  <div className="form-group"><label>Learning Rate</label><input type="text" defaultValue={currentProj?.config?.optimizer?.lr || "0.0002"} /></div>
-                  <div className="form-group"><label>Batch Size</label><input type="number" defaultValue={currentProj?.config?.train?.batch_size || 1} /></div>
-                  
-                  {currentProj?.config && (
-                    <div style={{ marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem', display: 'block' }}>Read-only Parameters</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.7rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Input NC</span><span style={{ fontWeight: '600' }}>{currentProj.config.model?.input_nc}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Output NC</span><span style={{ fontWeight: '600' }}>{currentProj.config.model?.output_nc}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>λ IDT</span><span style={{ fontWeight: '600' }}>{currentProj.config.model?.lambda_idt}</span></div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>GAN Mode</span><span style={{ fontWeight: '600' }}>{currentProj.config.model?.gan_mode}</span></div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <section className="card">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                        <h3 style={{ margin: 0 }}>Ablation Matrix</h3>
+                        <div className="chip-grid" style={{ gap: '0.5rem' }}>
+                          <button className={`chip ${ablationType === 'size' ? 'selected' : ''}`} style={{ fontSize: '0.7rem' }} onClick={() => setAblationType('size')}>Vary Size (N)</button>
+                          <button className={`chip ${ablationType === 'beta' ? 'selected' : ''}`} style={{ fontSize: '0.7rem' }} onClick={() => setAblationType('beta')}>Vary Beta (β)</button>
+                          <button className={`chip ${ablationType === 'lambda' ? 'selected' : ''}`} style={{ fontSize: '0.7rem' }} onClick={() => setAblationType('lambda')}>Vary Lambda (λ)</button>
+                        </div>
+                      </div>
+                      
+                      {ablationType === 'size' && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                          <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Experiment: Sample Size (N)</label>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>β and λ will be fixed at 10.0</p>
+                          <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{sizes.map(s => (<div key={s} className={`chip ${selectedSizes.includes(s) ? 'selected' : ''}`} onClick={() => toggleSelection(s, selectedSizes, setSelectedSizes)}>N={s}</div>))}</div>
+                        </div>
+                      )}
+
+                      {ablationType === 'beta' && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Experiment: Weights (β)</label>
+                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Bio-Feedback Alignment</span>
+                          </div>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>N will be fixed at 50, λ at 10.0</p>
+                          <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{betas.map(b => (<div key={b} className={`chip ${selectedBetas.includes(b) ? 'selected' : ''}`} onClick={() => toggleSelection(b, selectedBetas, setSelectedBetas)}>β={b.toFixed(1)}</div>))}</div>
+                        </div>
+                      )}
+
+                      {ablationType === 'lambda' && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Experiment: Weights (λ)</label>
+                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Cycle Reconstruction</span>
+                          </div>
+                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>N will be fixed at 50, β at 10.0</p>
+                          <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{lambdas.map(l => (<div key={l} className={`chip ${selectedLambdas.includes(l) ? 'selected' : ''}`} onClick={() => toggleSelection(l, selectedLambdas, setSelectedLambdas)}>λ={l.toFixed(1)}</div>))}</div>
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>Session Repeats:</label>
+                        <input 
+                          type="number" min={1} max={10} 
+                          value={selectedRepeats} 
+                          onChange={(e) => setSelectedRepeats(parseInt(e.target.value) || 1)}
+                          style={{ width: '60px', padding: '0.25rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                        />
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>* How many runs for each condition</span>
+                      </div>
+                    </section>
+                    <section className="card">
+                      <h3>Project Status</h3>
+                      {renderProjectStatus()}
+                    </section>
+                  </div>
+                  <section className="card">
+                    <h3>Quick Config</h3>
+                    <div className="config-form" style={{ gridTemplateColumns: '1fr', gap: '1.25rem' }}>
+                      <div className="form-group">
+                        <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>Training Epochs</label>
+                        <div className="chip-grid" style={{ marginTop: '0.5rem', gap: '0.4rem' }}>
+                          {[100, 500, 1000].map(e => (
+                            <div key={e} className={`chip ${selectedEpochs === e ? 'selected' : ''}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }} onClick={() => setSelectedEpochs(e)}>{e}</div>
+                          ))}
+                          <div className={`chip ${selectedEpochs === 'custom' ? 'selected' : ''}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }} onClick={() => setSelectedEpochs('custom')}>Custom</div>
+                        </div>
+                        {selectedEpochs === 'custom' && (
+                          <input 
+                            type="number" value={customEpochs} 
+                            onChange={(e) => setCustomEpochs(parseInt(e.target.value) || 250)}
+                            style={{ marginTop: '0.5rem', width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
+                          />
+                        )}
+                      </div>
+
+                      <div style={{ marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem', display: 'block' }}>Fixed Parameters</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.7rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>LR</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.optimizer?.lr || "0.0002"}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Batch Size</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.train?.batch_size || 1}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Input NC</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.model?.input_nc}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Output NC</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.model?.output_nc}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>λ IDT</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.model?.lambda_idt}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>GAN Mode</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.model?.gan_mode}</span></div>
+                        </div>
                       </div>
                     </div>
-                  )}
-                </div>
+                  </section>                </div>
+              </>
+            ) : (
+              <section className="card">
+                <h3>Comparison: {selectedProject}</h3>
+                {metrics.length > 0 ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
+                    <thead><tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border-color)' }}><th style={{ padding: '0.75rem' }}>Algorithm</th><th style={{ padding: '0.75rem' }}>Pearson</th><th style={{ padding: '0.75rem' }}>Spearman</th><th style={{ padding: '0.75rem' }}>MAE</th></tr></thead>
+                    <tbody>{metrics.map((m, i) => (<tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}><td style={{ padding: '0.75rem', fontWeight: '600' }}>{m.Algorithm}</td><td style={{ padding: '0.75rem' }}>{m.Pearson}</td><td style={{ padding: '0.75rem' }}>{m.Spearman}</td><td style={{ padding: '0.75rem' }}>{m.MAE}</td></tr>))}</tbody>
+                  </table>
+                ) : (<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No metrics found.</div>)}
               </section>
-            </div>
+            )}
           </>
-        ) : (
-          <section className="card">
-            <h3>Comparison: {selectedProject}</h3>
-            {metrics.length > 0 ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-                <thead><tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border-color)' }}><th style={{ padding: '0.75rem' }}>Algorithm</th><th style={{ padding: '0.75rem' }}>Pearson</th><th style={{ padding: '0.75rem' }}>Spearman</th><th style={{ padding: '0.75rem' }}>MAE</th></tr></thead>
-                <tbody>{metrics.map((m, i) => (<tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}><td style={{ padding: '0.75rem', fontWeight: '600' }}>{m.Algorithm}</td><td style={{ padding: '0.75rem' }}>{m.Pearson}</td><td style={{ padding: '0.75rem' }}>{m.Spearman}</td><td style={{ padding: '0.75rem' }}>{m.MAE}</td></tr>))}</tbody>
-              </table>
-            ) : (<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No metrics found.</div>)}
-          </section>
         )}
       </main>
-
-      {viewingLog && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ width: '95%', height: '90%', display: 'flex', flexDirection: 'column', gap: '0.75rem', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                <h3>Logs: {viewingLog.replace("_log.txt", "")}</h3>
-                <div className="chip-grid">
-                  <div className={`chip ${logMode === 'chart' ? 'selected' : ''}`} style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem' }} onClick={() => setLogMode('chart')}><LineChartIcon size={12} /> Figure</div>
-                  <div className={`chip ${logMode === 'structured' ? 'selected' : ''}`} style={{ padding: '0.2rem 0.6rem', fontSize: '0.8rem' }} onClick={() => setLogMode('structured')}><TableIcon size={12} /> Table</div>
-                </div>
-              </div>
-              <X onClick={() => setViewingLog(null)} style={{ cursor: 'pointer' }} />
-            </div>
-
-            {logData?.summary && (
-              <div style={{ display: 'flex', gap: '0.5rem', padding: '0.25rem 0', flexWrap: 'wrap' }}>
-                <div style={{ background: '#f8f9fa', padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid var(--border-color)', minWidth: '120px' }}><div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>PROGRESS</div><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>E{logData.summary.epoch} | I{logData.summary.iters}</div></div>
-                {LOSS_METRICS.map(m => (
-                  <div key={m.key} style={{ background: visibleMetrics.includes(m.key) ? '#f8f9fa' : '#fff', opacity: visibleMetrics.includes(m.key) ? 1 : 0.5, padding: '0.5rem 1rem', borderRadius: '6px', borderLeft: `4px solid ${m.color}`, borderRight: '1px solid var(--border-color)', borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', minWidth: '100px', flex: 1, cursor: 'pointer' }} onClick={() => toggleSelection(m.key, visibleMetrics, setVisibleMetrics)}>
-                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>{m.label.toUpperCase()}{visibleMetrics.includes(m.key) ? <Eye size={10} /> : <EyeOff size={10} />}</div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: m.color }}>{logData.summary[m.key]?.toFixed(4) || "0.0000"}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            <div style={{ flex: 1, overflow: 'auto', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: '#fff', display: 'flex', flexDirection: 'column' }}>
-              {!logData ? (
-                <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>
-              ) : logMode === 'chart' ? (
-                <div style={{ width: '100%', height: '400px', padding: '1.5rem' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" interval="preserveStartEnd" minTickGap={50} fontSize={10} />
-                      <YAxis domain={['auto', 'auto']} fontSize={10} />
-                      <Tooltip />
-                      <Legend iconSize={10} wrapperStyle={{fontSize: '10px'}} />
-                      {LOSS_METRICS.map(m => visibleMetrics.includes(m.key) && (<Line key={m.key} type="monotone" dataKey={m.key} stroke={m.color} dot={false} strokeWidth={1.5} animationDuration={300} isAnimationActive={chartData.length < 1000} />))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <>
-                  <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', display: 'flex', gap: '1rem', alignItems: 'center', backgroundColor: '#fdfdfd' }}>
-                    <div style={{ position: 'relative', flex: 1, maxWidth: '300px' }}>
-                      <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                      <input 
-                        type="text" placeholder="Search epoch or iteration..." 
-                        style={{ padding: '0.4rem 0.75rem 0.4rem 2rem', width: '100%', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} 
-                        value={searchTerm} onChange={(e) => {setSearchTerm(e.target.value); setCurrentPage(1);}}
-                      />
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Page {currentPage} of {totalPages || 1} ({filteredData.length} matches)</div>
-                  </div>
-                  <div style={{ flex: 1, overflowY: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                      <thead style={{ position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}><tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border-color)' }}><th style={{ padding: '0.4rem' }}>Epoch</th><th style={{ padding: '0.4rem' }}>Iters</th><th style={{ padding: '0.4rem' }}>G_A</th><th style={{ padding: '0.4rem' }}>G_B</th><th style={{ padding: '0.4rem' }}>D_A</th><th style={{ padding: '0.4rem' }}>D_B</th><th style={{ padding: '0.4rem' }}>Cycle</th><th style={{ padding: '0.4rem' }}>Feedback</th><th style={{ padding: '0.4rem' }}>IDT</th></tr></thead>
-                      <tbody>{tableData.map((row, i) => (<tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}><td style={{ padding: '0.4rem', fontWeight: '600' }}>{row.epoch}</td><td style={{ padding: '0.4rem' }}>{row.iters}</td><td style={{ padding: '0.4rem' }}>{row.G_A?.toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{row.G_B?.toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{row.D_A?.toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{row.D_B?.toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{((row.cycle_A || 0) + (row.cycle_B || 0)).toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{((row.feedback_A || 0) + (row.feedback_B || 0)).toFixed(3)}</td><td style={{ padding: '0.4rem' }}>{((row.idt_A || 0) + (row.idt_B || 0)).toFixed(3)}</td></tr>))}</tbody>
-                    </table>
-                  </div>
-                  <div style={{ padding: '0.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center', gap: '0.5rem', backgroundColor: '#fdfdfd' }}>
-                    <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft size={14} /></button>
-                    <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}><ChevronLeft size={14} /></button>
-                    <span style={{ display: 'flex', alignItems: 'center', paddingLeft: '1rem', paddingRight: '1rem', fontSize: '0.85rem' }}>{currentPage} / {totalPages || 1}</span>
-                    <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}><ChevronRight size={14} /></button>
-                    <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight size={14} /></button>
-                  </div>
-                </>
-              )}
-            </div>
-            {logData && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Displaying all {logData.structured.length} recorded training points.</div>}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

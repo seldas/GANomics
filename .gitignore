@@ -7,3 +7,4 @@ results/sync_data/*
 
 __pycache__/
 results_old/
+app_logs/
