@@ -94,7 +94,24 @@ def main():
     res_qn = quantile_normalize(train_ag, test_ag, train_ngs, test_ngs)
     df_ma_qn = res_qn['rnaseq_to_microarray']
     df_rs_qn = res_qn['microarray_to_rnaseq']
-    
+
+    # save fake data of all algorithm into the sync_data folder:
+    sync_dir_fake = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}", "algorithms")
+    if not os.path.exists(sync_dir_fake):
+        os.system(f'mkdir -p {sync_dir_fake}')
+
+    df_ma_combat.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_combat.csv'))
+    df_ma_yugene.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_yugene.csv'))
+    df_ma_cublock.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_cublock.csv'))
+    df_ma_tdm.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_tdm.csv'))
+    df_ma_qn.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_qn.csv'))
+
+    df_ma_combat.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_combat.csv'))
+    df_ma_yugene.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_yugene.csv'))
+    df_ma_cublock.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_cublock.csv'))
+    df_ma_tdm.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_tdm.csv'))
+    df_ma_qn.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_qn.csv'))
+
     # 4. Aggregate Metrics
     comparisons = [
         ("GANomics (MA)", test_ag, df_ma_fake),

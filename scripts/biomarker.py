@@ -7,7 +7,8 @@ from src.core.pathway import load_gmt, run_permutation_test, jaccard_threshold_c
 
 def main():
     parser = argparse.ArgumentParser(description="Biomarker and Cross-Platform Modeling")
-    parser.add_argument("--real_A", type=str, required=True, help="Path to Real Domain A")
+    parser.add_argument("--data", type=str, required=True, help="data folder to the paired datasets (real, fake), (ag, ngs)")
+    parser.add_argument("--real_A", type=str, default='', help="Path to Real Domain A")
     parser.add_argument("--real_B", type=str, required=True, help="Path to Real Domain B")
     parser.add_argument("--syn_A", type=str, required=True, help="Path to Synthetic Domain A (from B)")
     parser.add_argument("--syn_B", type=str, required=True, help="Path to Synthetic Domain B (from A)")
