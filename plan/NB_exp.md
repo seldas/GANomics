@@ -58,7 +58,7 @@ Generating synthetic profiles. Automatically splits results into `train/` and `t
 
 - **Command:**
   ```bash
-  python scripts/test_sync.py --config configs/nb_config.yaml --project NB --sample_size 50 --run_id 0
+  python scripts/test_sync.py --config configs/nb_config.yaml --project NB --sample_size 50 --run_id 0 --exp_type Ablation_Size
   ```
 - **Expected Outputs:** `results/sync_data/NB_50_0/test/microarray_fake.csv`, etc.
 

@@ -1,10 +1,14 @@
 import os
+import sys
 import argparse
 import yaml
 import torch
 import pandas as pd
 import numpy as np
 import pickle
+
+# Add the parent directory to sys.path to make 'src' importable
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.datasets.genomics_dataset import GenomicsDataset
 from src.models.ganomics_model import GANomicsModel
 from src.core.evaluation import compute_metrics
@@ -36,7 +40,13 @@ def main():
     parser.add_argument("--project", type=str, default="NB", help="Project name")
     parser.add_argument("--sample_size", type=int, default=50, help="Training size")
     parser.add_argument("--run_id", type=int, default=0, help="Run ID")
+    parser.add_argument("--no_adjust_path", action='store_true', help="Don't adjust PYTHONPATH")
+    parser.add_argument("--save_full", action='store_true', help="Save full results")
     args = parser.parse_args()
+    
+    if not args.no_adjust_path:
+        # Add the parent directory to sys.path to make 'src' importable
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
@@ -44,25 +54,18 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     # 1. Load Data and Split
-    dataset = GenomicsDataset(config['dataset']['path_A'], config['dataset']['path_B'], is_train=False)
-    
-    # Determine test index from sync data if it exists, or use default split
-    # For NB, the paper uses a specific split. Here we'll use the remaining samples.
-    n_train = args.sample_size
-    train_ag = dataset.df_A.iloc[:n_train]
-    train_ngs = dataset.df_B.iloc[:n_train]
-    test_ag = dataset.df_A.iloc[n_train:]
-    test_ngs = dataset.df_B.iloc[n_train:]
+    train_dir = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}", "train")
+    train_ag = pd.read_csv(os.path.join(train_dir, "microarray_real.csv"), index_col=0)
+    train_ngs = pd.read_csv(os.path.join(train_dir, "rnaseq_real.csv"), index_col=0)
+    test_dir = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}", "test")
+    test_ag = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
+    test_ngs = pd.read_csv(os.path.join(test_dir, "rnaseq_real.csv"), index_col=0)
     
     # 2. GANomics Results
-    sync_dir = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}")
+    sync_dir = os.path.join("results", "sync_data", f"{args.project}_{args.sample_size}_{args.run_id}", "test")
     df_ma_fake = pd.read_csv(os.path.join(sync_dir, "microarray_fake.csv"), index_col=0)
     df_rs_fake = pd.read_csv(os.path.join(sync_dir, "rnaseq_fake.csv"), index_col=0)
     
-    # Sync with test index
-    df_ma_fake = df_ma_fake.loc[test_ag.index]
-    df_rs_fake = df_rs_fake.loc[test_ngs.index]
-
     # 3. Run Baselines
     print("Running Baseline Comparisons...")
     

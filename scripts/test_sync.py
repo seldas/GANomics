@@ -1,9 +1,12 @@
 import os
+import sys
 import argparse
 import yaml
 import torch
 import pandas as pd
 import numpy as np
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.datasets.genomics_dataset import GenomicsDataset
 from src.models.ganomics_model import GANomicsModel
 from src.core.evaluation import benchmark_all_methods
@@ -15,7 +18,14 @@ def main():
     parser.add_argument("--sample_size", type=int, default=400, help="Training sample size used")
     parser.add_argument("--run_id", type=int, default=0, help="Run/Repetition ID")
     parser.add_argument("--epoch", type=str, default="latest", help="Epoch checkpoint to load")
+    parser.add_argument("--no_adjust_path", action='store_true', help="Don't adjust PYTHONPATH")
+    parser.add_argument("--exp_type", type=str, default="GANomics", help="Experiment type, specific to checkpoints.")
     args = parser.parse_args()
+
+    if not args.no_adjust_path:
+        # Add the parent directory to sys.path to make 'src' importable
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    
     
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
@@ -24,7 +34,7 @@ def main():
     
     # 1. Determine Checkpoint Path
     # Convention: results/checkpoints/{Project}_GANomics_{sample_size}_{run_id}/net_epoch_{epoch}.pth
-    exp_name = f"{args.project}_GANomics_{args.sample_size}_{args.run_id}"
+    exp_name = f"{args.project}_{args.exp_type}_{args.sample_size}_Run_{args.run_id}"
     checkpoint_dir = os.path.join(config['output']['checkpoints_dir'], exp_name)
     
     if args.epoch == "latest":

@@ -20,7 +20,7 @@ Each method will translate RNA-seq (RS) test samples into the Microarray (MA) do
 - **Expression Data:** `dataset/NB/NB_AG.csv` (MA) and `dataset/NB/NB_NGS.csv` (RS).
 - **Clinical Labels:** `dataset/NB/clinical_info.csv` (Expected columns: `sample_id`, `label` where label is High-Risk/Low-Risk).
     - *Note:* If missing, this must be generated from the SEQC clinical TXT file found in the original dataset.
-- **Pathway Sets:** `dataset/RAW/h.all.v2023.1.Hs.symbols.gmt` (MSigDB GO Terms).
+- **Pathway Sets:** `dataset/RAW/h.all.v2025.1.Hs.symbols.gmt`.
 - **Model:** `results/checkpoints/NB_Ablation_Size_50_Run_0/` (Latest checkpoint).
 
 ## 4. Implementation Steps
@@ -54,11 +54,11 @@ python scripts/comparative_analysis.py --config configs/nb_config.yaml --sample_
 
 # 2. Run the comparative biomarker analysis
 python scripts/comparative_biomarker.py `
-    --real_A dataset/NB/NB_A.csv `
-    --real_B dataset/NB/NB_B.csv `
+    --real_A dataset/NB/NB_AG.csv `
+    --real_B dataset/NB/NB_NGS.csv `
     --syn_dir results/sync_data/baselines/NB_50_0/ `
     --labels dataset/NB/clinical_info.csv `
-    --gmt dataset/RAW/h.all.v2023.1.Hs.symbols.gmt `
+    --gmt dataset/RAW/h.all.v2025.1.Hs.symbols.gmt `
     --out results/tables/Comparative_Biological_Fidelity.csv
 
 # 3. Generate plots
