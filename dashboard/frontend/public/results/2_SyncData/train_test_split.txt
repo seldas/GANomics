@@ -1,1 +1,0 @@
-#this file defines which samples have been used for training/testing purpose

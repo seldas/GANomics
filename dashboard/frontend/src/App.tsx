@@ -16,6 +16,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   ArrowLeft
@@ -23,12 +24,15 @@ import {
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
+  ReferenceLine
 } from 'recharts';
 import './App.css';
 
@@ -72,7 +76,8 @@ const App: React.FC = () => {
   const [customEpochs, setCustomEpochs] = useState<number>(500);
   const [ablationType, setAblationType] = useState<'size' | 'beta' | 'lambda'>('size');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [taskView, setTaskView] = useState<'overview' | 'training'>('overview');
+  const [taskView, setTaskView] = useState<'overview' | 'training' | 'comparative'>('overview');
+  const [runComparativeData, setRunComparativeData] = useState<any[] | null>(null);
   
   const [resultsStatus, setResultsStatus] = useState<{
     checkpoints: string[], 
@@ -223,6 +228,204 @@ const App: React.FC = () => {
     return <div className={className} style={style}>{label}</div>;
   };
 
+  const fetchComparativeMetrics = (runId: string) => {
+    setTaskView('comparative');
+    setRunComparativeData(null);
+    axios.get(`${API_BASE}/runs/${runId}/comparative`)
+      .then(res => setRunComparativeData(res.data))
+      .catch(() => setRunComparativeData([]));
+  };
+
+  const [corrGroup, setCorrGroup] = useState<'MA' | 'RS'>('MA');
+
+  const renderComparativeAnalysis = () => {
+    if (!runComparativeData) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
+    if (runComparativeData.length === 0) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No comparative data found for this run.</div>;
+
+    const parseVal = (str: string) => {
+      if (!str || typeof str !== 'string') return 0;
+      const match = str.match(/([-\d.]+)/);
+      return match ? parseFloat(match[1]) : 0;
+    };
+
+    const processed = runComparativeData.map(d => ({
+      ...d,
+      pearsonNum: parseVal(d.Pearson),
+      spearmanNum: parseVal(d.Spearman),
+      maeNum: parseVal(d.L1 || d.MAE),
+      isExtreme: parseVal(d.L1 || d.MAE) > 100000 
+    }));
+
+    // Filter for Correlation Section
+    const allCorrData = processed.filter(d => 
+      d.Algorithm.includes(`(${corrGroup})`) || d.Algorithm.toLowerCase().includes('baseline')
+    );
+
+    const baselineEntry = allCorrData.find(d => d.Algorithm.toLowerCase().includes('baseline'));
+    const chartData = allCorrData.filter(d => !d.Algorithm.toLowerCase().includes('baseline'));
+    
+    const baselinePearson = baselineEntry?.pearsonNum || 0;
+    const baselineSpearman = baselineEntry?.spearmanNum || 0;
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        {/* SECTION 1: Correlation Performance */}
+        <section className="card">
+          <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h3 style={{ margin: 0 }}>1. Correlation Performance (Alignment Strength)</h3>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>How well the trends match (Range: -1 to 1, Higher is Better)</p>
+            </div>
+            <div className="chip-grid" style={{ gap: '0.5rem' }}>
+              <button className={`chip ${corrGroup === 'MA' ? 'selected' : ''}`} onClick={() => setCorrGroup('MA')}>Microarray (MA)</button>
+              <button className={`chip ${corrGroup === 'RS' ? 'selected' : ''}`} onClick={() => setCorrGroup('RS')}>RNA-Seq (RS)</button>
+            </div>
+          </div>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '2rem', alignItems: 'start' }}>
+            {/* Correlation Chart */}
+            <div style={{ height: '450px', backgroundColor: '#fcfcfc', borderRadius: '8px', padding: '1rem' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 10, left: 0, bottom: 90 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                  <XAxis 
+                    dataKey="Algorithm" 
+                    angle={-45} 
+                    textAnchor="end" 
+                    interval={0} 
+                    fontSize={11} 
+                    tick={{ fill: 'var(--text-main)' }}
+                    height={100}
+                  />
+                  <YAxis 
+                    domain={[0, 1]} 
+                    fontSize={11}
+                    label={{ value: 'Correlation Coefficient', angle: -90, position: 'insideLeft', offset: 10, fontSize: 12, fontWeight: 500 }} 
+                  />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(0,0,0,0.04)' }} 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }} 
+                  />
+                  <Legend 
+                    verticalAlign="top" 
+                    align="right" 
+                    wrapperStyle={{ paddingBottom: '20px', fontSize: '11px' }} 
+                    payload={[
+                      { value: 'Pearson (r)', type: 'rect', color: 'var(--primary-color)' },
+                      { value: 'Spearman (ρ)', type: 'rect', color: '#818cf8' },
+                      { value: `Baseline (r): ${baselinePearson.toFixed(3)}`, type: 'plainline', color: 'var(--primary-color)' },
+                      { value: `Baseline (ρ): ${baselineSpearman.toFixed(3)}`, type: 'plainline', color: '#818cf8' },
+                    ]}
+                  />
+                  
+                  {/* Baseline Reference Lines */}
+                  <ReferenceLine 
+                    y={baselinePearson} 
+                    stroke="var(--primary-color)" 
+                    strokeDasharray="5 5" 
+                    strokeWidth={2} 
+                  />
+                  <ReferenceLine 
+                    y={baselineSpearman} 
+                    stroke="#818cf8" 
+                    strokeDasharray="5 5" 
+                    strokeWidth={2} 
+                  />
+
+                  <Bar dataKey="pearsonNum" name="Pearson (r)" fill="var(--primary-color)" radius={[4, 4, 0, 0]} barSize={24} />
+                  <Bar dataKey="spearmanNum" name="Spearman (ρ)" fill="#818cf8" radius={[4, 4, 0, 0]} barSize={24} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Correlation Table */}
+            <div style={{ overflowX: 'auto', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', backgroundColor: '#f9fafb', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '0.75rem' }}>Algorithm</th>
+                    <th style={{ padding: '0.75rem' }}>Pearson (r)</th>
+                    <th style={{ padding: '0.75rem' }}>Spearman (ρ)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allCorrData.map((m, i) => {
+                    const isBaseline = m.Algorithm.toLowerCase().includes('baseline');
+                    return (
+                      <tr key={i} style={{ 
+                        borderBottom: '1px solid #f3f4f6',
+                        backgroundColor: isBaseline ? '#f0f9ff' : 'transparent',
+                        fontWeight: isBaseline ? 'bold' : 'normal'
+                      }} className="hover-row">
+                        <td style={{ padding: '0.75rem', fontWeight: '600' }}>{m.Algorithm}</td>
+                        <td style={{ padding: '0.75rem', color: m.pearsonNum > 0.9 ? 'var(--success-color)' : 'inherit', fontWeight: m.pearsonNum > 0.9 ? '700' : '400' }}>{m.Pearson}</td>
+                        <td style={{ padding: '0.75rem', color: m.spearmanNum > 0.9 ? 'var(--success-color)' : 'inherit', fontWeight: m.spearmanNum > 0.9 ? '700' : '400' }}>{m.Spearman}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 2: Error Performance */}
+        <section className="card">
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ margin: 0 }}>2. Error Performance (Deviation)</h3>
+            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Average distance between actual and predicted values (Lower is Better)</p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
+            {/* Error Chart (Log Scale) */}
+            <div style={{ height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={processed} margin={{ top: 20, right: 30, left: 20, bottom: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                  <XAxis dataKey="Algorithm" angle={-30} textAnchor="end" interval={0} fontSize={10} />
+                  <YAxis 
+                    scale="log" 
+                    domain={[1, 'auto']} 
+                    label={{ value: 'Error (log)', angle: -90, position: 'insideLeft', fontSize: 10 }}
+                    tickFormatter={(val) => val.toExponential(0)}
+                  />
+                  <Tooltip 
+                    cursor={{ fill: '#f8f9fa' }}
+                    formatter={(value: any) => [parseFloat(value).toExponential(2), "Error"]}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  />
+                  <Bar dataKey="maeNum" name="MAE / L1" fill="#ec4899" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Error Table */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '0.5rem' }}>Algorithm</th>
+                    <th style={{ padding: '0.5rem' }}>MAE / L1</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {processed.map((m, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid #f9fafb' }}>
+                      <td style={{ padding: '0.5rem', fontWeight: '600' }}>{m.Algorithm}</td>
+                      <td style={{ padding: '0.5rem', color: m.isExtreme ? '#ef4444' : 'inherit' }}>
+                        {m.isExtreme ? m.maeNum.toExponential(4) : (m.L1 || m.MAE)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
   const renderLogViewer = () => {
     if (!logData) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
     
@@ -350,6 +553,8 @@ const App: React.FC = () => {
   };
 
   const [statusFilters, setStatusFilters] = useState({ architecture: 'all', size: 'all', sensitivity: 'all' });
+  const [globalStepFilter, setGlobalStepFilter] = useState<string>('all');
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
 
   const renderProjectStatus = () => {
     const projectLogs = resultsStatus.logs
@@ -363,66 +568,110 @@ const App: React.FC = () => {
       other: projectLogs.filter(id => !id.includes("Architecture") && !id.includes("Size") && !id.includes("Sensitivity"))
     };
 
-    const SubPanel = ({ title, items, filterKey }: { title: string, items: string[], filterKey: keyof typeof statusFilters }) => {
+    const SubPanel = ({ title, items, filterKey }: { title: string, items: string[], filterKey: string }) => {
       if (items.length === 0) return null;
+      const isCollapsed = collapsedPanels[filterKey] || false;
       
       const filteredItems = items.filter(id => {
-        if (statusFilters[filterKey] === 'all') return true;
         const status = resultsStatus.run_statuses?.[id];
-        if (statusFilters[filterKey] === 'running') return status?.training === 'running';
-        if (statusFilters[filterKey] === 'completed') return status?.training === 'completed';
-        if (statusFilters[filterKey] === 'pending') return status?.training === 'idle';
+        
+        // 1. Global Step Filter
+        if (globalStepFilter !== 'all') {
+          if (globalStepFilter === 'training') {
+            if (status?.training !== 'completed') return false;
+          } else {
+            const stepKey = globalStepFilter as keyof NonNullable<typeof status>;
+            if (!status?.[stepKey]) return false;
+          }
+        }
+
+        const key = filterKey as keyof typeof statusFilters;
+        if (statusFilters[key] === 'all') return true;
+        if (statusFilters[key] === 'running') return status?.training === 'running';
+        if (statusFilters[key] === 'completed') return status?.training === 'completed';
+        if (statusFilters[key] === 'pending') return status?.training === 'idle';
         return true;
       });
 
       return (
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem' }}>
-            <h4 style={{ margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</h4>
-            <select 
-              value={statusFilters[filterKey]} 
-              onChange={(e) => setStatusFilters({ ...statusFilters, [filterKey]: e.target.value })}
-              style={{ fontSize: '0.7rem', padding: '2px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-            >
-              <option value="all">All Status</option>
-              <option value="running">Running</option>
-              <option value="completed">Completed</option>
-              <option value="pending">Pending</option>
-            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }} onClick={() => setCollapsedPanels({ ...collapsedPanels, [filterKey]: !isCollapsed })}>
+              {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              <h4 style={{ margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title} ({filteredItems.length})</h4>
+            </div>
+            {!isCollapsed && (
+              <select 
+                value={statusFilters[filterKey as keyof typeof statusFilters]} 
+                onChange={(e) => setStatusFilters({ ...statusFilters, [filterKey]: e.target.value })}
+                style={{ fontSize: '0.7rem', padding: '2px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+              >
+                <option value="all">All Status</option>
+                <option value="running">Running</option>
+                <option value="completed">Completed</option>
+                <option value="pending">Pending</option>
+              </select>
+            )}
           </div>
-          <div className="queue-list">
-            {filteredItems.map(runId => {
-              const status = resultsStatus.run_statuses?.[runId];
-              const isSizeTask = runId.includes("Size") && !runId.includes("Architecture");
-              return (
-                <div key={runId} className="queue-item" onClick={() => { setSelectedRunId(runId); setTaskView('overview'); }} style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
-                  <div style={{ fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {runId}
-                    {status?.training === 'running' && <Loader2 size={12} className="animate-spin" style={{ color: '#1890ff' }} />}
+          {!isCollapsed && (
+            <div className="queue-list">
+              {filteredItems.map(runId => {
+                const status = resultsStatus.run_statuses?.[runId];
+                const isSizeTask = runId.includes("Size") && !runId.includes("Architecture");
+                return (
+                  <div key={runId} className="queue-item" onClick={() => { setSelectedRunId(runId); setTaskView('overview'); }} style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {runId}
+                      {status?.training === 'running' && <Loader2 size={12} className="animate-spin" style={{ color: '#1890ff' }} />}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      <StatusButton label="Training" status={status?.training || 'idle'} />
+                      <StatusButton label="Sync Data" status={status?.sync || false} />
+                      <StatusButton label="Comparative" status={isSizeTask ? (status?.comparative || false) : 'unavailable'} />
+                      <StatusButton label="DEG" status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
+                      <StatusButton label="Pathway" status={isSizeTask ? (status?.pathway || false) : 'unavailable'} />
+                      <StatusButton label="Pred. Model" status={isSizeTask ? (status?.pred_model || false) : 'unavailable'} />
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                    <StatusButton label="Training" status={status?.training || 'idle'} />
-                    <StatusButton label="Sync Data" status={status?.sync || false} />
-                    <StatusButton label="Comparative" status={isSizeTask ? (status?.comparative || false) : 'unavailable'} />
-                    <StatusButton label="DEG" status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
-                    <StatusButton label="Pathway" status={isSizeTask ? (status?.pathway || false) : 'unavailable'} />
-                    <StatusButton label="Pred. Model" status={isSizeTask ? (status?.pred_model || false) : 'unavailable'} />
-                  </div>
-                </div>
-              );
-            })}
-            {filteredItems.length === 0 && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>No runs matching filter.</div>}
-          </div>
+                );
+              })}
+              {filteredItems.length === 0 && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>No runs matching filter.</div>}
+            </div>
+          )}
         </div>
       );
     };
 
     return (
-      <div>
-        <SubPanel title="🏗️ Architecture" items={categories.architecture} filterKey="architecture" />
-        <SubPanel title="📏 Sample Size" items={categories.size} filterKey="size" />
-        <SubPanel title="⚙️ Sensitivity" items={categories.sensitivity} filterKey="sensitivity" />
-        <SubPanel title="📦 Other Runs" items={categories.other} filterKey="architecture" />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>FILTER BY COMPLETION:</div>
+            <select 
+              value={globalStepFilter} 
+              onChange={(e) => setGlobalStepFilter(e.target.value)}
+              style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: '#fff', fontWeight: '600' }}
+            >
+              <option value="all">Show All Tasks</option>
+              <option value="training">Finished: 1. Training</option>
+              <option value="sync">Finished: 2. Sync Data</option>
+              <option value="comparative">Finished: 3. Comparative</option>
+              <option value="deg">Finished: 4. DEG</option>
+              <option value="pathway">Finished: 5. Pathway</option>
+              <option value="pred_model">Finished: 6. Pred. Model</option>
+            </select>
+          </div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            Total: {projectLogs.length} runs
+          </div>
+        </div>
+
+        <div>
+          <SubPanel title="🏗️ Architecture" items={categories.architecture} filterKey="architecture" />
+          <SubPanel title="📏 Sample Size" items={categories.size} filterKey="size" />
+          <SubPanel title="⚙️ Sensitivity" items={categories.sensitivity} filterKey="sensitivity" />
+          <SubPanel title="📦 Other Runs" items={categories.other} filterKey="architecture" />
+        </div>
       </div>
     );
   };
@@ -442,6 +691,20 @@ const App: React.FC = () => {
             <h2 style={{ margin: 0 }}>Training Performance: {selectedRunId}</h2>
           </div>
           {renderLogViewer()}
+        </div>
+      );
+    }
+
+    if (taskView === 'comparative') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="chip" onClick={() => setTaskView('overview')} style={{ padding: '0.5rem' }}>
+              <ArrowLeft size={18} />
+            </button>
+            <h2 style={{ margin: 0 }}>Comparative Analysis: {selectedRunId}</h2>
+          </div>
+          {renderComparativeAnalysis()}
         </div>
       );
     }
@@ -468,6 +731,9 @@ const App: React.FC = () => {
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>3. Comparative</div>
             <StatusButton label={isSizeTask ? (status?.comparative ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.comparative || false) : 'unavailable'} />
+            {isSizeTask && status?.comparative && (
+              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchComparativeMetrics(selectedRunId)}>View Results</button>
+            )}
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>4. DEG</div>
@@ -486,18 +752,92 @@ const App: React.FC = () => {
     );
   };
 
-  if (loading) return <div style={{ padding: '2rem' }}>Loading Dashboard...</div>;
   const currentProj = projects.find(p => p.id === selectedProject);
+  const status = selectedRunId ? resultsStatus.run_statuses?.[selectedRunId] : null;
+  const isSizeTask = selectedRunId ? selectedRunId.includes("Size") && !selectedRunId.includes("Architecture") : false;
+
+  const StepItem = ({ num, label, active, status, onClick, disabled }: any) => (
+    <div 
+      onClick={!disabled ? onClick : undefined}
+      className={`nav-item ${active ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+      style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '12px', 
+        paddingLeft: '24px', 
+        fontSize: '0.85rem',
+        opacity: disabled ? 0.5 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer'
+      }}
+    >
+      <div style={{ 
+        width: '20px', 
+        height: '20px', 
+        borderRadius: '50%', 
+        backgroundColor: active ? 'var(--primary-color)' : (status === 'completed' || status === true ? 'var(--success-color)' : '#e5e7eb'),
+        color: active || status === 'completed' || status === true ? 'white' : 'var(--text-muted)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '0.7rem',
+        fontWeight: 'bold'
+      }}>
+        {num}
+      </div>
+      <span style={{ flex: 1 }}>{label}</span>
+      {status === 'running' && <Loader2 size={12} className="animate-spin" />}
+    </div>
+  );
+
+  if (loading) return <div style={{ padding: '2rem' }}>Loading Dashboard...</div>;
 
   return (
     <div className="dashboard-container">
       <aside className="sidebar">
         <div className="sidebar-header"><Activity size={24} /><span>GANomics Dashboard</span></div>
         <nav className="nav-menu">
-          <a className={`nav-item ${activeTab === 'train' ? 'active' : ''}`} onClick={() => { setActiveTab('train'); setSelectedRunId(null); }}><LayoutDashboard size={20} /> Training</a>
-          <a className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => { setActiveTab('analysis'); setSelectedRunId(null); }}><BarChart3 size={20} /> Analysis</a>
-          <a className="nav-item"><Database size={20} /> Datasets</a>
-          <a className="nav-item"><Settings size={20} /> Configuration</a>
+          <div style={{ padding: '0.5rem 1rem', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Menu</div>
+          <a className={`nav-item ${activeTab === 'train' && !selectedRunId ? 'active' : ''}`} onClick={() => { setActiveTab('train'); setSelectedRunId(null); setTaskView('overview'); }}>
+            <LayoutDashboard size={18} /> Project
+          </a>
+          <a className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => { setActiveTab('analysis'); setSelectedRunId(null); setTaskView('overview'); }}>
+            <BarChart3 size={18} /> Global Analysis
+          </a>
+
+          {selectedRunId && (
+            <>
+              <div style={{ padding: '1.5rem 1rem 0.5rem 1rem', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Task Pipeline</div>
+              <div style={{ padding: '0.25rem 1rem 0.75rem 1rem', fontSize: '0.75rem', color: 'var(--primary-color)', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {selectedRunId}
+              </div>
+              <StepItem 
+                num="1" label="Training" 
+                active={taskView === 'training' || (taskView === 'overview' && !status?.training)} 
+                status={status?.training}
+                onClick={() => { setTaskView('training'); fetchLogs(selectedRunId); }}
+              />
+              <StepItem 
+                num="2" label="Sync Data" 
+                status={status?.sync}
+                disabled={true} 
+              />
+              <StepItem 
+                num="3" label="Comparative" 
+                active={taskView === 'comparative'}
+                status={isSizeTask ? status?.comparative : 'unavailable'}
+                disabled={!isSizeTask || !status?.comparative}
+                onClick={() => fetchComparativeMetrics(selectedRunId)}
+              />
+              <StepItem num="4" label="DEG" status={isSizeTask ? status?.deg : 'unavailable'} disabled={true} />
+              <StepItem num="5" label="Pathway" status={isSizeTask ? status?.pathway : 'unavailable'} disabled={true} />
+              <StepItem num="6" label="Pred. Model" status={isSizeTask ? status?.pred_model : 'unavailable'} disabled={true} />
+            </>
+          )}
+
+          <div style={{ marginTop: 'auto', padding: '1rem' }}>
+            <div className="nav-item"><Database size={18} /> Datasets</div>
+            <div className="nav-item"><Settings size={18} /> Settings</div>
+          </div>
         </nav>
       </aside>
 
