@@ -1,0 +1,228 @@
+results_old/
+├── archived_logs/
+│   ├── run_BRCA/
+│   ├── run_BRCA1/
+│   ├── run_BRCA2/
+│   ├── run_LAML/
+│   ├── run_LAML1/
+│   ├── run_LAML2/
+│   ├── run_LUSC1/
+│   ├── run_METSIM/
+│   ├── run_NB/
+│   ├── run_NB_all/
+│   ├── run_NB_noFB/
+│   ├── run_NCI60/
+│   ├── run_NCI60_ag2/
+│   ├── run_NCI60_ag3/
+│   ├── run_NCI601/
+│   ├── run_NCI602/
+│   ├── run_NCI603/
+├── checkpoints/
+│   ├── BRCA1_10_0/
+│   ├── BRCA1_20_0/
+│   ├── BRCA1_50_0/
+│   ├── BRCA1_100_0/
+│   ├── BRCA1_150_0/
+│   ├── BRCA2_10_0/
+│   ├── BRCA2_50_0/
+│   ├── BRCA2_100_0/
+│   ├── LAML_50_0/
+│   ├── LUSC_50_0/
+│   ├── METSIM_10_0/
+│   ├── METSIM_20_0/
+│   ├── METSIM_50_0/
+│   ├── METSIM_100_0/
+│   ├── NCI601_50_0/
+│   ├── NCI602_50_0/
+│   ├── NCI603_50_0/
+├── logs/
+│   ├── BRCA1_10_0.txt
+│   ├── BRCA1_20_0.txt
+│   ├── BRCA1_50_0.txt
+│   ├── BRCA1_100_0.txt
+│   ├── BRCA1_150_0.txt
+│   ├── BRCA2_10_0.txt
+│   ├── BRCA2_50_0.txt
+│   ├── BRCA2_100_0.txt
+│   ├── LAML_50_0.txt
+│   ├── LUSC_50_0.txt
+│   ├── METSIM_10_0.txt
+│   ├── METSIM_20_0.txt
+│   ├── METSIM_50_0.txt
+│   ├── METSIM_100_0.txt
+│   ├── NCI601_50_0.txt
+│   ├── NCI602_50_0.txt
+│   ├── NCI603_50_0.txt
+├── NB_results/
+│   ├── SampleSize_10_0/
+│   ├── SampleSize_10_1/
+│   ├── SampleSize_10_2/
+│   ├── SampleSize_10_3/
+│   ├── SampleSize_10_4/
+│   ├── SampleSize_20_0/
+│   ├── SampleSize_20_1/
+│   ├── SampleSize_20_2/
+│   ├── SampleSize_20_3/
+│   ├── SampleSize_20_4/
+│   ├── SampleSize_30_0/
+│   ├── SampleSize_30_1/
+│   ├── SampleSize_30_2/
+│   ├── SampleSize_30_3/
+│   ├── SampleSize_30_4/
+│   ├── SampleSize_40_0/
+│   ├── SampleSize_40_1/
+│   ├── SampleSize_40_2/
+│   ├── SampleSize_40_3/
+│   ├── SampleSize_40_4/
+│   ├── SampleSize_50_0/
+│   ├── SampleSize_50_1/
+│   ├── SampleSize_50_2/
+│   ├── SampleSize_50_3/
+│   ├── SampleSize_50_4/
+├── NB_results_ablation/
+│   ├── SampleSize_2_0/
+│   ├── SampleSize_2_1/
+│   ├── SampleSize_2_2/
+│   ├── SampleSize_2_3/
+│   ├── SampleSize_2_4/
+│   ├── SampleSize_5_0/
+│   ├── SampleSize_5_1/
+│   ├── SampleSize_5_2/
+│   ├── SampleSize_5_3/
+│   ├── SampleSize_5_4/
+│   ├── SampleSize_10_0/
+│   ├── SampleSize_10_1/
+│   ├── SampleSize_10_2/
+│   ├── SampleSize_10_3/
+│   ├── SampleSize_10_4/
+│   ├── SampleSize_20_0/
+│   ├── SampleSize_20_1/
+│   ├── SampleSize_20_2/
+│   ├── SampleSize_20_3/
+│   ├── SampleSize_20_4/
+│   ├── SampleSize_50_0/
+│   ├── SampleSize_50_1/
+│   ├── SampleSize_50_2/
+│   ├── SampleSize_50_3/
+│   ├── SampleSize_50_4/
+│   ├── SampleSize_50_5/
+│   ├── SampleSize_50_6/
+│   ├── SampleSize_50_7/
+│   ├── SampleSize_50_8/
+│   ├── SampleSize_50_9/
+│   ├── SampleSize_100_0/
+│   ├── SampleSize_100_1/
+│   ├── SampleSize_100_2/
+│   ├── SampleSize_100_3/
+│   ├── SampleSize_100_4/
+│   ├── SampleSize_100_5/
+│   ├── SampleSize_100_6/
+│   ├── SampleSize_100_7/
+│   ├── SampleSize_100_8/
+│   ├── SampleSize_100_9/
+│   ├── SampleSize_150_0/
+│   ├── SampleSize_150_1/
+│   ├── SampleSize_150_2/
+│   ├── SampleSize_150_3/
+│   ├── SampleSize_150_4/
+│   ├── SampleSize_150_5/
+│   ├── SampleSize_150_6/
+│   ├── SampleSize_150_7/
+│   ├── SampleSize_200_0/
+│   ├── SampleSize_200_1/
+│   ├── SampleSize_200_2/
+│   ├── SampleSize_200_3/
+│   ├── SampleSize_200_4/
+│   ├── SampleSize_250_0/
+│   ├── SampleSize_250_1/
+│   ├── SampleSize_250_2/
+│   ├── SampleSize_250_3/
+│   ├── SampleSize_250_4/
+│   ├── SampleSize_300_0/
+│   ├── SampleSize_300_1/
+│   ├── SampleSize_300_2/
+│   ├── SampleSize_300_3/
+│   ├── SampleSize_300_4/
+│   ├── SampleSize_350_0/
+│   ├── SampleSize_350_1/
+│   ├── SampleSize_350_2/
+│   ├── SampleSize_350_3/
+│   ├── SampleSize_350_4/
+│   ├── SampleSize_400_0/
+│   ├── SampleSize_400_1/
+│   ├── SampleSize_400_2/
+│   ├── SampleSize_400_3/
+│   ├── SampleSize_400_4/
+├── NB_results_noFB/
+│   ├── SampleSize_10_0/
+│   ├── SampleSize_10_1/
+│   ├── SampleSize_10_2/
+│   ├── SampleSize_10_3/
+│   ├── SampleSize_10_4/
+│   ├── SampleSize_20_0/
+│   ├── SampleSize_20_1/
+│   ├── SampleSize_20_2/
+│   ├── SampleSize_20_3/
+│   ├── SampleSize_20_4/
+│   ├── SampleSize_30_0/
+│   ├── SampleSize_30_1/
+│   ├── SampleSize_30_2/
+│   ├── SampleSize_30_3/
+│   ├── SampleSize_30_4/
+│   ├── SampleSize_40_0/
+│   ├── SampleSize_40_1/
+│   ├── SampleSize_40_2/
+│   ├── SampleSize_40_3/
+│   ├── SampleSize_40_4/
+│   ├── SampleSize_50_0/
+│   ├── SampleSize_50_1/
+│   ├── SampleSize_50_2/
+│   ├── SampleSize_50_3/
+│   ├── SampleSize_50_4/
+├── sync_data/
+│   ├── BRCA_LUSC/
+│   ├── BRCA1/
+│   ├── BRCA2/
+│   ├── Comparison/
+│   ├── DEG_lists_NBFav_5/
+│   ├── DEG_lists_NBFav_20/
+│   ├── DEG_lists_NBFav_50/
+│   ├── DEG_lists_NBFav_300/
+│   ├── Enriched_Pathways/
+│   ├── Enriched_Pathways_s5/
+│   ├── Enriched_Pathways_s20/
+│   ├── Enriched_Pathways_s50/
+│   ├── L1000_MCF7_HELA_L1.xlsx
+│   ├── LAML1/
+│   ├── LAML2/
+│   ├── LUSC1/
+│   ├── LUSC2/
+│   ├── METSIM/
+│   ├── METSIM_raw/
+
+## patterns.
+results_old/
+├── archived_logs/
+│   ├── run_*/ (multiple runs with similar structure)
+├── checkpoints/
+│   ├── *_*/ (multiple directories with similar structure)
+├── logs/
+│   ├── *_*.txt (multiple log files with varying parameters)
+├── NB_results/
+│   ├── SampleSize_*/ (multiple SampleSize directories)
+│   │   ├── *_net_*.pth (multiple model files)
+│   │   ├── loss_log.txt
+│   │   └── web/
+├── NB_results_ablation/
+│   ├── SampleSize_*/ (multiple SampleSize directories)
+│   │   ├── *_net_*.pth (multiple model files)
+│   │   ├── loss_log.txt
+│   │   └── web/
+├── NB_results_noFB/
+│   ├── SampleSize_*/ (multiple SampleSize directories)
+│   │   ├── *_net_*.pth (multiple model files)
+│   │   ├── loss_log.txt
+│   │   └── web/
+├── sync_data/
+│   ├── *_*/ (multiple directories with specific data)
+│   └── *.xlsx (Excel files)
