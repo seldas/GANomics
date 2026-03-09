@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import argparse
 import yaml
@@ -6,6 +7,9 @@ import torch
 import numpy as np
 import random
 from torch.utils.data import DataLoader
+
+# Add the parent directory to sys.path to make 'src' importable
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.datasets.genomics_dataset import GenomicsDataset
 from src.models.ganomics_model import GANomicsModel
 
@@ -82,7 +86,7 @@ def train():
     save_dir = os.path.join(config['output']['checkpoints_dir'], config['output']['name'])
     os.makedirs(save_dir, exist_ok=True)
     with open(os.path.join(save_dir, "train_samples.txt"), 'w') as f:
-        f.write("\n".join(dataset.samples_A))
+        f.write("\n".join(str(s) for s in dataset.samples_A))
     
     if not args.quiet:
         print(f"Number of training samples: {len(dataset)}")

@@ -70,7 +70,7 @@ const App: React.FC = () => {
     checkpoints: string[], 
     logs: string[],
     run_statuses?: Record<string, {
-      training: boolean,
+      training: 'running' | 'completed' | 'idle',
       sync: boolean,
       comparative: boolean,
       deg: boolean,
@@ -79,21 +79,32 @@ const App: React.FC = () => {
     }>
   }>({checkpoints: [], logs: []});
 
-  const StatusButton = ({ label, active }: { label: string, active: boolean }) => (
-    <div className={`status-badge ${active ? 'status-success' : 'status-error'}`} 
-         style={{ 
-           fontSize: '0.65rem', 
-           padding: '2px 6px', 
-           borderRadius: '4px',
-           whiteSpace: 'nowrap',
-           opacity: active ? 1 : 0.6,
-           border: active ? 'none' : '1px solid #ff4d4f',
-           background: active ? '#52c41a' : 'transparent',
-           color: active ? 'white' : '#ff4d4f'
-         }}>
-      {label}
-    </div>
-  );
+  const StatusButton = ({ label, status }: { label: string, status: 'running' | 'completed' | 'idle' | boolean }) => {
+    let className = "status-badge ";
+    let style: React.CSSProperties = {
+      fontSize: '0.65rem',
+      padding: '2px 6px',
+      borderRadius: '4px',
+      whiteSpace: 'nowrap',
+    };
+
+    if (status === 'running') {
+      className += "status-running";
+      style = { ...style, background: '#1890ff', color: 'white', animation: 'pulse 1.5s infinite' };
+    } else if (status === 'completed' || status === true) {
+      className += "status-success";
+      style = { ...style, background: '#52c41a', color: 'white' };
+    } else {
+      className += "status-error";
+      style = { ...style, border: '1px solid #ff4d4f', color: '#ff4d4f', opacity: 0.6 };
+    }
+
+    return (
+      <div className={className} style={style}>
+        {label}
+      </div>
+    );
+  };
 
   const renderProjectStatus = () => {
     const projectLogs = resultsStatus.logs
@@ -106,14 +117,17 @@ const App: React.FC = () => {
           const status = resultsStatus.run_statuses?.[runId];
           return (
             <div key={runId} className="queue-item" onClick={() => fetchLogs(runId)} style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
-              <div style={{ fontWeight: '600', fontSize: '0.85rem' }}>{runId}</div>
+              <div style={{ fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {runId}
+                {status?.training === 'running' && <Loader2 size={12} className="animate-spin" style={{ color: '#1890ff' }} />}
+              </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                <StatusButton label="Training" active={status?.training || false} />
-                <StatusButton label="Sync Data" active={status?.sync || false} />
-                <StatusButton label="Comparative" active={status?.comparative || false} />
-                <StatusButton label="DEG" active={status?.deg || false} />
-                <StatusButton label="Pathway" active={status?.pathway || false} />
-                <StatusButton label="Pred. Model" active={status?.pred_model || false} />
+                <StatusButton label="Training" status={status?.training || 'idle'} />
+                <StatusButton label="Sync Data" status={status?.sync || false} />
+                <StatusButton label="Comparative" status={status?.comparative || false} />
+                <StatusButton label="DEG" status={status?.deg || false} />
+                <StatusButton label="Pathway" status={status?.pathway || false} />
+                <StatusButton label="Pred. Model" status={status?.pred_model || false} />
               </div>
             </div>
           );
@@ -165,7 +179,7 @@ const App: React.FC = () => {
           axios.get(`${API_BASE}/results`)
         ]);
         setProjects(projRes.data);
-        if (projRes.data.length > 0) setSelectedProject(projRes.data[0].id);
+        if (projRes.data.length > 0 && !selectedProject) setSelectedProject(projRes.data[0].id);
         setResultsStatus(resStatus.data);
       } catch (err) {
         console.error("Failed to fetch dashboard data", err);
@@ -174,7 +188,9 @@ const App: React.FC = () => {
       }
     };
     fetchData();
-  }, []);
+    const interval = setInterval(fetchData, 10000); // Refresh every 10 seconds
+    return () => clearInterval(interval);
+  }, [selectedProject]);
 
   useEffect(() => {
     if (activeTab === 'analysis' && selectedProject) {
@@ -398,7 +414,7 @@ const App: React.FC = () => {
                   <div style={{ padding: '0.75rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center', gap: '0.5rem', backgroundColor: '#fdfdfd' }}>
                     <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage === 1} onClick={() => setCurrentPage(1)}><ChevronsLeft size={14} /></button>
                     <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}><ChevronLeft size={14} /></button>
-                    <span style={{ display: 'flex', alignItems: 'center', px: '1rem', fontSize: '0.85rem' }}>{currentPage} / {totalPages || 1}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', paddingLeft: '1rem', paddingRight: '1rem', fontSize: '0.85rem' }}>{currentPage} / {totalPages || 1}</span>
                     <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(prev => prev + 1)}><ChevronRight size={14} /></button>
                     <button className="chip" style={{ padding: '0.2rem 0.5rem' }} disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}><ChevronsRight size={14} /></button>
                   </div>

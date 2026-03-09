@@ -65,12 +65,15 @@ class GenomicsDataset(Dataset):
         self.B_size = len(self.samples_B)
 
     def _load_df(self, path):
-        if path.endswith('.csv'):
-            return pd.read_csv(path, index_col=0)
-        elif path.endswith('.tsv') or path.endswith('.txt'):
-            return pd.read_csv(path, sep='\t', index_col=0)
-        else:
-            raise ValueError(f"Unsupported file format: {path}")
+        try:
+            # First attempt with default separator (csv=comma, tsv=tab)
+            if path.endswith('.csv'):
+                return pd.read_csv(path, index_col=0)
+            else:
+                return pd.read_csv(path, sep='\t', index_col=0)
+        except:
+            # Fallback to auto-detection if the above fails
+            return pd.read_csv(path, sep=None, engine='python', index_col=0)
 
     def __len__(self):
         return max(self.A_size, self.B_size)

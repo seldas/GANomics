@@ -2,6 +2,7 @@ import os
 import yaml
 import subprocess
 import re
+import time
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -63,15 +64,29 @@ def get_project_stats(config_path):
         with open(config_path, 'r') as f:
             cfg = yaml.safe_load(f)
         path_a = cfg['dataset']['path_A']
+        
+        # Resolve path relative to backend or root
         if not os.path.isabs(path_a):
-            alt_path = os.path.abspath(os.path.join(BACKEND_DIR, "..", "..", path_a))
-            if os.path.exists(alt_path): path_a = alt_path
-            else: path_a = os.path.abspath(os.path.join(BACKEND_DIR, path_a))
+            # Try root relative
+            alt_path = os.path.abspath(os.path.join(ROOT_DIR, path_a))
+            if os.path.exists(alt_path): 
+                path_a = alt_path
+            else:
+                # Try backend relative
+                path_a = os.path.abspath(os.path.join(BACKEND_DIR, path_a))
+        
         if os.path.exists(path_a):
-            df = pd.read_csv(path_a, index_col=0, nrows=1)
-            full_df = pd.read_csv(path_a, index_col=0)
-            return len(full_df.columns), len(full_df)
-    except: pass
+            # Efficiently read columns and row count
+            df_headers = pd.read_csv(path_a, index_col=0, nrows=0, sep=None, engine='python')
+            # For row count, we can use a fast line count if it's really large, 
+            # but for now let's just use pandas with only the index column if possible
+            # or just skip full load.
+            row_count = 0
+            with open(path_a, 'rb') as f:
+                row_count = sum(1 for _ in f) - 1 # Subtract header
+            return len(df_headers.columns), row_count
+    except Exception as e:
+        print(f"Error getting stats for {config_path}: {e}")
     return 0, 0
 
 def parse_log_line(line: str):
@@ -119,6 +134,7 @@ async def get_results_status():
     
     # Define status for each log (run)
     run_statuses = {}
+    now = time.time()
     for run_id in logs:
         parts = run_id.split("_")
         project = parts[0]
@@ -132,9 +148,16 @@ async def get_results_status():
             
         sync_folder = f"{project}_{size}_{run_idx}"
         sync_path = os.path.join(SYNC_DATA_DIR, sync_folder, "test", "microarray_fake.csv")
+        log_path = os.path.join(LOGS_DIR, f"{run_id}_log.txt")
+        
+        # Check if log was updated in the last 60 seconds
+        is_running = False
+        if os.path.exists(log_path):
+            if now - os.path.getmtime(log_path) < 60:
+                is_running = True
         
         run_statuses[run_id] = {
-            "training": run_id in checkpoints,
+            "training": "running" if is_running else ("completed" if run_id in checkpoints else "idle"),
             "sync": os.path.exists(sync_path),
             "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, f"Table_2_Comparison_{project}.csv")),
             "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", "Table_Fig9a_Jaccard_Curve.csv")),
@@ -149,20 +172,34 @@ async def get_results_status():
     }
 
 @app.post("/api/train")
-async def start_training(req: TrainRequest, background_tasks: BackgroundTasks):
+async def start_training(req: TrainRequest):
     run_ablation_script = os.path.join(SCRIPTS_DIR, "run_ablation.py")
-    # Add new directory structure arguments if script supports them, 
-    # otherwise we'll update the script to use TRAIN_DIR etc.
     cmd = ["python", run_ablation_script, "--config", req.config_path, "--repeats", str(req.repeats)]
     if req.sizes: cmd += ["--sizes"] + [str(s) for s in req.sizes]
     if req.betas: cmd += ["--betas"] + [str(b) for b in req.betas]
     if req.lambdas: cmd += ["--lambdas"] + [str(l) for l in req.lambdas]
-    def run_cmd():
-        env = os.environ.copy()
-        env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
-        subprocess.run(cmd, cwd=BACKEND_DIR, env=env)
-    background_tasks.add_task(run_cmd)
-    return {"message": "Training session started", "command": " ".join(cmd)}
+    
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    
+    # Use Popen to start a completely detached process
+    # creationflags=subprocess.CREATE_NEW_CONSOLE opens a new terminal window on Windows
+    try:
+        kwargs = {}
+        if os.name == 'nt':
+            kwargs['creationflags'] = subprocess.CREATE_NEW_CONSOLE
+        
+        process = subprocess.Popen(
+            cmd, 
+            cwd=BACKEND_DIR, 
+            env=env, 
+            stdout=None, # Let it print to its own console
+            stderr=None, 
+            **kwargs
+        )
+        return {"message": "Training session started in separate process", "pid": process.pid, "command": " ".join(cmd)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start training: {str(e)}")
 
 @app.get("/api/runs/{run_id}/logs")
 async def stream_run_logs(run_id: str):
