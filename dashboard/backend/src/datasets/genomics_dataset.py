@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 import pandas as pd
 import numpy as np
 import random
+import os
 
 class GenomicsDataset(Dataset):
     """
@@ -65,15 +66,31 @@ class GenomicsDataset(Dataset):
         self.B_size = len(self.samples_B)
 
     def _load_df(self, path):
+        # Path resolution logic
+        actual_path = path
+        if not os.path.isabs(path) and not os.path.exists(path):
+            # Try relative to backend dir (where this src is nested)
+            # This src is in dashboard/backend/src/datasets/genomics_dataset.py
+            backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            alt_path = os.path.join(backend_dir, path)
+            if os.path.exists(alt_path):
+                actual_path = alt_path
+            else:
+                # Try relative to root (one level above backend)
+                root_dir = os.path.abspath(os.path.join(backend_dir, '..', '..'))
+                alt_path2 = os.path.join(root_dir, path)
+                if os.path.exists(alt_path2):
+                    actual_path = alt_path2
+
         try:
             # First attempt with default separator (csv=comma, tsv=tab)
-            if path.endswith('.csv'):
-                return pd.read_csv(path, index_col=0)
+            if actual_path.endswith('.csv'):
+                return pd.read_csv(actual_path, index_col=0)
             else:
-                return pd.read_csv(path, sep='\t', index_col=0)
+                return pd.read_csv(actual_path, sep='\t', index_col=0)
         except:
             # Fallback to auto-detection if the above fails
-            return pd.read_csv(path, sep=None, engine='python', index_col=0)
+            return pd.read_csv(actual_path, sep=None, engine='python', index_col=0)
 
     def __len__(self):
         return max(self.A_size, self.B_size)

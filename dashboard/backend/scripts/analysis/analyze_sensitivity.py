@@ -115,5 +115,15 @@ def analyze_parameter(param_name, log_pattern):
 
 if __name__ == "__main__":
     print("Parsing logs and generating sensitivity reports...")
-    analyze_parameter("Beta", "results/logs/*Sensitivity_Beta_*_log.txt")
-    analyze_parameter("Lambda", "results/logs/*Sensitivity_Lambda_*_log.txt")
+    
+    # Determine backend directory
+    # This script is in dashboard/backend/scripts/analysis/analyze_sensitivity.py
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    def resolve_path(p):
+        return os.path.join(backend_dir, p) if not os.path.isabs(p) else p
+
+    beta_pattern = resolve_path("results/1_Training/logs/*Sensitivity_Beta_*_log.txt")
+    lambda_pattern = resolve_path("results/1_Training/logs/*Sensitivity_Lambda_*_log.txt")
+    
+    analyze_parameter("Beta", beta_pattern)
+    analyze_parameter("Lambda", lambda_pattern)

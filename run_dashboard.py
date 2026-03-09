@@ -2,13 +2,40 @@ import subprocess
 import sys
 import os
 import time
+import threading
+
+def stream_output(pipe, prefix, log_path):
+    """
+    Reads from a pipe line by line, prints with a prefix, and saves to a log file.
+    """
+    try:
+        # Open in append mode
+        with open(log_path, 'a', encoding='utf-8') as f:
+            for line in iter(pipe.readline, ''):
+                if line:
+                    stripped_line = line.strip()
+                    # Print to console
+                    print(f"{prefix} {stripped_line}")
+                    # Write to file with timestamp
+                    f.write(f"{time.ctime()} | {stripped_line}\n")
+                    f.flush() # Ensure it's written immediately
+    except Exception:
+        pass
+    finally:
+        pipe.close()
 
 def main():
     root_dir = os.path.abspath(os.path.dirname(__file__))
     
+    # Create logs directory
+    logs_dir = os.path.join(root_dir, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    
+    backend_log = os.path.join(logs_dir, "backend.log")
+    frontend_log = os.path.join(logs_dir, "frontend.log")
+    
     # 1. Start Backend (FastAPI)
-    # The script uses uvicorn internally on port 8000
-    print("\n[BACKEND] Starting FastAPI on http://localhost:8000 ...")
+    print(f"\n[SYSTEM] Starting Backend on http://localhost:8000 (Logging to {backend_log})...")
     backend_proc = subprocess.Popen(
         [sys.executable, "dashboard/backend/main.py"],
         cwd=root_dir,
@@ -18,9 +45,16 @@ def main():
         bufsize=1
     )
     
+    # Start thread to stream backend logs
+    backend_thread = threading.Thread(
+        target=stream_output, 
+        args=(backend_proc.stdout, "[BACKEND]", backend_log), 
+        daemon=True
+    )
+    backend_thread.start()
+    
     # 2. Start Frontend (Vite)
-    # Vite defaults to port 5173
-    print("[FRONTEND] Starting Vite on http://localhost:5173 ...")
+    print(f"[SYSTEM] Starting Frontend on http://localhost:5173 (Logging to {frontend_log})...")
     frontend_proc = subprocess.Popen(
         ["npm", "run", "dev"],
         cwd=os.path.join(root_dir, "dashboard", "frontend"),
@@ -31,11 +65,17 @@ def main():
         bufsize=1
     )
     
+    # Start thread to stream frontend logs
+    frontend_thread = threading.Thread(
+        target=stream_output, 
+        args=(frontend_proc.stdout, "[FRONTEND]", frontend_log), 
+        daemon=True
+    )
+    frontend_thread.start()
+    
     print("\n✅ Dashboard is launching. Press Ctrl+C to stop both processes.\n")
 
     try:
-        # Simple loop to stream output from both (first few lines to confirm startup)
-        # In a real tool, you might want a more sophisticated multiplexer
         while True:
             # Check if processes are still alive
             if backend_proc.poll() is not None:
@@ -44,9 +84,6 @@ def main():
             if frontend_proc.poll() is not None:
                 print("\n[!] Frontend process exited.")
                 break
-            
-            # Print any available output (optional, but good for debugging)
-            # For simplicity in this "start" script, we'll just wait
             time.sleep(1)
             
     except KeyboardInterrupt:

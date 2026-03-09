@@ -3,6 +3,7 @@ import yaml
 import subprocess
 import re
 import time
+import sys
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -174,10 +175,13 @@ async def get_results_status():
 @app.post("/api/train")
 async def start_training(req: TrainRequest):
     run_ablation_script = os.path.join(SCRIPTS_DIR, "run_ablation.py")
-    cmd = ["python", run_ablation_script, "--config", req.config_path, "--repeats", str(req.repeats)]
+    # Use sys.executable to ensure we use the same environment's python
+    cmd = [sys.executable, run_ablation_script, "--config", req.config_path, "--repeats", str(req.repeats)]
     if req.sizes: cmd += ["--sizes"] + [str(s) for s in req.sizes]
     if req.betas: cmd += ["--betas"] + [str(b) for b in req.betas]
     if req.lambdas: cmd += ["--lambdas"] + [str(l) for l in req.lambdas]
+    
+    print(f"Starting training command: {' '.join(cmd)}")
     
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"

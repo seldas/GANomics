@@ -1,0 +1,21 @@
+================ Training Loss (Mon Mar  9 16:10:51 2026) ================
+(epoch: 1, iters: 0, time: 0.562, data: 0.011) G_A: 41.224 G_B: 6.610 D_A: 15171.187 D_B: 1.582 cycle_A: 86.966 cycle_B: 6112.496 feedback_A: 4417.342 feedback_B: 413.907 idt_A: 2280.453 idt_B: 34.826 
+(epoch: 1, iters: 10, time: 0.573, data: 0.006) G_A: 5.213 G_B: 16047269.000 D_A: 89697.273 D_B: 8019630.500 cycle_A: 20.091 cycle_B: 1660.753 feedback_A: 3501.470 feedback_B: 391.573 idt_A: 780.008 idt_B: 14.949 
+(epoch: 2, iters: 0, time: 0.501, data: 0.007) G_A: 17.307 G_B: 2553758.500 D_A: 116871.141 D_B: 1275282.750 cycle_A: 9.835 cycle_B: 1030.190 feedback_A: 3215.596 feedback_B: 459.597 idt_A: 495.391 idt_B: 6.755 
+(epoch: 2, iters: 10, time: 0.499, data: 0.007) G_A: 72.004 G_B: 183143.844 D_A: 154297.328 D_B: 92000.781 cycle_A: 7.861 cycle_B: 720.780 feedback_A: 2970.829 feedback_B: 398.729 idt_A: 503.079 idt_B: 5.368 
+(epoch: 3, iters: 0, time: 0.490, data: 0.007) G_A: 37.245 G_B: 905912.625 D_A: 2435.875 D_B: 453909.281 cycle_A: 6.124 cycle_B: 590.421 feedback_A: 2740.546 feedback_B: 399.403 idt_A: 415.701 idt_B: 5.194 
+(epoch: 3, iters: 10, time: 0.498, data: 0.007) G_A: 37.731 G_B: 1725500.000 D_A: 6241.495 D_B: 864064.062 cycle_A: 6.438 cycle_B: 623.482 feedback_A: 2750.380 feedback_B: 438.521 idt_A: 332.353 idt_B: 4.392 
+(epoch: 4, iters: 0, time: 0.537, data: 0.011) G_A: 0.488 G_B: 9853018.000 D_A: 405.054 D_B: 4929648.000 cycle_A: 6.348 cycle_B: 469.958 feedback_A: 1925.940 feedback_B: 374.900 idt_A: 246.819 idt_B: 3.343 
+(epoch: 4, iters: 10, time: 0.524, data: 0.006) G_A: 14.126 G_B: 787618.250 D_A: 122211.125 D_B: 394697.188 cycle_A: 5.346 cycle_B: 391.470 feedback_A: 1367.845 feedback_B: 424.996 idt_A: 319.765 idt_B: 3.965 
+(epoch: 5, iters: 0, time: 0.517, data: 0.007) G_A: 1.693 G_B: 1513993.250 D_A: 41920.227 D_B: 755766.688 cycle_A: 4.910 cycle_B: 367.360 feedback_A: 2071.853 feedback_B: 502.162 idt_A: 328.516 idt_B: 3.130 
+(epoch: 5, iters: 10, time: 0.507, data: 0.009) G_A: 3.298 G_B: 481055.688 D_A: 42872.848 D_B: 239835.062 cycle_A: 4.766 cycle_B: 459.278 feedback_A: 2190.536 feedback_B: 421.568 idt_A: 361.607 idt_B: 2.811 
+(epoch: 6, iters: 0, time: 0.518, data: 0.009) G_A: 0.492 G_B: 25775.068 D_A: 34776.594 D_B: 12727.663 cycle_A: 3.947 cycle_B: 378.927 feedback_A: 1684.147 feedback_B: 430.616 idt_A: 284.358 idt_B: 2.866 
+(epoch: 6, iters: 10, time: 0.577, data: 0.007) G_A: 2.468 G_B: 312268.281 D_A: 316934.594 D_B: 156694.203 cycle_A: 5.529 cycle_B: 343.999 feedback_A: 1698.341 feedback_B: 473.522 idt_A: 263.305 idt_B: 3.960 
+(epoch: 7, iters: 0, time: 0.681, data: 0.007) G_A: 7.861 G_B: 3048306.750 D_A: 79485.234 D_B: 1522407.875 cycle_A: 4.825 cycle_B: 378.301 feedback_A: 2048.231 feedback_B: 348.630 idt_A: 327.521 idt_B: 2.826 
+(epoch: 7, iters: 10, time: 0.714, data: 0.008) G_A: 11.469 G_B: 12.733 D_A: 94837.180 D_B: 3.752 cycle_A: 5.605 cycle_B: 385.529 feedback_A: 1832.222 feedback_B: 470.839 idt_A: 212.332 idt_B: 4.496 
+(epoch: 8, iters: 0, time: 0.720, data: 0.007) G_A: 8.111 G_B: 314632.656 D_A: 45519.094 D_B: 157878.406 cycle_A: 4.677 cycle_B: 422.288 feedback_A: 1744.465 feedback_B: 416.420 idt_A: 244.170 idt_B: 2.479 
+(epoch: 8, iters: 10, time: 0.669, data: 0.007) G_A: 1.967 G_B: 63080.805 D_A: 122088.641 D_B: 31792.148 cycle_A: 4.656 cycle_B: 388.559 feedback_A: 1521.416 feedback_B: 374.072 idt_A: 225.548 idt_B: 4.037 
+(epoch: 9, iters: 0, time: 0.623, data: 0.007) G_A: 26.226 G_B: 1018.361 D_A: 32222.707 D_B: 477.783 cycle_A: 3.549 cycle_B: 378.105 feedback_A: 1774.628 feedback_B: 417.850 idt_A: 233.296 idt_B: 2.518 
+(epoch: 9, iters: 10, time: 0.637, data: 0.007) G_A: 0.630 G_B: 202013.328 D_A: 6507.221 D_B: 100557.719 cycle_A: 3.686 cycle_B: 343.686 feedback_A: 1418.749 feedback_B: 369.176 idt_A: 215.443 idt_B: 2.739 
+(epoch: 10, iters: 0, time: 0.644, data: 0.006) G_A: 1.485 G_B: 2868.854 D_A: 121862.289 D_B: 1381.528 cycle_A: 3.741 cycle_B: 366.910 feedback_A: 1651.163 feedback_B: 382.753 idt_A: 232.227 idt_B: 2.450 
+(epoch: 10, iters: 10, time: 0.698, data: 0.009) G_A: 17.681 G_B: 266776.281 D_A: 11664.302 D_B: 133905.344 cycle_A: 4.968 cycle_B: 377.923 feedback_A: 1387.408 feedback_B: 321.867 idt_A: 151.542 idt_B: 5.094 

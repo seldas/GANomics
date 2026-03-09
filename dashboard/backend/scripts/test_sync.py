@@ -29,10 +29,15 @@ def main():
         
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
+    # Determine backend directory
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    def resolve_path(p):
+        return os.path.join(backend_dir, p) if not os.path.isabs(p) else p
+
     # 1. Determine Checkpoint Path
     # Convention: results/checkpoints/{Project}_GANomics_{sample_size}_{run_id}/net_epoch_{epoch}.pth
     exp_name = f"{args.exp}"
-    checkpoint_dir = os.path.join(config['output']['checkpoints_dir'], exp_name)
+    checkpoint_dir = resolve_path(os.path.join(config['output']['checkpoints_dir'], exp_name))
     
     if args.epoch == "latest":
         checkpoint_path = os.path.join(checkpoint_dir, "net_latest.pth")
@@ -80,7 +85,7 @@ def main():
         
     # 5. Save Sync Data
     # Convention: results/2_SyncData/{exp_name}/
-    sync_dir = os.path.join("results", "2_SyncData", f"{args.exp}")
+    sync_dir = resolve_path(os.path.join("results", "2_SyncData", f"{args.exp}"))
     
     # Automatic Train/Test Identification
     train_samples_path = os.path.join(checkpoint_dir, "train_samples.txt")

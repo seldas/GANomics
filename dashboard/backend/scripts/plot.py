@@ -73,25 +73,31 @@ def main():
     parser.add_argument("--out", type=str, required=True, help="Output path")
     args = parser.parse_args()
     
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    # Determine backend directory
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    def resolve_path(p):
+        return os.path.join(backend_dir, p) if not os.path.isabs(p) else p
+
+    output_path = resolve_path(args.out)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
     if args.type == 'tsne':
-        df_r = pd.read_csv(args.real, index_col=0)
-        df_s = pd.read_csv(args.syn, index_col=0)
+        df_r = pd.read_csv(resolve_path(args.real), index_col=0)
+        df_s = pd.read_csv(resolve_path(args.syn), index_col=0)
         # Dummy labels for demo
         labels = ['Real']*len(df_r) + ['Synthetic']*len(df_s)
-        plot_tsne(df_r.values, df_s.values, labels, "t-SNE: Real vs Synthetic Alignment", args.out)
+        plot_tsne(df_r.values, df_s.values, labels, "t-SNE: Real vs Synthetic Alignment", output_path)
         
     elif args.type == 'bland_altman':
-        df_r = pd.read_csv(args.real, index_col=0)
-        df_s = pd.read_csv(args.syn, index_col=0)
+        df_r = pd.read_csv(resolve_path(args.real), index_col=0)
+        df_s = pd.read_csv(resolve_path(args.syn), index_col=0)
         if args.genes:
-            with open(args.genes, 'r') as f:
+            with open(resolve_path(args.genes), 'r') as f:
                 sig_genes = [l.strip() for l in f]
-            plot_bland_altman(df_r, df_s, sig_genes, "Bland-Altman: PAM50 Signature Stability", args.out)
+            plot_bland_altman(df_r, df_s, sig_genes, "Bland-Altman: PAM50 Signature Stability", output_path)
             
     elif args.type == 'performance':
-        plot_performance_bars(args.table, args.out)
+        plot_performance_bars(resolve_path(args.table), output_path)
 
 if __name__ == "__main__":
     main()

@@ -20,6 +20,11 @@ def main():
     parser.add_argument("--gmt", type=str, help="Path to MSigDB GMT file for pathway analysis")
     args = parser.parse_args()
     
+    # Determine backend directory
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    def resolve_path(p):
+        return os.path.join(backend_dir, p) if not os.path.isabs(p) else p
+
     # 1. Load Data
     df_rA = pd.read_csv(args.real_A, index_col=0)
     df_rB = pd.read_csv(args.real_B, index_col=0)
@@ -29,7 +34,6 @@ def main():
     # Load labels
     if args.labels.endswith('.txt'):
         df_labels = pd.read_csv(args.labels, sep='\t')
-        # Based on NB clinical file structure, SEQC_NB_SampleID is the column to use as index
         if 'SEQC_NB_SampleID' in df_labels.columns:
             df_labels.set_index('SEQC_NB_SampleID', inplace=True)
     else:
@@ -43,27 +47,25 @@ def main():
     else:
         raise ValueError(f"Label column '{args.label_col}' or 'label' not found in {args.labels}")
     
-    # Filter samples: keep only those with available labels
+    # Filter samples
     df_labels = df_labels.dropna(subset=[label_col])
     
     # Align samples
     idx = df_rA.index.intersection(df_labels.index)
     if len(idx) == 0:
-        print(f"Warning: No matching samples found between data and labels (label column: {label_col}).")
+        print(f"Warning: No matching samples found between data and labels.")
         return
 
     df_rA, df_rB = df_rA.loc[idx], df_rB.loc[idx]
     df_sA, df_sB = df_sA.loc[idx], df_sB.loc[idx]
     y = df_labels.loc[idx, label_col]
     
-    # Map numeric labels to strings if necessary (0=Favorable, 1=Unfavorable)
-    # This ensures compatibility with src.core.analysis functions
     if pd.api.types.is_numeric_dtype(y):
         y = y.map({0: 'Favorable', 1: 'Unfavorable'})
     
     print(f"Total aligned samples with labels: {len(idx)}")
     
-    # Split for classification (50/50 split as per paper example)
+    # Split for classification
     n = len(idx) // 2
     train_idx, test_idx = idx[:n], idx[n:]
     
@@ -83,7 +85,7 @@ def main():
         results.append(metrics)
         
     table_4 = pd.DataFrame(results)
-    pred_dir = "results/4_Biomarkers/Prediction"
+    pred_dir = resolve_path("results/4_Biomarkers/Prediction")
     os.makedirs(pred_dir, exist_ok=True)
     table_4.to_csv(os.path.join(pred_dir, "Table_4_Classifier_Performance.csv"), index=False)
     print(table_4)
@@ -95,7 +97,7 @@ def main():
     
     # Jaccard overlap curve (Fig 9a)
     jac_curve = jaccard_threshold_curve(deg_rA, deg_sA)
-    deg_dir = "results/4_Biomarkers/DEG"
+    deg_dir = resolve_path("results/4_Biomarkers/DEG")
     os.makedirs(deg_dir, exist_ok=True)
     jac_curve.to_csv(os.path.join(deg_dir, "Table_Fig9a_Jaccard_Curve.csv"), index=False)
     
@@ -105,7 +107,7 @@ def main():
         print(f"Pathway Rank Concordance (Spearman rho): {obs_rho:.3f}, p-value: {p_val:.4f}")
         
         # Save null distribution for Fig 9b-e
-        pathway_dir = "results/4_Biomarkers/Pathway"
+        pathway_dir = resolve_path("results/4_Biomarkers/Pathway")
         os.makedirs(pathway_dir, exist_ok=True)
         pd.Series(null_dist).to_csv(os.path.join(pathway_dir, "Table_Fig9_Null_Dist.csv"), index=False)
 

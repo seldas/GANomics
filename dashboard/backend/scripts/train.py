@@ -106,14 +106,25 @@ def train():
         direction=direction
     )
 
+    # Determine backend directory (one level above this script)
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    
+    # Function to resolve results path
+    def resolve_path(path_in):
+        if os.path.isabs(path_in):
+            return path_in
+        return os.path.join(backend_dir, path_in)
+
     # Create Output Directories
-    os.makedirs(config['output'].get('checkpoints_dir', 'results/1_Training/checkpoints'), exist_ok=True)
-    save_dir = os.path.join(config['output'].get('checkpoints_dir', 'results/1_Training/checkpoints'), config['output']['name'])
+    checkpoints_base = resolve_path(config['output'].get('checkpoints_dir', 'results/1_Training/checkpoints'))
+    os.makedirs(checkpoints_base, exist_ok=True)
+    
+    save_dir = os.path.join(checkpoints_base, config['output']['name'])
     os.makedirs(save_dir, exist_ok=True)
     
-    log_dir = config['output'].get('logs_dir', 'results/1_Training/logs')
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, f"{config['output']['name']}_log.txt")
+    logs_base = resolve_path(config['output'].get('logs_dir', 'results/1_Training/logs'))
+    os.makedirs(logs_base, exist_ok=True)
+    log_file = os.path.join(logs_base, f"{config['output']['name']}_log.txt")
     
     with open(log_file, 'a') as f:
         f.write(f"================ Training Loss ({time.ctime()}) ================\n")
