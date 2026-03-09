@@ -202,7 +202,7 @@ const App: React.FC = () => {
 
   const totalPages = Math.ceil(filteredData.length / pageSize);
 
-  const StatusButton = ({ label, status }: { label: string, status: 'running' | 'completed' | 'idle' | boolean }) => {
+  const StatusButton = ({ label, status }: { label: string, status: 'running' | 'completed' | 'idle' | 'unavailable' | boolean }) => {
     let className = "status-badge ";
     let style: React.CSSProperties = {
       fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap',
@@ -213,6 +213,9 @@ const App: React.FC = () => {
     } else if (status === 'completed' || status === true) {
       className += "status-success";
       style = { ...style, background: '#52c41a', color: 'white' };
+    } else if (status === 'unavailable') {
+      className += "status-disabled";
+      style = { ...style, background: '#f5f5f5', color: '#bfbfbf', border: '1px solid #d9d9d9', opacity: 0.8 };
     } else {
       className += "status-error";
       style = { ...style, border: '1px solid #ff4d4f', color: '#ff4d4f', opacity: 0.6 };
@@ -390,6 +393,7 @@ const App: React.FC = () => {
           <div className="queue-list">
             {filteredItems.map(runId => {
               const status = resultsStatus.run_statuses?.[runId];
+              const isSizeTask = runId.includes("Size") && !runId.includes("Architecture");
               return (
                 <div key={runId} className="queue-item" onClick={() => { setSelectedRunId(runId); setTaskView('overview'); }} style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
                   <div style={{ fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -399,10 +403,10 @@ const App: React.FC = () => {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                     <StatusButton label="Training" status={status?.training || 'idle'} />
                     <StatusButton label="Sync Data" status={status?.sync || false} />
-                    <StatusButton label="Comparative" status={status?.comparative || false} />
-                    <StatusButton label="DEG" status={status?.deg || false} />
-                    <StatusButton label="Pathway" status={status?.pathway || false} />
-                    <StatusButton label="Pred. Model" status={status?.pred_model || false} />
+                    <StatusButton label="Comparative" status={isSizeTask ? (status?.comparative || false) : 'unavailable'} />
+                    <StatusButton label="DEG" status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
+                    <StatusButton label="Pathway" status={isSizeTask ? (status?.pathway || false) : 'unavailable'} />
+                    <StatusButton label="Pred. Model" status={isSizeTask ? (status?.pred_model || false) : 'unavailable'} />
                   </div>
                 </div>
               );
@@ -426,6 +430,7 @@ const App: React.FC = () => {
   const renderTaskDashboard = () => {
     if (!selectedRunId) return null;
     const status = resultsStatus.run_statuses?.[selectedRunId];
+    const isSizeTask = selectedRunId.includes("Size") && !selectedRunId.includes("Architecture");
     
     if (taskView === 'training') {
       return (
@@ -460,21 +465,21 @@ const App: React.FC = () => {
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>2. Sync Data</div>
             <StatusButton label={status?.sync ? 'Generated' : 'Pending'} status={status?.sync || false} />
           </section>
-          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>3. Comparative</div>
-            <StatusButton label={status?.comparative ? 'Done' : 'Pending'} status={status?.comparative || false} />
+            <StatusButton label={isSizeTask ? (status?.comparative ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.comparative || false) : 'unavailable'} />
           </section>
-          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>4. DEG</div>
-            <StatusButton label={status?.deg ? 'Done' : 'Pending'} status={status?.deg || false} />
+            <StatusButton label={isSizeTask ? (status?.deg ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
           </section>
-          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>5. Pathway</div>
-            <StatusButton label={status?.pathway ? 'Done' : 'Pending'} status={status?.pathway || false} />
+            <StatusButton label={isSizeTask ? (status?.pathway ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.pathway || false) : 'unavailable'} />
           </section>
-          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>6. Pred. Model</div>
-            <StatusButton label={status?.pred_model ? 'Done' : 'Pending'} status={status?.pred_model || false} />
+            <StatusButton label={isSizeTask ? (status?.pred_model ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.pred_model || false) : 'unavailable'} />
           </section>
         </div>
       </div>

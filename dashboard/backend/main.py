@@ -160,10 +160,10 @@ async def get_results_status():
         run_statuses[run_id] = {
             "training": "running" if is_running else ("completed" if run_id in checkpoints else "idle"),
             "sync": os.path.exists(sync_path),
-            "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, f"Table_2_Comparison_{project}.csv")),
-            "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", "Table_Fig9a_Jaccard_Curve.csv")),
-            "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", "Table_Fig9_Null_Dist.csv")),
-            "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", "Table_4_Classifier_Performance.csv")),
+            "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")),
+            "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Table_Fig9a_Jaccard_Curve.csv")),
+            "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", run_id, "Table_Fig9_Null_Dist.csv")),
+            "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", run_id, "Table_4_Classifier_Performance.csv")),
         }
 
     return {
