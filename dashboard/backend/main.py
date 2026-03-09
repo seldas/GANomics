@@ -253,6 +253,34 @@ async def get_project_metrics(project_id: str):
         return df.to_dict(orient="records")
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/runs/{run_id}/comparative")
+async def get_run_comparative_metrics(run_id: str):
+    run_id = run_id.strip()
+    # Try multiple possible paths
+    possible_paths = [
+        os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv"),
+        os.path.join(COMPARATIVE_DIR, run_id, "Table_2_Comparison.csv"),
+        os.path.join(RESULTS_DIR, "tables", "biomarkers", "CycleGAN", "Table_2_Comparison.csv") # legacy fallback
+    ]
+    
+    table_path = None
+    for p in possible_paths:
+        if os.path.exists(p):
+            table_path = p
+            break
+            
+    if not table_path:
+        print(f"Comparative metrics NOT FOUND for {run_id}. Checked: {possible_paths}")
+        raise HTTPException(status_code=404, detail=f"Comparative metrics not found for run {run_id}")
+    
+    try:
+        # Use utf-8 to handle ± symbols
+        df = pd.read_csv(table_path, encoding='utf-8')
+        return df.to_dict(orient="records")
+    except Exception as e: 
+        print(f"Error reading comparative metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
