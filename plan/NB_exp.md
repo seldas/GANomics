@@ -48,7 +48,7 @@ python scripts/run_ablation.py --config configs/nb_config.yaml --lambdas 1.0 5.0
 
 ### C. One-Directional Architecture Ablation
 ```bash
-python scripts/run_ablation.py --config configs/nb_config.yaml --direction AtoB --repeats 3
+python scripts/run_ablation.py --config configs/nb_config.yaml --direction AtoB --repeats 3 --gpu_ids 0,1,2,3,4,5,6,7
 ```
 
 ---
