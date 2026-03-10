@@ -1650,6 +1650,31 @@ const App: React.FC = () => {
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                {viewingAblationCategory !== 'architecture' && (
+                  <section className="card">
+                    <h3 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Final Loss Values</h3>
+                    <div style={{ height: '400px' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={summaryData} margin={{ bottom: 60 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} fontSize={11} />
+                          <YAxis label={{ value: 'Avg. Final Loss', angle: -90, position: 'insideLeft' }} fontSize={11} />
+                          <Tooltip />
+                          <Legend verticalAlign="top" height={36}/>
+                          <Bar dataKey="G_A.avgFinal" name="Gen A" fill="#007bff" />
+                          <Bar dataKey="G_B.avgFinal" name="Gen B" fill="#0056b3" />
+                          <Bar dataKey="D_A.avgFinal" name="Disc A" fill="#ef4444" />
+                          <Bar dataKey="D_B.avgFinal" name="Disc B" fill="#991b1b" />
+                          <Bar dataKey="cycle_A.avgFinal" name="Cycle A" fill="#10b981" />
+                          <Bar dataKey="cycle_B.avgFinal" name="Cycle B" fill="#065f46" />
+                          <Bar dataKey="feedback_A.avgFinal" name="Feedback A" fill="#f59e0b" />
+                          <Bar dataKey="feedback_B.avgFinal" name="Feedback B" fill="#92400e" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </section>
+                )}
+
                 <section className="card">
                   <h3 style={{ fontSize: '0.9rem', marginBottom: '1.5rem' }}>Detailed Metrics Comparison (Mean ± Std)</h3>
                   <div style={{ overflowX: 'auto' }}>
