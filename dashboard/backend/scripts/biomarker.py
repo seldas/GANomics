@@ -12,7 +12,7 @@ from src.core.pathway import load_gmt, run_permutation_test, jaccard_threshold_c
 def main():
     parser = argparse.ArgumentParser(description="Biomarker and Cross-Platform Modeling for all algorithms")
     parser.add_argument("--run_id", type=str, required=True, help="Full run ID (e.g. NB_Ablation_Size_50_Run_0)")
-    parser.add_argument("--labels", type=str, default=os.path.join("dataset", "NB", "clinical_info.csv"), help="Path to clinical labels")
+    parser.add_argument("--labels", type=str, default=os.path.join("dataset", "NB", "clinical_info.tsv"), help="Path to clinical labels")
     parser.add_argument("--gmt", type=str, help="Path to MSigDB GMT file for pathway analysis")
     parser.add_argument("--no_adjust_path", action='store_true', help="Don't adjust PYTHONPATH")
     args = parser.parse_args()
@@ -32,7 +32,10 @@ def main():
     
     # 2. Load Real Data and Labels
     real_ma = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
-    df_labels = pd.read_csv(resolve_path(args.labels), index_col=0)
+    
+    label_path = resolve_path(args.labels)
+    sep = '\t' if label_path.endswith('.tsv') else ','
+    df_labels = pd.read_csv(label_path, index_col=0, sep=sep)
     
     # Align labels with real_ma samples
     common_idx = real_ma.index.intersection(df_labels.index)
