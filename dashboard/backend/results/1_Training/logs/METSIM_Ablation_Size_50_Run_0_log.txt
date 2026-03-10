@@ -38,3 +38,7 @@
 (epoch: 4, iters: 20, time: 0.015, data: 0.008) G_A: 0.050 G_B: 1388.857 D_A: 1754.833 D_B: 657.810 cycle_A: 4.432 cycle_B: 369.992 feedback_A: 1033.357 feedback_B: 325.651 idt_A: 189.392 idt_B: 2.860 
 (epoch: 4, iters: 30, time: 0.015, data: 0.008) G_A: 27.899 G_B: 8329.646 D_A: 13962.710 D_B: 4074.171 cycle_A: 5.222 cycle_B: 393.527 feedback_A: 963.720 feedback_B: 458.701 idt_A: 212.328 idt_B: 3.664 
 (epoch: 4, iters: 30, time: 0.016, data: 0.008) G_A: 27.899 G_B: 8329.646 D_A: 13962.710 D_B: 4074.171 cycle_A: 5.222 cycle_B: 393.527 feedback_A: 963.720 feedback_B: 458.701 idt_A: 212.328 idt_B: 3.664 
+(epoch: 4, iters: 40, time: 0.015, data: 0.008) G_A: 4.906 G_B: 976.714 D_A: 1108.341 D_B: 520.148 cycle_A: 3.553 cycle_B: 497.543 feedback_A: 1308.361 feedback_B: 369.892 idt_A: 323.381 idt_B: 3.936 
+(epoch: 4, iters: 40, time: 0.015, data: 0.008) G_A: 4.906 G_B: 976.714 D_A: 1108.341 D_B: 520.148 cycle_A: 3.553 cycle_B: 497.543 feedback_A: 1308.361 feedback_B: 369.892 idt_A: 323.381 idt_B: 3.936 
+(epoch: 5, iters: 0, time: 0.016, data: 0.009) G_A: 1.851 G_B: 21755.891 D_A: 13394.026 D_B: 11025.944 cycle_A: 4.038 cycle_B: 407.612 feedback_A: 1187.864 feedback_B: 414.939 idt_A: 267.742 idt_B: 3.499 
+(epoch: 5, iters: 0, time: 0.018, data: 0.008) G_A: 1.851 G_B: 21755.891 D_A: 13394.026 D_B: 11025.944 cycle_A: 4.038 cycle_B: 407.612 feedback_A: 1187.864 feedback_B: 414.939 idt_A: 267.742 idt_B: 3.499 
