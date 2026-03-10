@@ -52,7 +52,7 @@ interface LogResponse {
   total_lines: number;
 }
 
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = "http://localhost:8832/api";
 
 const LOSS_METRICS = [
   { key: 'G_A', color: '#007bff', label: 'Gen A' },
