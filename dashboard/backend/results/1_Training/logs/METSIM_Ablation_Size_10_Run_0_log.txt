@@ -1,0 +1,2 @@
+================ Training Loss (Tue Mar 10 09:00:54 2026) ================
+(epoch: 1, iters: 0, time: 0.508, data: 0.008) G_A: 41.224 G_B: 9977.095 D_A: 55084.145 D_B: 5089.280 cycle_A: 86.966 cycle_B: 6157.821 feedback_A: 4478.350 feedback_B: 413.907 idt_A: 2338.843 idt_B: 34.826 

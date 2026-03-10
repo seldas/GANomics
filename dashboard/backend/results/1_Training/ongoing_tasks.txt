@@ -1,2 +1,1 @@
-METSIM_Ablation_Size_10_Run_0
 METSIM_Sensitivity_Beta_10.0_Run_0
