@@ -90,6 +90,7 @@ const App: React.FC = () => {
   const [selectedRepeats, setSelectedRepeats] = useState<number>(1);
   const [selectedEpochs, setSelectedEpochs] = useState<number | 'custom'>(500);
   const [customEpochs, setCustomEpochs] = useState<number>(500);
+  const [useGpu, setUseGpu] = useState<boolean>(true);
   const [ablationType, setAblationType] = useState<'size' | 'beta' | 'lambda'>('size');
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -156,7 +157,8 @@ const App: React.FC = () => {
       betas: ablationType === 'beta' ? selectedBetas : [10.0],
       lambdas: ablationType === 'lambda' ? selectedLambdas : [10.0],
       repeats: selectedRepeats,
-      epochs: selectedEpochs === 'custom' ? customEpochs : selectedEpochs
+      epochs: selectedEpochs === 'custom' ? customEpochs : selectedEpochs,
+      use_gpu: useGpu
     };
 
     try {
@@ -491,11 +493,29 @@ const App: React.FC = () => {
                 </div>
               </div>
             </section>
+
+            <section className="card" style={{ padding: '2rem' }}>
+              <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>4. HARDWARE ACCELERATION</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', fontSize: '1rem', fontWeight: '500' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={useGpu} 
+                    onChange={(e) => setUseGpu(e.target.checked)}
+                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                  />
+                  Use GPU acceleration (if available)
+                </label>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', backgroundColor: '#f0f9ff', padding: '0.5rem 1rem', borderRadius: '6px', border: '1px solid #bae7ff' }}>
+                  <b>Note:</b> If no compatible GPU is found, the system will automatically fallback to CPU.
+                </div>
+              </div>
+            </section>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', position: 'sticky', top: '2rem' }}>
             <section className="card" style={{ padding: '1.5rem' }}>
-              <h3 style={{ fontSize: '0.9rem', marginBottom: '1.25rem', color: 'var(--text-muted)' }}>4. QUICK CONFIG</h3>
+              <h3 style={{ fontSize: '0.9rem', marginBottom: '1.25rem', color: 'var(--text-muted)' }}>5. QUICK CONFIG</h3>
               <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: '600' }}>Training Epochs</label>
                 <div className="chip-grid" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
@@ -1722,7 +1742,18 @@ const App: React.FC = () => {
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>1. Training</div>
             <StatusButton label={status?.training === 'running' ? 'Running' : (status?.training === 'completed' ? 'Completed' : 'Idle')} status={status?.training || 'idle'} />
-            <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => { setTaskView('training'); fetchLogs(selectedRunId); }}>View Performance</button>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => { setTaskView('training'); fetchLogs(selectedRunId); }}>View Logs</button>
+              {status?.training !== 'running' && (
+                <button 
+                  className="chip selected" 
+                  style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }} 
+                  onClick={() => handleRestartTask(selectedRunId)}
+                >
+                  <RotateCcw size={12} /> Re-run
+                </button>
+              )}
+            </div>
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>2. Sync Data</div>

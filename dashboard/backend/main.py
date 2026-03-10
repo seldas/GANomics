@@ -80,6 +80,15 @@ class TrainRequest(BaseModel):
     repeats: int = 1
     epochs: Optional[int] = 250
     lr: Optional[float] = 0.0002
+    use_gpu: bool = True
+
+def get_available_gpus():
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return ",".join([str(i) for i in range(torch.cuda.device_count())])
+    except: pass
+    return None
 
 def get_project_stats(config_path):
     try:
@@ -236,6 +245,14 @@ async def start_training(req: TrainRequest):
     if req.betas: cmd += ["--betas"] + [str(b) for b in req.betas]
     if req.lambdas: cmd += ["--lambdas"] + [str(l) for l in req.lambdas]
     
+    if req.use_gpu:
+        gpu_ids = get_available_gpus()
+        if gpu_ids:
+            cmd += ["--gpu_ids", gpu_ids]
+            print(f"Using GPUs: {gpu_ids}")
+        else:
+            print("GPU requested but none found. Falling back to CPU.")
+    
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
     
@@ -277,24 +294,14 @@ async def stop_task(run_id: str):
     if proc_info:
         try:
             kill_proc_tree(proc_info['pid'])
-            # If it was the training session, remove that key
-            if running_processes.get('training_session') == proc_info:
-                del running_processes['training_session']
-            if run_id in running_processes:
-                del running_processes[run_id]
+            # Mark as stopped in memory
+            proc_info['stopped'] = True
+            # Keep proc_info for restart!
         except: pass
         
-        # Also remove from ongoing_tasks.txt
-        ongoing_file = os.path.join(TRAINING_DIR, "ongoing_tasks.txt")
-        if os.path.exists(ongoing_file):
-            try:
-                with open(ongoing_file, 'r') as f:
-                    tasks = [line.strip() for line in f if line.strip()]
-                if run_id in tasks:
-                    tasks.remove(run_id)
-                    with open(ongoing_file, 'w') as f:
-                        for t in tasks: f.write(f"{t}\n")
-            except: pass
+        # User requested: "clicking stop, it should update the status of the ongoing_tasks to be stopped"
+        # We don't remove it from ongoing_tasks.txt so it stays in "Incomplete" or "Task Monitor"
+        # but we need to know it's not running.
             
         return {"message": f"Task {run_id} stopped"}
     
@@ -327,28 +334,78 @@ async def stop_task(run_id: str):
 
 @app.post("/api/runs/{run_id}/restart")
 async def restart_task(run_id: str):
-    # This requires knowing the command. If it's in our tracker, we use that.
-    # Otherwise, we might need to reconstruct it or only allow restart for tracked tasks.
     proc_info = running_processes.get(run_id)
-    if not proc_info:
-        raise HTTPException(status_code=404, detail="Restart info not found for this task")
-    
-    # Stop first if running
-    try: kill_proc_tree(proc_info['pid'])
-    except: pass
+    if not proc_info and run_id == 'training_session':
+        proc_info = running_processes.get('training_session')
+        
+    cmd = None
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    cwd = BACKEND_DIR
+
+    if proc_info:
+        # Stop first if running
+        try: kill_proc_tree(proc_info['pid'])
+        except: pass
+        cmd = proc_info['cmd']
+        cwd = proc_info.get('cwd', BACKEND_DIR)
+        env = proc_info.get('env', env)
+    else:
+        # Heuristic reconstruction for training runs
+        # run_id format: PROJECT_Ablation_Size_10_Run_0
+        if "Ablation" in run_id or "Sensitivity" in run_id or "Run_" in run_id:
+            project_id = run_id.split('_')[0]
+            # Try to find config path
+            config_path = None
+            for root, dirs, files in os.walk(DATASET_DIR):
+                if project_id.upper() in root.upper():
+                    for f in files:
+                        if f.endswith("_config.yaml"):
+                            config_path = os.path.join(root, f)
+                            break
+                if config_path: break
+            
+            if not config_path:
+                raise HTTPException(status_code=404, detail=f"Config not found for project {project_id}")
+            
+            train_script = os.path.join(SCRIPTS_DIR, "train.py")
+            cmd = [sys.executable, train_script, "--config", config_path, "--name", run_id]
+            
+            # Extract params from run_id
+            size_match = re.search(r'Size_(\d+)', run_id)
+            if size_match: cmd += ["--max_samples", size_match.group(1)]
+            
+            beta_match = re.search(r'Beta_([\d.]+)', run_id)
+            if beta_match: cmd += ["--lambda_feedback", beta_match.group(1)]
+            
+            lambda_match = re.search(r'Lambda_([\d.]+)', run_id)
+            if lambda_match: cmd += ["--lambda_cycle", lambda_match.group(1)]
+            
+            if "AtoB" in run_id: cmd += ["--direction", "AtoB"]
+            elif "BtoA" in run_id: cmd += ["--direction", "BtoA"]
+            
+            # Check GPU
+            gpu_ids = get_available_gpus()
+            if gpu_ids: cmd += ["--device", f"cuda:0"] # Default to first GPU for single run restart
+        else:
+            raise HTTPException(status_code=404, detail="Restart info not found and cannot be reconstructed")
     
     try:
         kwargs = {}
         if os.name == 'nt':
             kwargs['creationflags'] = subprocess.CREATE_NEW_CONSOLE
         
-        process = subprocess.Popen(
-            proc_info['cmd'], 
-            cwd=proc_info['cwd'], 
-            env=proc_info['env'], 
-            **kwargs
-        )
-        running_processes[run_id] = {**proc_info, "pid": process.pid}
+        process = subprocess.Popen(cmd, cwd=cwd, env=env, **kwargs)
+        
+        # Update tracker
+        running_processes[run_id] = {
+            "pid": process.pid,
+            "cmd": cmd,
+            "env": env,
+            "cwd": cwd,
+            "type": "training",
+            "stopped": False
+        }
         return {"message": f"Task {run_id} restarted", "pid": process.pid}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to restart: {str(e)}")
