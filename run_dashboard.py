@@ -35,9 +35,9 @@ def main():
     frontend_log = os.path.join(logs_dir, "frontend.log")
     
     # 1. Start Backend (FastAPI)
-    print(f"\n[SYSTEM] Starting Backend on http://localhost:8000 (Logging to {backend_log})...")
+    print(f"\n[SYSTEM] Starting Backend on http://localhost:8832 (Logging to {backend_log})...")
     backend_proc = subprocess.Popen(
-        [sys.executable, "dashboard/backend/main.py"],
+        ['./venv/bin/python', "dashboard/backend/main.py"],
         cwd=root_dir,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -54,11 +54,10 @@ def main():
     backend_thread.start()
     
     # 2. Start Frontend (Vite)
-    print(f"[SYSTEM] Starting Frontend on http://localhost:5173 (Logging to {frontend_log})...")
+    print(f"[SYSTEM] Starting Frontend on http://localhost:8831 (Logging to {frontend_log})...")
     frontend_proc = subprocess.Popen(
         ["npm", "run", "dev"],
         cwd=os.path.join(root_dir, "dashboard", "frontend"),
-        shell=True, # Required for npm on Windows
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
