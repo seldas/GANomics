@@ -85,6 +85,8 @@ const App: React.FC = () => {
   const [runPathwayData, setRunPathwayData] = useState<any | null>(null);
   const [selectedPathwayLibrary, setSelectedPathwayLibrary] = useState<string | null>(null);
   const [ablationData, setAblationData] = useState<any[]>([]);
+  const [ablationLogs, setAblationLogs] = useState<any[] | null>(null);
+  const [viewingAblationCategory, setViewingAblationCategory] = useState<string | null>(null);
   const [corrGroup, setCorrGroup] = useState<'MA' | 'RS'>('MA');
   
   const [resultsStatus, setResultsStatus] = useState<{
@@ -1066,6 +1068,144 @@ const App: React.FC = () => {
     );
   };
 
+  const fetchAblationLogs = (category: string) => {
+    setViewingAblationCategory(category);
+    setAblationLogs(null);
+    axios.get(`${API_BASE}/projects/${selectedProject}/ablation_logs`, { params: { category } })
+      .then(res => setAblationLogs(res.data))
+      .catch(err => console.error(err));
+  };
+
+  const renderAblationAnalyticsModal = () => {
+    if (!viewingAblationCategory) return null;
+
+    return (
+      <div className="modal-overlay" style={{ zIndex: 2000 }}>
+        <div className="modal-content" style={{ maxWidth: '1000px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <h2 style={{ margin: 0, textTransform: 'uppercase' }}>{viewingAblationCategory} Analytics: {selectedProject}</h2>
+            <button className="chip" onClick={() => setViewingAblationCategory(null)}><X size={18} /></button>
+          </div>
+
+          {!ablationLogs ? (
+            <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>
+          ) : ablationLogs.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No logs found for this category.</div>
+          ) : (() => {
+            const variants: Record<string, any[]> = {};
+            ablationLogs.forEach(log => {
+              let variant = "Other";
+              if (viewingAblationCategory === 'size') {
+                const m = log.run_id.match(/Size_(\d+)/);
+                if (m) variant = `Size ${m[1]}`;
+              } else if (viewingAblationCategory === 'architecture') {
+                if (log.run_id.includes("AtoB")) variant = "A → B Only";
+                else if (log.run_id.includes("BtoA")) variant = "B → A Only";
+                else variant = "Baseline (Both)";
+              } else if (viewingAblationCategory === 'sensitivity') {
+                const bm = log.run_id.match(/Beta_([\d.]+)/);
+                const lm = log.run_id.match(/Lambda_([\d.]+)/);
+                if (bm) variant = `Beta ${bm[1]}`;
+                else if (lm) variant = `Lambda ${lm[1]}`;
+              }
+              if (!variants[variant]) variants[variant] = [];
+              variants[variant].push(log);
+            });
+
+            const metricKeys = ['G_A', 'G_B', 'D_A', 'D_B', 'cycle_A', 'cycle_B', 'feedback_A', 'feedback_B'];
+            const summaryData = Object.entries(variants).map(([name, logs]) => {
+              const stats: any = { name };
+              metricKeys.forEach(k => {
+                const reductions = logs.map(l => {
+                  const first = l.first[k] || 0;
+                  const last = l.last[k] || 0;
+                  return first !== 0 ? ((first - last) / first) * 100 : 0;
+                });
+                const finalValues = logs.map(l => l.last[k] || 0);
+                
+                const avgRed = (reductions.reduce((a, b) => a + b, 0) / (reductions.length || 1));
+                const stdRed = Math.sqrt(reductions.map(x => Math.pow(x - avgRed, 2)).reduce((a, b) => a + b, 0) / (reductions.length || 1));
+                
+                const avgFinal = (finalValues.reduce((a, b) => a + b, 0) / (finalValues.length || 1));
+                const stdFinal = Math.sqrt(finalValues.map(x => Math.pow(x - avgFinal, 2)).reduce((a, b) => a + b, 0) / (finalValues.length || 1));
+
+                stats[k] = { avgRed, stdRed, avgFinal, stdFinal };
+              });
+              return stats;
+            });
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <section className="card">
+                  <h3 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Loss Reduction Summary (%)</h3>
+                  <div style={{ height: '400px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={summaryData} margin={{ bottom: 60 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} fontSize={11} />
+                        <YAxis label={{ value: 'Avg. Reduction (%)', angle: -90, position: 'insideLeft' }} fontSize={11} />
+                        <Tooltip />
+                        <Legend verticalAlign="top" height={36}/>
+                        <Bar dataKey="G_A.avgRed" name="Gen A" fill="#007bff" />
+                        <Bar dataKey="G_B.avgRed" name="Gen B" fill="#0056b3" />
+                        <Bar dataKey="cycle_A.avgRed" name="Cycle A" fill="#10b981" />
+                        <Bar dataKey="feedback_A.avgRed" name="Feedback A" fill="#f59e0b" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </section>
+
+                <section className="card">
+                  <h3 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Detailed Metrics Table (Mean ± Std)</h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid var(--border-color)' }}>
+                          <th style={{ padding: '0.75rem', textAlign: 'left' }}>Variant</th>
+                          {metricKeys.map(k => (
+                            <th key={k} style={{ padding: '0.75rem', textAlign: 'center' }} colSpan={2}>
+                              {k.replace('_', ' ')}
+                            </th>
+                          ))}
+                        </tr>
+                        <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid var(--border-color)' }}>
+                          <th style={{ padding: '0.5rem' }}></th>
+                          {metricKeys.map(k => (
+                            <React.Fragment key={`${k}-sub`}>
+                              <th style={{ padding: '0.5rem', fontSize: '0.6rem', fontWeight: 'normal' }}>Final Loss</th>
+                              <th style={{ padding: '0.5rem', fontSize: '0.6rem', fontWeight: 'normal' }}>Red. %</th>
+                            </React.Fragment>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summaryData.map(s => (
+                          <tr key={s.name} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                            <td style={{ padding: '0.75rem', fontWeight: 'bold' }}>{s.name}</td>
+                            {metricKeys.map(k => (
+                              <React.Fragment key={`${s.name}-${k}`}>
+                                <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                  {s[k].avgFinal.toFixed(3)} <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>±{s[k].stdFinal.toFixed(3)}</span>
+                                </td>
+                                <td style={{ padding: '0.5rem', textAlign: 'center', backgroundColor: 'rgba(24, 144, 255, 0.02)' }}>
+                                  {s[k].avgRed.toFixed(1)}% <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>±{s[k].stdRed.toFixed(1)}</span>
+                                </td>
+                              </React.Fragment>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+    );
+  };
+
   const renderProjectStatus = () => {
     const projectLogs = resultsStatus.logs
       .filter(l => l.startsWith(selectedProject))
@@ -1078,7 +1218,7 @@ const App: React.FC = () => {
       other: projectLogs.filter(id => !id.includes("Architecture") && !id.includes("Size") && !id.includes("Sensitivity"))
     };
 
-    const SubPanel = ({ title, items, filterKey }: { title: string, items: string[], filterKey: string }) => {
+  const SubPanel = ({ title, items, filterKey }: { title: string, items: string[], filterKey: string }) => {
       if (items.length === 0) return null;
       const isCollapsed = collapsedPanels[filterKey] || false;
       
@@ -1106,9 +1246,18 @@ const App: React.FC = () => {
       return (
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }} onClick={() => setCollapsedPanels({ ...collapsedPanels, [filterKey]: !isCollapsed })}>
-              {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-              <h4 style={{ margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title} ({filteredItems.length})</h4>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }} onClick={() => setCollapsedPanels({ ...collapsedPanels, [filterKey]: !isCollapsed })}>
+                {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                <h4 style={{ margin: 0, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title} ({filteredItems.length})</h4>
+              </div>
+              <button 
+                className="chip" 
+                style={{ fontSize: '0.6rem', padding: '0.1rem 0.4rem', border: '1px solid var(--primary-color)', color: 'var(--primary-color)' }}
+                onClick={() => fetchAblationLogs(filterKey)}
+              >
+                Ablation Analytics
+              </button>
             </div>
             {!isCollapsed && (
               <select 
@@ -1530,6 +1679,7 @@ const App: React.FC = () => {
                       {renderProjectStatus()}
                     </section>
                   </div>
+                  {renderAblationAnalyticsModal()}
                   <section className="card">
                     <h3>Quick Config</h3>
                     <div className="config-form" style={{ gridTemplateColumns: '1fr', gap: '1.25rem' }}>

@@ -474,6 +474,49 @@ async def get_project_ablation_metrics(project_id: str):
                 except: pass
     return results
 
+@app.get("/api/projects/{project_id}/ablation_logs")
+async def get_project_ablation_logs(project_id: str, category: str):
+    # category: architecture, size, sensitivity
+    results = []
+    if not os.path.exists(LOGS_DIR): return []
+    
+    for f in os.listdir(LOGS_DIR):
+        if f.startswith(project_id) and f.endswith("_log.txt"):
+            run_id = f.replace("_log.txt", "")
+            
+            # Filter by category
+            is_match = False
+            if category == 'architecture' and "Architecture" in run_id: is_match = True
+            elif category == 'size' and "Size" in run_id and "Architecture" not in run_id: is_match = True
+            elif category == 'sensitivity' and "Sensitivity" in run_id: is_match = True
+            
+            if not is_match: continue
+            
+            log_path = os.path.join(LOGS_DIR, f)
+            try:
+                with open(log_path, "r", encoding="utf-8", errors="ignore") as lf:
+                    lines = lf.readlines()
+                    if not lines: continue
+                    
+                    # Find first and last parsed lines
+                    structured = []
+                    for line in lines:
+                        parsed = parse_log_line(line)
+                        if parsed: structured.append(parsed)
+                    
+                    if len(structured) < 2: continue
+                    
+                    first = structured[0]
+                    last = structured[-1]
+                    
+                    results.append({
+                        "run_id": run_id,
+                        "first": first,
+                        "last": last
+                    })
+            except: pass
+    return results
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8832)
