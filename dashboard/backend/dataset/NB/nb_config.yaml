@@ -31,7 +31,7 @@ train:
 dataset:
   path_A: 'dataset/NB/df_ag.tsv'
   path_B: 'dataset/NB/df_rs.tsv'
-  max_samples: 500
+  max_samples: 498
   force_index_mapping: true
 
 # Output Parameters

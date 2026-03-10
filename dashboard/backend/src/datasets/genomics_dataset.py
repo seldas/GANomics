@@ -16,41 +16,50 @@ class GenomicsDataset(Dataset):
         path_B: Path to domain B (e.g. RNA-seq) CSV/TSV
         is_train: Whether in training mode (affects sampling)
         random_seed: Optional seed for reproducible shuffling of samples
-        force_index_mapping: If True, assume genes are already aligned by index
+        force_index_mapping: If True, assume genes and samples are already aligned by index/order
         """
         self.is_train = is_train
         self.force_index_mapping = force_index_mapping
         
-        # Load data (assuming CSV with index as sample IDs and columns as genes)
+        # Load data
         self.df_A = self._load_df(path_A)
         self.df_B = self._load_df(path_B)
         
-        # Auto-transpose if Genes x Samples (Heuristic: Rows > Cols)
+        # Strict Point-to-Point Mapping Logic
+        # 1. Handle Transposition if necessary (Heuristic: Rows usually Samples, Cols usually Genes)
+        # In genomics, Genes (Cols) >> Samples (Rows). 
+        # If Rows > Cols, it's likely Genes x Samples and needs T.
         if self.df_A.shape[0] > self.df_A.shape[1]:
             self.df_A = self.df_A.T
         if self.df_B.shape[0] > self.df_B.shape[1]:
             self.df_B = self.df_B.T
-        
+
         if self.force_index_mapping:
-            if len(self.df_A.columns) != len(self.df_B.columns):
-                raise ValueError(f"Forced index mapping requires same number of genes. "
-                                 f"A has {len(self.df_A.columns)}, B has {len(self.df_B.columns)}")
-            # Use columns from A for both
+            # Force identical index and columns regardless of their current values
+            # This is "Point-to-Point Mapping" - we trust the positional alignment
+            if self.df_A.shape != self.df_B.shape:
+                raise ValueError(f"Strict mapping requested but dimensions mismatch: A {self.df_A.shape}, B {self.df_B.shape}")
+            
+            # Use A's identifiers for both to ensure downstream code (like y.loc[idx]) works
+            self.df_B.index = self.df_A.index
             self.df_B.columns = self.df_A.columns
         else:
-            # Ensure genes are aligned
+            # Align by actual IDs (standard join)
             common_genes = self.df_A.columns.intersection(self.df_B.columns)
-            if len(common_genes) == 0:
-                raise ValueError("No common genes found. If they are already aligned by index, set force_index_mapping=True.")
-            self.df_A = self.df_A[common_genes]
-            self.df_B = self.df_B[common_genes]
+            common_samples = self.df_A.index.intersection(self.df_B.index)
+            
+            if len(common_genes) == 0 or len(common_samples) == 0:
+                raise ValueError("No common genes/samples found. For positional mapping, set force_index_mapping=True.")
+            
+            self.df_A = self.df_A.loc[common_samples, common_genes]
+            self.df_B = self.df_B.loc[common_samples, common_genes]
         
-        # Randomize samples if seed provided
-        all_samples = self.df_A.index.tolist()
+        # Randomize samples if seed provided (applies to both domains together to maintain pairing)
         if random_seed is not None:
-            random.Random(random_seed).shuffle(all_samples)
-            self.df_A = self.df_A.loc[all_samples]
-            self.df_B = self.df_B.loc[all_samples]
+            indices = self.df_A.index.tolist()
+            random.Random(random_seed).shuffle(indices)
+            self.df_A = self.df_A.loc[indices]
+            self.df_B = self.df_B.loc[indices]
 
         if max_samples:
             self.df_A = self.df_A.head(max_samples)
@@ -58,9 +67,6 @@ class GenomicsDataset(Dataset):
             
         self.samples_A = self.df_A.index.tolist()
         self.samples_B = self.df_B.index.tolist()
-        
-        # For paired data, we assume the index (sample ID) matches
-        self.common_samples = sorted(list(set(self.samples_A) & set(self.samples_B)))
         
         self.A_size = len(self.samples_A)
         self.B_size = len(self.samples_B)
