@@ -140,6 +140,7 @@ async def get_results_status():
         sync_folder = run_id
         sync_path = os.path.join(SYNC_DATA_DIR, sync_folder, "test", "microarray_fake.csv")
         log_path = os.path.join(LOGS_DIR, f"{run_id}_log.txt")
+        checkpoint_latest = os.path.join(CHECKPOINTS_DIR, run_id, "net_latest.pth")
         
         # Check if log was updated in the last 60 seconds
         is_running = False
@@ -148,7 +149,7 @@ async def get_results_status():
                 is_running = True
         
         run_statuses[run_id] = {
-            "training": "running" if is_running else ("completed" if run_id in checkpoints else "idle"),
+            "training": "running" if is_running else ("completed" if os.path.exists(checkpoint_latest) else "idle"),
             "sync": os.path.exists(sync_path),
             "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")),
             "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Jaccard_Curve_GANomics.csv")),
@@ -357,6 +358,61 @@ async def get_run_prediction_metrics(run_id: str):
                 print(f"Error reading {f}: {e}")
                 
     return results
+
+@app.post("/api/runs/{run_id}/run_step")
+async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] = None):
+    # Map step numbers to scripts
+    scripts = {
+        2: "test_sync.py",
+        3: "comparative_analysis.py",
+        4: "biomarker.py" # Covers both DEG and Prediction
+    }
+    
+    if step not in scripts:
+        raise HTTPException(status_code=400, detail=f"Invalid step: {step}")
+        
+    script_path = os.path.join(SCRIPTS_DIR, scripts[step])
+    if not os.path.exists(script_path):
+        raise HTTPException(status_code=404, detail=f"Script not found: {scripts[step]}")
+        
+    cmd = [sys.executable, script_path, "--run_id", run_id]
+    
+    # Step 2 needs config
+    if step == 2:
+        if not config_path:
+            # Try to find config from run_id or projects
+            raise HTTPException(status_code=400, detail="Step 2 requires config_path")
+        cmd += ["--config", config_path]
+    
+    # Step 4 might need labels (defaults to NB clinical_info)
+    if step == 4:
+        # Check if project is NB or other to set labels
+        if "NB" in run_id:
+            cmd += ["--labels", os.path.join(DATASET_DIR, "NB", "clinical_info.tsv")]
+        elif "METSIM" in run_id:
+            cmd += ["--labels", os.path.join(DATASET_DIR, "METSIM", "clinical_info.tsv")]
+            
+    print(f"Running step {step} command: {' '.join(cmd)}")
+    
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    
+    try:
+        kwargs = {}
+        if os.name == 'nt':
+            kwargs['creationflags'] = subprocess.CREATE_NEW_CONSOLE
+        
+        process = subprocess.Popen(
+            cmd, 
+            cwd=BACKEND_DIR, 
+            env=env, 
+            stdout=None, 
+            stderr=None, 
+            **kwargs
+        )
+        return {"message": f"Step {step} started", "pid": process.pid}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start step {step}: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

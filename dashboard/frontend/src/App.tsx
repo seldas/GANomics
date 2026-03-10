@@ -145,6 +145,24 @@ const App: React.FC = () => {
     }
   };
 
+  const handleRunStep = async (step: number) => {
+    if (!selectedRunId) return;
+    const project = projects.find(p => selectedRunId.startsWith(p.id));
+    
+    try {
+      await axios.post(`${API_BASE}/runs/${selectedRunId}/run_step`, null, {
+        params: { 
+          step,
+          config_path: project?.config_path
+        }
+      });
+      alert(`Step ${step} started in a new console.`);
+    } catch (err) {
+      console.error(err);
+      alert(`Failed to start step ${step}`);
+    }
+  };
+
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -1020,34 +1038,75 @@ const App: React.FC = () => {
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>2. Sync Data</div>
             <StatusButton label={status?.sync ? 'Generated' : 'Pending'} status={status?.sync || false} />
-            {status?.sync && (
+            {status?.sync ? (
               <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchSyncStatus(selectedRunId)}>View Details</button>
+            ) : (
+              <button 
+                className={`chip selected ${status?.training !== 'completed' ? 'disabled' : ''}`} 
+                style={{ fontSize: '0.75rem', opacity: status?.training !== 'completed' ? 0.5 : 1, cursor: status?.training !== 'completed' ? 'not-allowed' : 'pointer' }} 
+                onClick={() => status?.training === 'completed' && handleRunStep(2)}
+              >
+                Start Sync
+              </button>
             )}
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>3. Comparative</div>
             <StatusButton label={isSizeTask ? (status?.comparative ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.comparative || false) : 'unavailable'} />
-            {isSizeTask && status?.comparative && (
+            {isSizeTask && (status?.comparative ? (
               <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchComparativeMetrics(selectedRunId)}>View Results</button>
-            )}
+            ) : (
+              <button 
+                className={`chip selected ${!status?.sync ? 'disabled' : ''}`} 
+                style={{ fontSize: '0.75rem', opacity: !status?.sync ? 0.5 : 1, cursor: !status?.sync ? 'not-allowed' : 'pointer' }} 
+                onClick={() => status?.sync && handleRunStep(3)}
+              >
+                Start Analysis
+              </button>
+            ))}
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>4. DEG</div>
             <StatusButton label={isSizeTask ? (status?.deg ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
-            {isSizeTask && status?.deg && (
+            {isSizeTask && (status?.deg ? (
               <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchDegMetrics(selectedRunId)}>View Results</button>
-            )}
+            ) : (
+              <button 
+                className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
+                style={{ fontSize: '0.75rem', opacity: !status?.comparative ? 0.5 : 1, cursor: !status?.comparative ? 'not-allowed' : 'pointer' }} 
+                onClick={() => status?.comparative && handleRunStep(4)}
+              >
+                Start Analysis
+              </button>
+            ))}
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>5. Pathway</div>
             <StatusButton label={isSizeTask ? (status?.pathway ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.pathway || false) : 'unavailable'} />
+            {isSizeTask && !status?.pathway && (
+              <button 
+                className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
+                style={{ fontSize: '0.75rem', opacity: !status?.comparative ? 0.5 : 1, cursor: !status?.comparative ? 'not-allowed' : 'pointer' }} 
+                onClick={() => status?.comparative && handleRunStep(4)}
+              >
+                Start Analysis
+              </button>
+            )}
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>6. Pred. Model</div>
             <StatusButton label={isSizeTask ? (status?.pred_model ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.pred_model || false) : 'unavailable'} />
-            {isSizeTask && status?.pred_model && (
+            {isSizeTask && (status?.pred_model ? (
               <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchPredictionMetrics(selectedRunId)}>View Results</button>
-            )}
+            ) : (
+              <button 
+                className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
+                style={{ fontSize: '0.75rem', opacity: !status?.comparative ? 0.5 : 1, cursor: !status?.comparative ? 'not-allowed' : 'pointer' }} 
+                onClick={() => status?.comparative && handleRunStep(4)}
+              >
+                Start Analysis
+              </button>
+            ))}
           </section>
         </div>
       </div>
