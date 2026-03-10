@@ -37,3 +37,9 @@ output:
   name: 'NCI60_1_GANomics_50'
   logs_dir: 'results/1_Training/logs'
 
+
+default_ablation:
+  size: 50
+  beta: 10.0
+  lambda: 10.0
+

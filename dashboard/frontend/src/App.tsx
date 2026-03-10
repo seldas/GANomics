@@ -68,6 +68,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'train' | 'analysis'>('train');
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
+  const [projectAblationTab, setProjectAblationTab] = useState<'size' | 'architecture' | 'sensitivity'>('size');
   const [selectedSizes, setSelectedSizes] = useState<number[]>([50]);
   const [selectedBetas, setSelectedBetas] = useState<number[]>([10.0]);
   const [selectedLambdas, setSelectedLambdas] = useState<number[]>([10.0]);
@@ -83,6 +84,7 @@ const App: React.FC = () => {
   const [runPredictionData, setRunPredictionData] = useState<any | null>(null);
   const [runPathwayData, setRunPathwayData] = useState<any | null>(null);
   const [selectedPathwayLibrary, setSelectedPathwayLibrary] = useState<string | null>(null);
+  const [ablationData, setAblationData] = useState<any[]>([]);
   const [corrGroup, setCorrGroup] = useState<'MA' | 'RS'>('MA');
   
   const [resultsStatus, setResultsStatus] = useState<{
@@ -195,12 +197,13 @@ const App: React.FC = () => {
   }, []); // Poll status globally
 
   useEffect(() => {
-    if (activeTab === 'analysis' && selectedProject) {
-      axios.get(`${API_BASE}/metrics/${selectedProject}`)
-        .then(res => setMetrics(res.data))
-        .catch(() => setMetrics([]));
+    if (selectedProject) {
+      axios.get(`${API_BASE}/projects/${selectedProject}/ablation`)
+        .then(res => setAblationData(res.data))
+        .catch(err => console.error(err));
     }
-  }, [activeTab, selectedProject]);
+  }, [selectedProject, resultsStatus]);
+
 
   const toggleSelection = (val: any, list: any[], setter: (val: any[]) => void) => {
     if (list.includes(val)) {
@@ -934,6 +937,134 @@ const App: React.FC = () => {
   const [statusFilters, setStatusFilters] = useState({ architecture: 'all', size: 'all', sensitivity: 'all' });
   const [globalStepFilter, setGlobalStepFilter] = useState<string>('all');
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
+  const [sensitivityType, setSensitivityType] = useState<'beta' | 'lambda'>('beta');
+
+  const renderAblationCharts = () => {
+    if (ablationData.length === 0) return null;
+
+    // 1. Sample Size Data
+    const sizeData = ablationData
+      .filter(d => d.run_id.includes("Size") && !d.run_id.includes("Architecture"))
+      .map(d => {
+        const match = d.run_id.match(/Size_(\d+)/);
+        return { 
+          size: match ? parseInt(match[1]) : 0, 
+          MAE: parseFloat(d.L1),
+          Pearson: parseFloat(d.Pearson),
+          Spearman: parseFloat(d.Spearman)
+        };
+      })
+      .filter(d => d.size > 0)
+      .sort((a, b) => a.size - b.size);
+
+    // Group by size and average (if multiple runs exist)
+    const sizeAvgMap = new Map();
+    sizeData.forEach(d => {
+      if (!sizeAvgMap.has(d.size)) sizeAvgMap.set(d.size, { size: d.size, MAE: 0, count: 0 });
+      const entry = sizeAvgMap.get(d.size);
+      entry.MAE += d.MAE;
+      entry.count += 1;
+    });
+    const sizeChartData = Array.from(sizeAvgMap.values()).map(v => ({ 
+      size: v.size, 
+      MAE: v.MAE / v.count 
+    })).sort((a,b) => a.size - b.size);
+
+    // 2. Architecture Data
+    // Get baseline (Size 50 run)
+    const baselineRun = ablationData.find(d => d.run_id.includes("Size_50") && !d.run_id.includes("Architecture"));
+    const archRuns = ablationData.filter(d => d.run_id.includes("Architecture"));
+    
+    const archChartData = [
+      { name: 'Baseline (Both)', MAE: baselineRun ? parseFloat(baselineRun.L1) : null },
+      ...archRuns.map(d => ({
+        name: d.run_id.includes("AtoB") ? "A → B Only" : "B → A Only",
+        MAE: parseFloat(d.L1)
+      }))
+    ];
+
+    // 3. Sensitivity Data
+    const sensData = ablationData
+      .filter(d => d.run_id.includes("Sensitivity"))
+      .map(d => {
+        const bMatch = d.run_id.match(/Beta_([\d.]+)/);
+        const lMatch = d.run_id.match(/Lambda_([\d.]+)/);
+        return {
+          beta: bMatch ? parseFloat(bMatch[1]) : 10.0,
+          lambda: lMatch ? parseFloat(lMatch[1]) : 10.0,
+          MAE: parseFloat(d.L1)
+        };
+      });
+    
+    const sensitivityChartData = (sensitivityType === 'beta' 
+      ? sensData.filter(d => d.lambda === 10.0).sort((a,b) => a.beta - b.beta)
+      : sensData.filter(d => d.beta === 10.0).sort((a,b) => a.lambda - b.lambda)
+    ).map(d => ({
+      val: sensitivityType === 'beta' ? d.beta : d.lambda,
+      MAE: d.MAE
+    }));
+
+    return (
+      <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem' }}>Ablation Analysis Results</h3>
+          <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: '#f3f4f6', padding: '0.25rem', borderRadius: '8px' }}>
+            <button className={`chip ${projectAblationTab === 'size' ? 'selected' : ''}`} style={{ border: 'none', fontSize: '0.75rem' }} onClick={() => setProjectAblationTab('size')}>Sample Size</button>
+            <button className={`chip ${projectAblationTab === 'architecture' ? 'selected' : ''}`} style={{ border: 'none', fontSize: '0.75rem' }} onClick={() => setProjectAblationTab('architecture')}>Architecture</button>
+            <button className={`chip ${projectAblationTab === 'sensitivity' ? 'selected' : ''}`} style={{ border: 'none', fontSize: '0.75rem' }} onClick={() => setProjectAblationTab('sensitivity')}>Sensitivity</button>
+          </div>
+        </div>
+
+        <div style={{ height: '300px', width: '100%' }}>
+          {projectAblationTab === 'size' && (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={sizeChartData} margin={{ top: 5, right: 30, left: 20, bottom: 25 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="size" label={{ value: 'Training Samples (N)', position: 'bottom', fontSize: 12 }} fontSize={11} />
+                <YAxis label={{ value: 'MAE (L1 Loss)', angle: -90, position: 'insideLeft', fontSize: 12 }} fontSize={11} />
+                <Tooltip />
+                <Line type="monotone" dataKey="MAE" stroke="var(--primary-color)" strokeWidth={2} dot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+
+          {projectAblationTab === 'architecture' && (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={archChartData} margin={{ top: 5, right: 30, left: 20, bottom: 25 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" fontSize={11} />
+                <YAxis label={{ value: 'MAE (L1 Loss)', angle: -90, position: 'insideLeft', fontSize: 12 }} fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="MAE" fill="var(--primary-color)" radius={[4, 4, 0, 0]} barSize={50} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+
+          {projectAblationTab === 'sensitivity' && (
+            <div style={{ height: '100%' }}>
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', justifyContent: 'center' }}>
+                <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <input type="radio" checked={sensitivityType === 'beta'} onChange={() => setSensitivityType('beta')} /> Beta (Feedback)
+                </label>
+                <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <input type="radio" checked={sensitivityType === 'lambda'} onChange={() => setSensitivityType('lambda')} /> Lambda (Cycle)
+                </label>
+              </div>
+              <ResponsiveContainer width="100%" height="250px">
+                <LineChart data={sensitivityChartData} margin={{ top: 5, right: 30, left: 20, bottom: 25 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="val" label={{ value: sensitivityType === 'beta' ? 'Beta' : 'Lambda', position: 'bottom', fontSize: 12 }} fontSize={11} />
+                  <YAxis label={{ value: 'MAE', angle: -90, position: 'insideLeft', fontSize: 12 }} fontSize={11} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="MAE" stroke="var(--primary-color)" strokeWidth={2} dot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderProjectStatus = () => {
     const projectLogs = resultsStatus.logs
@@ -1023,6 +1154,8 @@ const App: React.FC = () => {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {renderAblationCharts()}
+        
         <div style={{ padding: '0.75rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>FILTER BY COMPLETION:</div>

@@ -455,6 +455,25 @@ async def get_run_pathway_metrics(run_id: str):
                 
     return results
 
+@app.get("/api/projects/{project_id}/ablation")
+async def get_project_ablation_metrics(project_id: str):
+    # Search all comparative results for this project
+    results = []
+    if not os.path.exists(COMPARATIVE_DIR): return []
+    
+    for run_id in os.listdir(COMPARATIVE_DIR):
+        if run_id.startswith(project_id):
+            perf_path = os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")
+            if os.path.exists(perf_path):
+                try:
+                    df = pd.read_csv(perf_path)
+                    # Get GANomics performance
+                    row = df[df['Algorithm'] == 'GANomics'].iloc[0].to_dict()
+                    row['run_id'] = run_id
+                    results.append(row)
+                except: pass
+    return results
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8832)
