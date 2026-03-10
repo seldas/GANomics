@@ -913,9 +913,14 @@ async def get_project_ablation_logs(project_id: str, category: str):
             
             # Filter by category
             is_match = False
-            if category == 'architecture' and "Architecture" in run_id: is_match = True
-            elif category == 'size' and "Size" in run_id and "Architecture" not in run_id: is_match = True
-            elif category == 'sensitivity' and "Sensitivity" in run_id: is_match = True
+            if category == 'architecture':
+                if "Architecture" in run_id: is_match = True
+                # Also include baseline (Size 50, but not Architecture)
+                elif "Size_50" in run_id and "Architecture" not in run_id: is_match = True
+            elif category == 'size':
+                if "Size" in run_id and "Architecture" not in run_id: is_match = True
+            elif category == 'sensitivity':
+                if "Sensitivity" in run_id: is_match = True
             
             if not is_match: continue
             
