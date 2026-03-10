@@ -45,10 +45,12 @@ import './App.css';
 interface Project {
   id: string;
   name: string;
+  description?: string;
   genes: number;
   samples: number;
   config_path: string;
   config?: any;
+  has_label: boolean;
 }
 
 interface LogResponse {
@@ -329,6 +331,170 @@ const App: React.FC = () => {
       console.error(err);
       alert("Failed to restart task");
     }
+  };
+
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [agFile, setAgFile] = useState<File | null>(null);
+  const [rsFile, setRsFile] = useState<File | null>(null);
+  const [labelFile, setLabelFile] = useState<File | null>(null);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+
+  const [newProjectDescription, setNewProjectDescription] = useState('');
+
+  const handleCreateProject = async () => {
+    if (!newProjectName || !agFile || !rsFile) {
+      alert("Project name, Microarray (AG) and RNA-Seq (RS) files are required.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('project_name', newProjectName);
+    formData.append('description', newProjectDescription);
+    formData.append('df_ag', agFile);
+    formData.append('df_rs', rsFile);
+    if (labelFile) formData.append('label', labelFile);
+
+    setIsCreatingProject(true);
+    try {
+      const res = await axios.post(`${API_BASE}/projects/create`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      alert(res.data.message);
+      setNewProjectName('');
+      setNewProjectDescription('');
+      setAgFile(null);
+      setRsFile(null);
+      setLabelFile(null);
+      setShowSettingsModal(false);
+      
+      const projRes = await axios.get(`${API_BASE}/projects`);
+      setProjects(projRes.data);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.detail || "Failed to create project");
+    } finally {
+      setIsCreatingProject(false);
+    }
+  };
+
+  const FileUploadBox = ({ label, file, setFile, accept, required }: any) => (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-main)' }}>
+        {label} {required && <span style={{ color: '#ff4d4f' }}>*</span>}
+      </label>
+      <div 
+        className={`file-drop-zone ${file ? 'has-file' : ''}`}
+        style={{ 
+          border: '2px dashed #e2e8f0', 
+          borderRadius: '12px', 
+          padding: '1.5rem', 
+          textAlign: 'center',
+          backgroundColor: file ? '#f0f9ff' : '#f8fafc',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          position: 'relative'
+        }}
+        onClick={() => document.getElementById(`file-input-${label}`)?.click()}
+      >
+        <input 
+          id={`file-input-${label}`}
+          type="file" 
+          accept={accept} 
+          style={{ display: 'none' }} 
+          onChange={(e) => setFile(e.target.files?.[0] || null)} 
+        />
+        {file ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', color: 'var(--primary-color)' }}>
+            <TableIcon size={20} />
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{file.name}</div>
+              <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+            </div>
+            <X 
+              size={18} 
+              style={{ marginLeft: 'auto', color: '#64748b' }} 
+              onClick={(e) => { e.stopPropagation(); setFile(null); }} 
+            />
+          </div>
+        ) : (
+          <div style={{ color: '#64748b' }}>
+            <Upload size={24} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
+            <div style={{ fontSize: '0.85rem' }}>Click or drag to upload {label}</div>
+            <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.25rem' }}>Supports .tsv, .csv, .txt</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderSettingsModal = () => {
+    if (!showSettingsModal) return null;
+
+    return (
+      <div className="modal-overlay" style={{ zIndex: 3000 }}>
+        <div className="modal-content" style={{ maxWidth: '600px', width: '90%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ backgroundColor: '#f1f5f9', padding: '0.5rem', borderRadius: '8px' }}>
+                <Settings size={20} style={{ color: '#475569' }} />
+              </div>
+              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Project Management</h2>
+            </div>
+            <button className="chip" onClick={() => setShowSettingsModal(false)}><X size={18} /></button>
+          </div>
+
+          <section className="card" style={{ margin: 0, padding: '1.5rem', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <Plus size={18} style={{ color: 'var(--primary-color)' }} />
+              <h3 style={{ margin: 0, fontSize: '1rem' }}>Create New Project</h3>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Project Name <span style={{ color: '#ff4d4f' }}>*</span></label>
+              <input 
+                type="text" 
+                placeholder="e.g. MyDataset_2024" 
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.9rem' }}
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+              />
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>Folder name under backend/dataset (alphanumeric only).</p>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Description</label>
+              <textarea 
+                placeholder="Briefly describe the dataset and project goals..." 
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.9rem', minHeight: '80px', fontFamily: 'inherit' }}
+                value={newProjectDescription}
+                onChange={(e) => setNewProjectDescription(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <FileUploadBox label="Microarray (df_ag)" file={agFile} setFile={setAgFile} required accept=".tsv,.csv,.txt" />
+              <FileUploadBox label="RNA-Seq (df_rs)" file={rsFile} setFile={setRsFile} required accept=".tsv,.csv,.txt" />
+            </div>
+
+            <FileUploadBox label="Clinical Labels (label.txt)" file={labelFile} setFile={setLabelFile} accept=".tsv,.csv,.txt" />
+
+            <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
+              <button 
+                className={`chip selected ${isCreatingProject ? 'disabled' : ''}`} 
+                style={{ flex: 1, padding: '1rem', justifyContent: 'center', gap: '0.75rem' }}
+                onClick={handleCreateProject}
+                disabled={isCreatingProject}
+              >
+                {isCreatingProject ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+                {isCreatingProject ? 'Creating Project...' : 'Initialize Project'}
+              </button>
+              <button className="chip" style={{ padding: '1rem' }} onClick={() => setShowSettingsModal(false)}>Cancel</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
   };
 
   const renderOngoingTasks = () => {
@@ -1964,12 +2130,15 @@ const App: React.FC = () => {
                 ))}
               </div>
             )}
-            <div className="nav-item"><Settings size={18} /> Settings</div>
+            <div className="nav-item" onClick={() => setShowSettingsModal(true)} style={{ cursor: 'pointer' }}>
+              <Plus size={18} /> Create Project
+            </div>
           </div>
         </nav>
       </aside>
 
       <main className="main-content">
+        {renderSettingsModal()}
         {renderAblationAnalyticsModal()}
         {activeTab === 'new-session' ? (
           renderNewSessionPanel()
@@ -2011,25 +2180,54 @@ const App: React.FC = () => {
               {renderOngoingTasks()}
 
               <section className="card" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3 style={{ margin: 0, fontSize: '1rem' }}>Select Project</h3>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    {currentProj ? `${currentProj.genes.toLocaleString()} Genes | ${currentProj.samples.toLocaleString()} Samples` : 'No project selected'}
-                  </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1rem' }}>Project Selection</h3>
                 </div>
-                <div className="chip-grid">
+                
+                <div className="chip-grid" style={{ marginBottom: '2rem' }}>
                   {projects.length > 0 ? (
                     projects.map(p => (
-                      <div key={p.id} className={`chip ${selectedProject === p.id ? 'selected' : ''}`} style={{ padding: '0.5rem 1.25rem' }} onClick={() => setSelectedProject(p.id)}>
+                      <div key={p.id} className={`chip ${selectedProject === p.id ? 'selected' : ''}`} style={{ padding: '0.6rem 1.5rem' }} onClick={() => setSelectedProject(p.id)}>
                         {p.name}
                       </div>
                     ))
                   ) : (
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '1rem 0' }}>
-                      No projects found in dataset directory.
+                      No projects found. Create one to get started.
                     </div>
                   )}
                 </div>
+
+                {currentProj && (
+                  <div style={{ 
+                    padding: '1.5rem', 
+                    backgroundColor: '#f8fafc', 
+                    borderRadius: '12px', 
+                    border: '1px solid #e2e8f0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1rem'
+                  }}>
+                    <div style={{ display: 'flex', gap: '2rem' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Description</div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-main)', lineHeight: '1.5' }}>
+                          {currentProj.description || `Dataset for the ${currentProj.name} project.`}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <div style={{ padding: '0.75rem 1.25rem', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '100px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 'bold', textTransform: 'uppercase' }}>Genes</div>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--primary-color)' }}>{currentProj.genes.toLocaleString()}</div>
+                        </div>
+                        <div style={{ padding: '0.75rem 1.25rem', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '100px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 'bold', textTransform: 'uppercase' }}>Samples</div>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--primary-color)' }}>{currentProj.samples.toLocaleString()}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {selectedProject && !currentProj?.has_label && (
                   <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#fffbe6', border: '1px solid #ffe58f', borderRadius: '8px', display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>

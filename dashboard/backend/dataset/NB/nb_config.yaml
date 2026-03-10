@@ -1,47 +1,39 @@
-# GANomics Training Configuration for Neuroblastoma Dataset
-
-# Model Parameters
+dataset:
+  force_index_mapping: true
+  max_samples: 498
+  path_A: dataset/NB/df_ag.tsv
+  path_B: dataset/NB/df_rs.tsv
+default_ablation:
+  beta: 10.0
+  lambda: 10.0
+  size: 50
+metadata:
+  description: Dataset for NB project.
+  genes: 10042
+  name: NB
+  samples: 498
 model:
+  gan_mode: lsgan
   input_nc: 10042
-  output_nc: 10042
   lambda_A: 10.0
   lambda_B: 10.0
   lambda_feedback: 10.0
   lambda_idt: 0.5
-  gan_mode: 'lsgan'
-
-# Optimizer Parameters
+  output_nc: 10042
 optimizer:
-  lr: 0.0002
   beta1: 0.5
   beta2: 0.999
-
-# Training Parameters
+  lr: 0.0002
+output:
+  checkpoints_dir: results/1_Training/checkpoints
+  logs_dir: results/1_Training/logs
+  name: NB_GANomics_50
 train:
+  batch_size: 1
+  device: cuda:0
+  explosion_factor: 3.0
   n_epochs: 500
   n_epochs_decay: 50
-  batch_size: 1
-  device: 'cuda:0'
-  seed: 42
   print_freq: 10
   save_epoch_freq: 10
-  explosion_factor: 3.0
-
-# Dataset Parameters
-dataset:
-  path_A: 'dataset/NB/df_ag.tsv'
-  path_B: 'dataset/NB/df_rs.tsv'
-  max_samples: 498
-  force_index_mapping: true
-
-# Output Parameters
-output:
-  checkpoints_dir: 'results/1_Training/checkpoints'
-  name: 'NB_GANomics_50'
-  logs_dir: 'results/1_Training/logs'
-
-default_ablation:
-  size: 50
-  beta: 10.0
-  lambda: 10.0
-
+  seed: 42

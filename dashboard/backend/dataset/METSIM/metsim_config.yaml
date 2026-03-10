@@ -1,47 +1,40 @@
-# GANomics Training Configuration for METSIM Dataset
-
-# Model Parameters
+dataset:
+  force_index_mapping: true
+  max_samples: 331
+  path_A: dataset/METSIM/df_ag.tsv
+  path_B: dataset/METSIM/df_rs.tsv
+default_ablation:
+  beta: 10.0
+  lambda: 10.0
+  size: 50
+metadata:
+  created_at: '2026-03-10 10:48:11'
+  description: METSIM (METabolic Syndrome In Men) Study
+  genes: 6801
+  name: METSIM
+  samples: 331
 model:
+  gan_mode: lsgan
   input_nc: 6801
-  output_nc: 6801
   lambda_A: 10.0
   lambda_B: 10.0
   lambda_feedback: 10.0
   lambda_idt: 0.5
-  gan_mode: 'lsgan'
-
-# Optimizer Parameters
+  output_nc: 6801
 optimizer:
-  lr: 0.0002
   beta1: 0.5
   beta2: 0.999
-
-# Training Parameters
-train:
-  n_epochs: 500
-  n_epochs_decay: 100
-  batch_size: 1
-  device: 'cuda:0'
-  seed: 42
-  print_freq: 10
-  save_epoch_freq: 20
-
-# Dataset Parameters
-dataset:
-  path_A: 'dataset/METSIM/df_ag.tsv'
-  path_B: 'dataset/METSIM/df_rs.tsv'
-  max_samples: 332
-  force_index_mapping: true
-
-# Output Parameters
+  lr: 0.0002
 output:
-  checkpoints_dir: 'results/1_Training/checkpoints'
-  name: 'METSIM_GANomics_50'
-  logs_dir: 'results/1_Training/logs'
-
-
-default_ablation:
-  size: 50
-  beta: 10.0
-  lambda: 10.0
-
+  checkpoints_dir: results/1_Training/checkpoints
+  logs_dir: results/1_Training/logs
+  name: METSIM_GANomics
+train:
+  batch_size: 1
+  device: cuda:0
+  explosion_factor: 3.0
+  n_epochs: 500
+  n_epochs_decay: 50
+  print_freq: 10
+  save_epoch_freq: 10
+  seed: 42

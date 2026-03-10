@@ -6,7 +6,7 @@ import time
 import sys
 import signal
 from typing import List, Optional, Dict
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
@@ -67,6 +67,7 @@ print(f"LOGS EXISTS: {os.path.exists(LOGS_DIR)}")
 class ProjectInfo(BaseModel):
     id: str
     name: str
+    description: Optional[str] = ""
     genes: int
     samples: int
     config_path: str
@@ -98,25 +99,27 @@ def get_project_stats(config_path):
         path_a = cfg['dataset']['path_A']
         
         # Resolve path relative to backend or root
+        actual_path = path_a
         if not os.path.isabs(path_a):
             # Try root relative
             alt_path = os.path.abspath(os.path.join(ROOT_DIR, path_a))
             if os.path.exists(alt_path): 
-                path_a = alt_path
+                actual_path = alt_path
             else:
                 # Try backend relative
-                path_a = os.path.abspath(os.path.join(BACKEND_DIR, path_a))
+                alt_path = os.path.abspath(os.path.join(BACKEND_DIR, path_a))
+                if os.path.exists(alt_path):
+                    actual_path = alt_path
         
-        if os.path.exists(path_a):
-            # Efficiently read columns and row count
-            df_headers = pd.read_csv(path_a, index_col=0, nrows=0, sep=None, engine='python')
-            # For row count, we can use a fast line count if it's really large, 
-            # but for now let's just use pandas with only the index column if possible
-            # or just skip full load.
-            row_count = 0
-            with open(path_a, 'rb') as f:
-                row_count = sum(1 for _ in f) - 1 # Subtract header
-            return len(df_headers.columns), row_count
+        if os.path.exists(actual_path):
+            # Strict Orientation: Columns are Genes, Rows are Samples
+            df_headers = pd.read_csv(actual_path, index_col=0, nrows=0, sep=None, engine='python')
+            genes_count = len(df_headers.columns)
+            
+            with open(actual_path, 'rb') as f:
+                samples_count = sum(1 for _ in f) - 1 # Subtract header
+            
+            return genes_count, samples_count
     except Exception as e:
         print(f"Error getting stats for {config_path}: {e}")
     return 0, 0
@@ -147,8 +150,7 @@ async def list_projects():
         for file in files:
             if file.endswith("_config.yaml"):
                 full_path = os.path.join(root, file)
-                pid = os.path.basename(root).upper()
-                genes, samples = get_project_stats(full_path)
+                pid = os.path.basename(root)
                 
                 # Check for label.txt
                 has_label = os.path.exists(os.path.join(root, "label.txt"))
@@ -159,7 +161,29 @@ async def list_projects():
                         config_data = yaml.safe_load(f)
                 except: pass
                 
-                projects.append(ProjectInfo(id=pid, name=pid, genes=genes, samples=samples, config_path=full_path, has_label=has_label, config=config_data))
+                metadata = config_data.get('metadata', {})
+                name = metadata.get('name', pid)
+                description = metadata.get('description', "")
+                
+                # Use metadata stats or fallback to file analysis
+                genes = metadata.get('genes')
+                samples = metadata.get('samples')
+                
+                if genes is None or samples is None:
+                    f_genes, f_samples = get_project_stats(full_path)
+                    genes = genes if genes is not None else f_genes
+                    samples = samples if samples is not None else f_samples
+
+                projects.append(ProjectInfo(
+                    id=pid, 
+                    name=name, 
+                    description=description,
+                    genes=genes, 
+                    samples=samples, 
+                    config_path=full_path, 
+                    has_label=has_label, 
+                    config=config_data
+                ))
     return projects
 
 from fastapi import UploadFile, File
@@ -230,6 +254,114 @@ async def upload_labels(project_id: str, file: UploadFile = File(...)):
         if os.path.exists(temp_path): os.remove(temp_path)
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/projects/create")
+async def create_project(
+    project_name: str = Form(...),
+    description: str = Form(""),
+    df_ag: UploadFile = File(...),
+    df_rs: UploadFile = File(...),
+    label: Optional[UploadFile] = File(None)
+):
+    # 1. Validate Project Name
+    if not re.match(r'^[a-zA-Z0-9_-]+$', project_name):
+        raise HTTPException(status_code=400, detail="Invalid project name. Use only alphanumeric characters, underscores, and hyphens.")
+    
+    proj_dir = os.path.join(DATASET_DIR, project_name)
+    if os.path.exists(proj_dir):
+        raise HTTPException(status_code=400, detail="Project already exists.")
+    
+    os.makedirs(proj_dir, exist_ok=True)
+    
+    try:
+        # 2. Save Uploaded Files
+        ag_path = os.path.join(proj_dir, "df_ag.tsv")
+        rs_path = os.path.join(proj_dir, "df_rs.tsv")
+        
+        with open(ag_path, "wb") as f: f.write(await df_ag.read())
+        with open(rs_path, "wb") as f: f.write(await df_rs.read())
+        
+        if label:
+            label_path = os.path.join(proj_dir, "label.txt")
+            with open(label_path, "wb") as f: f.write(await label.read())
+            
+        # 3. Analyze Data to get Genes and Samples
+        # Strictly: Columns = Genes, Rows = Samples
+        df_ag_peek = pd.read_csv(ag_path, sep='\t', index_col=0, nrows=0)
+        genes_count = len(df_ag_peek.columns)
+        
+        with open(ag_path, 'r') as f:
+            samples_count = sum(1 for _ in f) - 1
+            
+        # 4. Generate YAML Config
+        config = {
+            'metadata': {
+                'name': project_name,
+                'description': description,
+                'genes': genes_count,
+                'samples': samples_count,
+                'created_at': time.strftime("%Y-%m-%d %H:%M:%S")
+            },
+            'model': {
+                'input_nc': genes_count,
+                'output_nc': genes_count,
+                'lambda_A': 10.0,
+                'lambda_B': 10.0,
+                'lambda_feedback': 10.0,
+                'lambda_idt': 0.5,
+                'gan_mode': 'lsgan'
+            },
+            'optimizer': {
+                'lr': 0.0002,
+                'beta1': 0.5,
+                'beta2': 0.999
+            },
+            'train': {
+                'n_epochs': 500,
+                'n_epochs_decay': 50,
+                'batch_size': 1,
+                'device': 'cuda:0',
+                'seed': 42,
+                'print_freq': 10,
+                'save_epoch_freq': 10,
+                'explosion_factor': 3.0
+            },
+            'dataset': {
+                'path_A': f'dataset/{project_name}/df_ag.tsv',
+                'path_B': f'dataset/{project_name}/df_rs.tsv',
+                'max_samples': samples_count,
+                'force_index_mapping': True
+            },
+            'output': {
+                'checkpoints_dir': 'results/1_Training/checkpoints',
+                'name': f'{project_name}_GANomics',
+                'logs_dir': 'results/1_Training/logs'
+            },
+            'default_ablation': {
+                'size': 50,
+                'beta': 10.0,
+                'lambda': 10.0
+            }
+        }
+        
+        config_path = os.path.join(proj_dir, f"{project_name.lower()}_config.yaml")
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+            
+        # 5. Generate samples.tsv
+        df_ag_full = pd.read_csv(ag_path, sep='\t', index_col=0)
+        samples = df_ag_full.index.tolist()
+        samples_path = os.path.join(proj_dir, "samples.tsv")
+        pd.DataFrame({'sample_id': samples}).to_csv(samples_path, sep='\t', index=False)
+        
+        return {"message": f"Project {project_name} created successfully", "genes": genes_count, "samples": samples_count}
+        
+    except Exception as e:
+        # Cleanup on failure
+        if os.path.exists(proj_dir):
+            import shutil
+            shutil.rmtree(proj_dir)
+        raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
 
 @app.get("/api/results")
 async def get_results_status():
