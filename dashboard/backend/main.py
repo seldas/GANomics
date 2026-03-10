@@ -348,11 +348,16 @@ async def create_project(
         with open(config_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
             
-        # 5. Generate samples.tsv
+        # 5. Generate samples.tsv and genelist.tsv
         df_ag_full = pd.read_csv(ag_path, sep='\t', index_col=0)
         samples = df_ag_full.index.tolist()
+        genes = df_ag_full.columns.tolist()
+        
         samples_path = os.path.join(proj_dir, "samples.tsv")
         pd.DataFrame({'sample_id': samples}).to_csv(samples_path, sep='\t', index=False)
+        
+        genes_path = os.path.join(proj_dir, "genelist.tsv")
+        pd.DataFrame({'gene_id': genes}).to_csv(genes_path, sep='\t', index=False)
         
         return {"message": f"Project {project_name} created successfully", "genes": genes_count, "samples": samples_count}
         
@@ -362,6 +367,148 @@ async def create_project(
             import shutil
             shutil.rmtree(proj_dir)
         raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
+
+@app.get("/api/runs/{run_id}/genes/template")
+async def get_gene_template(run_id: str):
+    checkpoint_dir = os.path.join(RESULTS_DIR, "1_Training", "checkpoints", run_id)
+    genes_path = os.path.join(checkpoint_dir, "genes.txt")
+    
+    # If genes.txt doesn't exist (older run), try to find it from the original project
+    if not os.path.exists(genes_path):
+        project_id = run_id.split('_')[0]
+        proj_dir = os.path.join(DATASET_DIR, project_id)
+        ag_file = os.path.join(proj_dir, "df_ag.tsv")
+        if os.path.exists(ag_file):
+            try:
+                df = pd.read_csv(ag_file, sep='\t', index_col=0, nrows=0)
+                genes = df.columns.tolist()
+                os.makedirs(checkpoint_dir, exist_ok=True)
+                with open(genes_path, 'w') as f:
+                    f.write("\n".join(genes))
+            except:
+                raise HTTPException(status_code=404, detail="Could not retrieve gene template for this run.")
+        else:
+            raise HTTPException(status_code=404, detail="Gene template not found.")
+
+    return FileResponse(
+        genes_path, 
+        media_type='text/plain', 
+        filename=f"{run_id}_genes_template.txt"
+    )
+
+@app.post("/api/runs/{run_id}/inference")
+async def run_external_inference(
+    run_id: str,
+    direction: str = Form(...), # 'AtoB' (MA->RS) or 'BtoA' (RS->MA)
+    file: UploadFile = File(...)
+):
+    checkpoint_dir = os.path.join(RESULTS_DIR, "1_Training", "checkpoints", run_id)
+    if not os.path.exists(checkpoint_dir):
+        raise HTTPException(status_code=404, detail="Run checkpoint not found.")
+
+    # 1. Save uploaded file temporarily
+    temp_input = os.path.join(TEMP_DIR, f"inference_in_{run_id}_{int(time.time())}.tsv")
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    with open(temp_input, "wb") as f:
+        f.write(await file.read())
+
+    # 2. Define output path
+    output_dir = os.path.join(RESULTS_DIR, "2_SyncData", run_id, "external")
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp = int(time.time())
+    output_filename = f"translated_{direction}_{timestamp}.tsv"
+    output_path = os.path.join(output_dir, output_filename)
+
+    # 3. Run Inference Script
+    script_path = os.path.join(BACKEND_DIR, "scripts", "inference.py")
+    cmd = [
+        "python", script_path,
+        "--run_id", run_id,
+        "--input", temp_input,
+        "--direction", direction,
+        "--output", output_path,
+        "--device", "cpu" # Default to cpu for inference to avoid VRAM issues
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        # Cleanup temp file
+        if os.path.exists(temp_input): os.remove(temp_input)
+        
+        return {
+            "message": "Inference completed successfully",
+            "output_file": output_filename,
+            "stdout": result.stdout
+        }
+    except subprocess.CalledProcessError as e:
+        if os.path.exists(temp_input): os.remove(temp_input)
+        raise HTTPException(status_code=500, detail=f"Inference failed: {e.stderr}")
+
+@app.get("/api/projects/{project_id}/genelist/download")
+async def download_genelist(project_id: str):
+    proj_dir = os.path.join(DATASET_DIR, project_id)
+    if not os.path.exists(proj_dir):
+        for d in os.listdir(DATASET_DIR):
+            if d.upper() == project_id.upper():
+                proj_dir = os.path.join(DATASET_DIR, d)
+                break
+    
+    genelist_path = os.path.join(proj_dir, "genelist.tsv")
+    if not os.path.exists(genelist_path):
+        raise HTTPException(status_code=404, detail="genelist.tsv not found for this project")
+    
+    return FileResponse(genelist_path, filename=f"{project_id}_genelist.tsv")
+
+@app.post("/api/runs/{run_id}/sync_external")
+async def sync_external(
+    run_id: str,
+    test_ag: Optional[UploadFile] = File(None),
+    test_rs: Optional[UploadFile] = File(None)
+):
+    if not test_ag and not test_rs:
+        raise HTTPException(status_code=400, detail="At least one file (test_ag or test_rs) must be uploaded.")
+
+    checkpoint_dir = os.path.join(RESULTS_DIR, "1_Training", "checkpoints", run_id)
+    if not os.path.exists(checkpoint_dir):
+        raise HTTPException(status_code=404, detail="Run checkpoint not found.")
+
+    output_dir = os.path.join(RESULTS_DIR, "2_SyncData", run_id, "external")
+    os.makedirs(output_dir, exist_ok=True)
+    results = []
+
+    async def process_file(file: UploadFile, direction: str):
+        temp_input = os.path.join(BACKEND_DIR, f"temp_sync_ext_{direction}_{int(time.time())}.tsv")
+        with open(temp_input, "wb") as f:
+            f.write(await file.read())
+        
+        output_filename = f"translated_{direction}_{int(time.time())}.tsv"
+        output_path = os.path.join(output_dir, output_filename)
+        
+        script_path = os.path.join(BACKEND_DIR, "scripts", "inference.py")
+        cmd = [sys.executable, script_path, "--run_id", run_id, "--input", temp_input, "--direction", direction, "--output", output_path]
+        
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            if os.path.exists(temp_input): os.remove(temp_input)
+            return {"direction": direction, "output_file": output_filename, "success": True}
+        except subprocess.CalledProcessError as e:
+            if os.path.exists(temp_input): os.remove(temp_input)
+            return {"direction": direction, "error": e.stderr, "success": False}
+
+    if test_ag:
+        res = await process_file(test_ag, 'AtoB')
+        results.append(res)
+    
+    if test_rs:
+        res = await process_file(test_rs, 'BtoA')
+        results.append(res)
+
+    # Check if any failed
+    if any(not r['success'] for r in results):
+        errors = [r['error'] for r in results if not r['success']]
+        raise HTTPException(status_code=500, detail=f"Sync External failed: {'; '.join(errors)}")
+
+    return {"message": "External sync completed successfully", "results": results}
 
 @app.get("/api/results")
 async def get_results_status():
@@ -434,6 +581,12 @@ async def get_results_status():
             "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Jaccard_Curve_GANomics.csv")),
             "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", run_id, "Pathway_Concordance_GANomics.csv")),
             "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", run_id, "Classifier_Performance_GANomics.csv")),
+            # External Branch Tracking
+            "sync_ext": os.path.exists(os.path.join(SYNC_DATA_DIR, run_id, "external")),
+            "comparative_ext": os.path.exists(os.path.join(COMPARATIVE_DIR, run_id, "external", "Test_performance.csv")),
+            "deg_ext": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "external", "Jaccard_Curve_GANomics.csv")),
+            "pathway_ext": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", run_id, "external", "Pathway_Concordance_GANomics.csv")),
+            "pred_model_ext": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", run_id, "external", "Classifier_Performance_GANomics.csv")),
         }
 
     return {

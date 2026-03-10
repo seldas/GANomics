@@ -200,7 +200,9 @@ const App: React.FC = () => {
       try {
         const projRes = await axios.get(`${API_BASE}/projects`);
         setProjects(projRes.data);
-        if (projRes.data.length > 0 && !selectedProject) setSelectedProject(projRes.data[0].id);
+        const nbProj = projRes.data.find((p: any) => p.id.toUpperCase() === 'NB');
+        if (nbProj) setSelectedProject(nbProj.id);
+        else if (projRes.data.length > 0) setSelectedProject(projRes.data[0].id);
       } catch (err) {
         console.error("Failed to fetch projects", err);
       } finally {
@@ -208,7 +210,7 @@ const App: React.FC = () => {
       }
     };
     fetchProjects();
-  }, []); // Only fetch projects once on mount
+  }, []);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -1692,9 +1694,9 @@ const App: React.FC = () => {
                     </div>
                     <div style={{ height: '400px' }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={summaryData} margin={{ bottom: 60 }}>
+                        <BarChart data={summaryData} margin={{ bottom: 20 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} fontSize={11} />
+                          <XAxis dataKey="name" angle={0} textAnchor="middle" interval={0} fontSize={11} />
                           <YAxis label={{ value: 'Avg. Final Loss', angle: -90, position: 'insideLeft' }} fontSize={11} />
                           <Tooltip />
                           <Legend verticalAlign="top" height={36}/>
@@ -1709,6 +1711,11 @@ const App: React.FC = () => {
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
+                    {viewingAblationCategory === 'sensitivity' && sensitivityType === 'beta' && summaryData.some(s => s.val === 0) && (
+                      <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Info size={14} /> <b>Note:</b> Beta = 0.0 represents the standard CycleGAN architecture (no feedback alignment loss).
+                      </div>
+                    )}
                   </section>
                 )}
 
@@ -1758,33 +1765,40 @@ const App: React.FC = () => {
                         </table>
                       );
                     })() : (
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid var(--border-color)' }}>
-                            <th style={{ padding: '0.75rem', textAlign: 'left' }}>Variant</th>
-                            {metricKeys.map(k => (
-                              <th key={k} style={{ padding: '0.75rem', textAlign: 'center' }}>
-                                {k.replace('_', ' ')}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {summaryData.map(s => (
-                            <tr key={s.name} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                              <td style={{ padding: '0.75rem', fontWeight: 'bold' }}>{s.name}</td>
-                              {metricKeys.map(k => (
-                                <td key={`${s.name}-${k}`} style={{ padding: '0.5rem', textAlign: 'center' }}>
-                                  {s[k].avgFinal.toFixed(3)} <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>±{s[k].stdFinal.toFixed(3)}</span>
-                                </td>
+                        <>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid var(--border-color)' }}>
+                                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Variant</th>
+                                {metricKeys.map(k => (
+                                  <th key={k} style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    {k.replace('_', ' ')}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {summaryData.map(s => (
+                                <tr key={s.name} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                  <td style={{ padding: '0.75rem', fontWeight: 'bold' }}>{s.name}</td>
+                                  {metricKeys.map(k => (
+                                    <td key={`${s.name}-${k}`} style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                      {s[k].avgFinal.toFixed(3)} <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>±{s[k].stdFinal.toFixed(3)}</span>
+                                    </td>
+                                  ))}
+                                </tr>
                               ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </section>
+                            </tbody>
+                          </table>
+                          {viewingAblationCategory === 'sensitivity' && sensitivityType === 'beta' && summaryData.some(s => s.val === 0) && (
+                            <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                              * Beta = 0.0 corresponds to standard CycleGAN (no feedback alignment).
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </section>
               </div>
             );
           })()}
@@ -2035,17 +2049,27 @@ const App: React.FC = () => {
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>2. Sync Data</div>
             <StatusButton label={status?.sync ? 'Generated' : 'Pending'} status={status?.sync || false} />
-            {status?.sync ? (
-              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchSyncStatus(selectedRunId)}>View Details</button>
-            ) : (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+              {status?.sync ? (
+                <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchSyncStatus(selectedRunId)}>View Details</button>
+              ) : (
+                <button 
+                  className={`chip selected ${status?.training !== 'completed' ? 'disabled' : ''}`} 
+                  style={{ fontSize: '0.75rem', opacity: status?.training !== 'completed' ? 0.5 : 1, cursor: status?.training !== 'completed' ? 'not-allowed' : 'pointer' }} 
+                  onClick={() => status?.training === 'completed' && handleRunStep(2)}
+                >
+                  Start Sync
+                </button>
+              )}
               <button 
-                className={`chip selected ${status?.training !== 'completed' ? 'disabled' : ''}`} 
-                style={{ fontSize: '0.75rem', opacity: status?.training !== 'completed' ? 0.5 : 1, cursor: status?.training !== 'completed' ? 'not-allowed' : 'pointer' }} 
-                onClick={() => status?.training === 'completed' && handleRunStep(2)}
+                className={`chip ${status?.training !== 'completed' ? 'disabled' : ''}`}
+                style={{ fontSize: '0.75rem', border: '1px solid var(--primary-color)', color: 'var(--primary-color)' }}
+                onClick={() => status?.training === 'completed' && setShowInferenceModal(true)}
+                disabled={status?.training !== 'completed'}
               >
-                Start Sync
+                <Upload size={12} style={{ marginRight: '4px' }} /> External Inference
               </button>
-            )}
+            </div>
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>3. Comparative</div>
@@ -2124,6 +2148,122 @@ const App: React.FC = () => {
     }
   };
 
+  const [showSyncExternalModal, setShowSyncExternalModal] = useState(false);
+  const [extAgFile, setExtAgFile] = useState<File | null>(null);
+  const [extRsFile, setExtRsFile] = useState<File | null>(null);
+  const [isRunningExtSync, setIsRunningExtSync] = useState(false);
+  const [extSyncResult, setExtSyncResult] = useState<any>(null);
+
+  const handleDownloadGenelist = () => {
+    if (!selectedProject) return;
+    window.open(`${API_BASE}/projects/${selectedProject}/genelist/download`);
+  };
+
+  const handleRunExtSync = async () => {
+    if (!selectedRunId || (!extAgFile && !extRsFile)) {
+      alert("Please upload at least one file (test_ag or test_rs).");
+      return;
+    }
+
+    const formData = new FormData();
+    if (extAgFile) formData.append('test_ag', extAgFile);
+    if (extRsFile) formData.append('test_rs', extRsFile);
+
+    setIsRunningExtSync(true);
+    setExtSyncResult(null);
+    try {
+      const res = await axios.post(`${API_BASE}/runs/${selectedRunId}/sync_external`, formData);
+      setExtSyncResult(res.data);
+      alert("External sync completed successfully!");
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.detail || "External sync failed");
+    } finally {
+      setIsRunningExtSync(false);
+    }
+  };
+
+  const renderSyncExternalModal = () => {
+    if (!showSyncExternalModal) return null;
+
+    return (
+      <div className="modal-overlay" style={{ zIndex: 3000 }}>
+        <div className="modal-content" style={{ maxWidth: '700px', width: '95%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ backgroundColor: '#f0fdf4', padding: '0.5rem', borderRadius: '8px' }}>
+                <RefreshCw size={20} style={{ color: '#16a34a' }} />
+              </div>
+              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>2.1 Sync External Dataset</h2>
+            </div>
+            <button className="chip" onClick={() => { setShowSyncExternalModal(false); setExtSyncResult(null); setExtAgFile(null); setExtRsFile(null); }}><X size={18} /></button>
+          </div>
+
+          {!extSyncResult ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div style={{ padding: '1.25rem', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', marginBottom: '0.75rem', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                  <Info size={16} /> DATA PREPARATION
+                </div>
+                <p style={{ fontSize: '0.85rem', margin: 0, color: '#64748b', lineHeight: '1.6' }}>
+                  Upload microarray or RNA-seq files from an external cohort. 
+                  Files must use the <b>exact same gene list</b> as the training data.
+                </p>
+                <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
+                  <button className="chip" style={{ backgroundColor: '#fff' }} onClick={handleDownloadGenelist}>
+                    <Download size={14} style={{ marginRight: '6px' }} /> Download genelist.tsv
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <FileUploadBox label="External Microarray (test_ag)" file={extAgFile} setFile={setExtAgFile} accept=".tsv,.txt" />
+                <FileUploadBox label="External RNA-Seq (test_rs)" file={extRsFile} setFile={setExtRsFile} accept=".tsv,.txt" />
+              </div>
+
+              <button 
+                className={`chip selected ${(!extAgFile && !extRsFile) || isRunningExtSync ? 'disabled' : ''}`}
+                style={{ padding: '1rem', justifyContent: 'center', gap: '0.75rem', fontSize: '1rem' }}
+                disabled={(!extAgFile && !extRsFile) || isRunningExtSync}
+                onClick={handleRunExtSync}
+              >
+                {isRunningExtSync ? <Loader2 size={20} className="animate-spin" /> : <Play size={20} />}
+                {isRunningExtSync ? 'Syncing External Data...' : 'Start External Analysis'}
+              </button>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '1rem' }}>
+              <div style={{ color: 'var(--success-color)', marginBottom: '1.5rem' }}>
+                <div style={{ backgroundColor: 'var(--success-color-bg)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+                  <RefreshCw size={32} />
+                </div>
+                <h3 style={{ margin: 0 }}>External Sync Complete</h3>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {extSyncResult.results.map((r: any, i: number) => (
+                  <div key={i} className="card" style={{ textAlign: 'left', backgroundColor: '#f8fafc', margin: 0 }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                      {r.direction === 'AtoB' ? 'MICROARRAY → RNA-SEQ' : 'RNA-SEQ → MICROARRAY'}
+                    </div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: '600', fontFamily: 'monospace' }}>{r.output_file}</div>
+                  </div>
+                ))}
+              </div>
+
+              <button 
+                className="chip selected" 
+                style={{ marginTop: '2rem', width: '100%', padding: '1rem' }}
+                onClick={() => { setShowSyncExternalModal(false); setExtSyncResult(null); setExtAgFile(null); setExtRsFile(null); }}
+              >
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
   const currentProj = projects.find(p => p.id === selectedProject);
   const status = selectedRunId ? resultsStatus.run_statuses?.[selectedRunId] : null;
   const isSizeTask = selectedRunId ? selectedRunId.includes("Size") && !selectedRunId.includes("Architecture") : false;
@@ -2248,6 +2388,7 @@ const App: React.FC = () => {
       <main className="main-content">
         {renderSettingsModal()}
         {renderAblationAnalyticsModal()}
+        {renderSyncExternalModal()}
         {activeTab === 'new-session' ? (
           renderNewSessionPanel()
         ) : selectedRunId ? (
