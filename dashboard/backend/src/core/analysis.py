@@ -4,12 +4,13 @@ from scipy import stats
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import matthews_corrcoef, accuracy_score, recall_score, precision_score, f1_score
 
-def run_deg_analysis(df, labels, group1='Favorable', group2='Unfavorable'):
+def run_deg_analysis(df, labels, group1=1, group2=0):
     """
     Perform vectorized Welch's t-test for DEGs.
     """
-    g1_data = df.loc[labels == group1]
-    g2_data = df.loc[labels == group2]
+    # Ensure labels are compared correctly (handles both numeric and string representations)
+    g1_data = df.loc[labels.astype(float) == float(group1)]
+    g2_data = df.loc[labels.astype(float) == float(group2)]
 
     n1 = len(g1_data)
     n2 = len(g2_data)
@@ -73,9 +74,9 @@ def train_eval_rf(train_x, train_y, test_x, test_y):
     
     preds = rf.predict(test_x)
     
-    # Find the 'Unfavorable' class or use the first class if missing
+    # Find the '0' class (Unfavorable) or use the first class if missing
     classes = rf.classes_
-    pos_label = 'Unfavorable' if 'Unfavorable' in classes else classes[0]
+    pos_label = '0' if '0' in classes else classes[0]
     
     return {
         'MCC': float(matthews_corrcoef(test_y, preds)),

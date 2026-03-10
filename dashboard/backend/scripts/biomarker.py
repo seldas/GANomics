@@ -12,7 +12,7 @@ from src.core.pathway import load_gmt, run_permutation_test, jaccard_threshold_c
 def main():
     parser = argparse.ArgumentParser(description="Biomarker and Cross-Platform Modeling for all algorithms")
     parser.add_argument("--run_id", type=str, required=True, help="Full run ID (e.g. NB_Ablation_Size_50_Run_0)")
-    parser.add_argument("--labels", type=str, default=os.path.join("dataset", "NB", "clinical_info.tsv"), help="Path to clinical labels")
+    parser.add_argument("--labels", type=str, default=os.path.join("dataset", "NB", "label.txt"), help="Path to clinical labels")
     parser.add_argument("--gmt", type=str, help="Path to MSigDB GMT file for pathway analysis")
     parser.add_argument("--libraries", type=str, nargs="+", default=['KEGG_2021_Human', 'GO_Biological_Process_2021'], help="Enrichr libraries to use")
     parser.add_argument("--no_adjust_path", action='store_true', help="Don't adjust PYTHONPATH")

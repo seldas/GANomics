@@ -22,7 +22,10 @@ import {
   Clock,
   Timer,
   Square,
-  RotateCcw
+  RotateCcw,
+  Download,
+  Upload,
+  AlertTriangle
 } from 'lucide-react';
 import {
   LineChart,
@@ -1785,13 +1788,13 @@ const App: React.FC = () => {
               </button>
             ))}
           </section>
-          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
+          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: (isSizeTask && currentProj?.has_label) ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>4. Bio-marker Analysis</div>
             <StatusButton 
-              label={isSizeTask ? (status?.deg && status?.pathway && status?.pred_model ? 'Done' : 'Pending') : 'Unavailable'} 
-              status={isSizeTask ? (status?.deg && status?.pathway && status?.pred_model || false) : 'unavailable'} 
+              label={!currentProj?.has_label ? 'Missing Labels' : (isSizeTask ? (status?.deg && status?.pathway && status?.pred_model ? 'Done' : 'Pending') : 'Unavailable')} 
+              status={currentProj?.has_label && isSizeTask ? (status?.deg && status?.pathway && status?.pred_model || false) : 'unavailable'} 
             />
-            {isSizeTask && (
+            {isSizeTask && currentProj?.has_label && (
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                 {(status?.deg || status?.pathway || status?.pred_model) ? (
                   <>
@@ -1815,10 +1818,36 @@ const App: React.FC = () => {
                 )}
               </div>
             )}
+            {!currentProj?.has_label && isSizeTask && (
+              <div style={{ fontSize: '0.7rem', color: '#856404', fontStyle: 'italic' }}>Upload label.txt to enable</div>
+            )}
           </section>
         </div>
       </div>
     );
+  };
+
+  const handleDownloadSamples = async () => {
+    if (!selectedProject) return;
+    window.open(`${API_BASE}/projects/${selectedProject}/samples/download`);
+  };
+
+  const handleUploadLabels = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedProject || !event.target.files?.[0]) return;
+    const file = event.target.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      await axios.post(`${API_BASE}/projects/${selectedProject}/labels/upload`, formData);
+      alert("label.txt uploaded and validated successfully!");
+      // Refresh projects to update has_label status
+      const projRes = await axios.get(`${API_BASE}/projects`);
+      setProjects(projRes.data);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.detail || "Failed to upload label.txt");
+    }
   };
 
   const currentProj = projects.find(p => p.id === selectedProject);
@@ -2001,6 +2030,28 @@ const App: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {selectedProject && !currentProj?.has_label && (
+                  <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#fffbe6', border: '1px solid #ffe58f', borderRadius: '8px', display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                    <AlertTriangle size={20} style={{ color: '#faad14', flexShrink: 0, marginTop: '2px' }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#856404', marginBottom: '0.25rem' }}>Missing label.txt</div>
+                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#856404', lineHeight: '1.5' }}>
+                        Biomarker analysis (Steps 4-6) is disabled for this project because no label file was found. 
+                        Please upload a <code>label.txt</code> containing sample classifications.
+                      </p>
+                      <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <button className="chip" style={{ backgroundColor: '#fff' }} onClick={handleDownloadSamples}>
+                          <Download size={14} style={{ marginRight: '6px' }} /> Download samples.tsv
+                        </button>
+                        <label className="chip selected" style={{ cursor: 'pointer', margin: 0 }}>
+                          <Upload size={14} style={{ marginRight: '6px' }} /> Upload label.txt
+                          <input type="file" accept=".txt,.csv" style={{ display: 'none' }} onChange={handleUploadLabels} />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </section>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
