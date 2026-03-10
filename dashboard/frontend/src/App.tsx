@@ -1102,44 +1102,37 @@ const App: React.FC = () => {
       );
     }
 
-    if (taskView === 'deg') {
+    if (taskView === 'deg' || taskView === 'pathway' || taskView === 'prediction') {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button className="chip" onClick={() => setTaskView('overview')} style={{ padding: '0.5rem' }}>
-              <ArrowLeft size={18} />
-            </button>
-            <h2 style={{ margin: 0 }}>Bio-Marker Analysis (DEG): {selectedRunId}</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <button className="chip" onClick={() => setTaskView('overview')} style={{ padding: '0.5rem' }}>
+                <ArrowLeft size={18} />
+              </button>
+              <h2 style={{ margin: 0 }}>Bio-marker Analysis: {selectedRunId}</h2>
+            </div>
+            <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: '#f3f4f6', padding: '0.25rem', borderRadius: '8px' }}>
+              <button 
+                className={`chip ${taskView === 'deg' ? 'selected' : ''}`} 
+                style={{ border: 'none' }}
+                onClick={() => fetchDegMetrics(selectedRunId)}
+              >DEG</button>
+              <button 
+                className={`chip ${taskView === 'pathway' ? 'selected' : ''}`} 
+                style={{ border: 'none' }}
+                onClick={() => fetchPathwayMetrics(selectedRunId)}
+              >Pathway</button>
+              <button 
+                className={`chip ${taskView === 'prediction' ? 'selected' : ''}`} 
+                style={{ border: 'none' }}
+                onClick={() => fetchPredictionMetrics(selectedRunId)}
+              >Prediction</button>
+            </div>
           </div>
-          {renderDegAnalysis()}
-        </div>
-      );
-    }
-
-    if (taskView === 'prediction') {
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button className="chip" onClick={() => setTaskView('overview')} style={{ padding: '0.5rem' }}>
-              <ArrowLeft size={18} />
-            </button>
-            <h2 style={{ margin: 0 }}>Prediction Model Performance: {selectedRunId}</h2>
-          </div>
-          {renderPredictionAnalysis()}
-        </div>
-      );
-    }
-
-    if (taskView === 'pathway') {
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button className="chip" onClick={() => setTaskView('overview')} style={{ padding: '0.5rem' }}>
-              <ArrowLeft size={18} />
-            </button>
-            <h2 style={{ margin: 0 }}>Pathway Analysis: {selectedRunId}</h2>
-          </div>
-          {renderPathwayAnalysis()}
+          {taskView === 'deg' && renderDegAnalysis()}
+          {taskView === 'pathway' && renderPathwayAnalysis()}
+          {taskView === 'prediction' && renderPredictionAnalysis()}
         </div>
       );
     }
@@ -1190,41 +1183,13 @@ const App: React.FC = () => {
             ))}
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>4. DEG</div>
-            <StatusButton label={isSizeTask ? (status?.deg ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
-            {isSizeTask && (status?.deg ? (
+            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>4. Bio-marker Analysis</div>
+            <StatusButton 
+              label={isSizeTask ? (status?.deg && status?.pathway && status?.pred_model ? 'Done' : 'Pending') : 'Unavailable'} 
+              status={isSizeTask ? (status?.deg && status?.pathway && status?.pred_model) : 'unavailable'} 
+            />
+            {isSizeTask && (status?.deg || status?.pathway || status?.pred_model ? (
               <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchDegMetrics(selectedRunId)}>View Results</button>
-            ) : (
-              <button 
-                className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
-                style={{ fontSize: '0.75rem', opacity: !status?.comparative ? 0.5 : 1, cursor: !status?.comparative ? 'not-allowed' : 'pointer' }} 
-                onClick={() => status?.comparative && handleRunStep(4)}
-              >
-                Start Analysis
-              </button>
-            ))}
-          </section>
-          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>5. Pathway</div>
-            <StatusButton label={isSizeTask ? (status?.pathway ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.pathway || false) : 'unavailable'} />
-            {isSizeTask && status?.pathway && (
-              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchPathwayMetrics(selectedRunId)}>View Results</button>
-            )}
-            {isSizeTask && !status?.pathway && (
-              <button 
-                className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
-                style={{ fontSize: '0.75rem', opacity: !status?.comparative ? 0.5 : 1, cursor: !status?.comparative ? 'not-allowed' : 'pointer' }} 
-                onClick={() => status?.comparative && handleRunStep(4)}
-              >
-                Start Analysis
-              </button>
-            )}
-          </section>
-          <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>6. Pred. Model</div>
-            <StatusButton label={isSizeTask ? (status?.pred_model ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.pred_model || false) : 'unavailable'} />
-            {isSizeTask && (status?.pred_model ? (
-              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchPredictionMetrics(selectedRunId)}>View Results</button>
             ) : (
               <button 
                 className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
@@ -1316,25 +1281,11 @@ const App: React.FC = () => {
                 onClick={() => fetchComparativeMetrics(selectedRunId)}
               />
               <StepItem 
-                num="4" label="DEG" 
-                active={taskView === 'deg'}
-                status={isSizeTask ? status?.deg : 'unavailable'} 
-                disabled={!isSizeTask || !status?.deg} 
+                num="4" label="Bio-markers" 
+                active={['deg', 'pathway', 'prediction'].includes(taskView)}
+                status={isSizeTask ? (status?.deg && status?.pathway && status?.pred_model) : 'unavailable'} 
+                disabled={!isSizeTask || (!status?.deg && !status?.pathway && !status?.pred_model)} 
                 onClick={() => fetchDegMetrics(selectedRunId)}
-              />
-              <StepItem 
-                num="5" label="Pathway" 
-                active={taskView === 'pathway'}
-                status={isSizeTask ? status?.pathway : 'unavailable'} 
-                disabled={!isSizeTask || !status?.pathway} 
-                onClick={() => fetchPathwayMetrics(selectedRunId)}
-              />
-              <StepItem 
-                num="6" label="Pred. Model" 
-                active={taskView === 'prediction'}
-                status={isSizeTask ? status?.pred_model : 'unavailable'} 
-                disabled={!isSizeTask || !status?.pred_model} 
-                onClick={() => fetchPredictionMetrics(selectedRunId)}
               />
             </>
           )}
