@@ -50,7 +50,33 @@ Develop/Run `scripts/comparative_biomarker.py` to:
 
 ```powershell
 # 1. Generate full synthetic profiles for all baselines
+
 python scripts/comparative_analysis.py --config configs/nb_config.yaml --sample_size 50 --save_full
+
+## data structures
+0. task identifier:
+NB_Ablation_Size_50_Run_0
+
+1. GANomics model checkpoint:
+dashboard/backend/results/1_Training/checkpoints/NB_Ablation_Size_50_Run_0/net_latest.pth 
+train_samples.txt is under the same folder.
+
+2. Sync-data output template:
+GANomics test: dashboard/backend/results/2_SyncData/NB_Ablation_Size_50_Run_0/test/microarray_fake.csv 
+other algorithms: dashboard/backend/results/2_SyncData/NB_Ablation_Size_50_Run_0/algorithms/microarray_fake_combat.csv
+combat; cublock; qn; tdm; yugene
+
+3. comparative analysis result:
+dashboard/backend/results/3_ComparativeAnalysis/NB_Ablation_Size_50_Run_0/Test_performance.csv
+
+4. DEG results:
+dashboard/backend/results/4_Biomarkers/DEG/NB_Ablation_Size_50_Run_0/Jaccard_Curve_ComBat.csv
+
+5. Pathway results:
+dashboard/backend/results/4_Biomarkers/Pathways/NB_Ablation_Size_50_Run_0/enriched_pathways_Combat.csv
+
+6. Pred. Model results:
+dashboard/backend/results/4_Biomarkers/Prediction/NB_Ablation_Size_50_Run_0/Classifier_Performance_ComBat.csv
 
 # 2. Run the comparative biomarker analysis
 python scripts/biomarker.py \
@@ -79,3 +105,5 @@ python scripts/plot.py --type comparative_fidelity --table results/tables/Compar
 
 ## 6. Expected Results
 We anticipate that **GANomics** will exhibit the highest Jaccard overlap and Spearman rank concordance, as its non-linear translation capability and feedback-loss supervision better preserve the platform-independent biological signals compared to linear harmonization methods like ComBat.
+
+
