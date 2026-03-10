@@ -153,7 +153,7 @@ async def get_results_status():
             "sync": os.path.exists(sync_path),
             "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")),
             "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Jaccard_Curve_GANomics.csv")),
-            "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", run_id, "Table_Fig9_Null_Dist_GANomics.csv")),
+            "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", run_id, "Pathway_Concordance_GANomics.csv")),
             "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", run_id, "Classifier_Performance_GANomics.csv")),
         }
 
@@ -413,6 +413,47 @@ async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] =
         return {"message": f"Step {step} started", "pid": process.pid}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start step {step}: {str(e)}")
+
+@app.get("/api/runs/{run_id}/pathway")
+async def get_run_pathway_metrics(run_id: str):
+    pathway_dir = os.path.join(BIOMARKERS_DIR, "Pathway", run_id)
+    if not os.path.exists(pathway_dir):
+        raise HTTPException(status_code=404, detail="Pathway results not found")
+    
+    # Structure: { library_name: { algo_name: { rho, p, null_dist } } }
+    results = {}
+    for f in os.listdir(pathway_dir):
+        if f.startswith("Pathway_Concordance_") and f.endswith(".csv"):
+            # Format: Pathway_Concordance_{algo}_{library}.csv
+            parts = f.replace("Pathway_Concordance_", "").replace(".csv", "").split("_")
+            if len(parts) < 2: continue
+            algo = parts[0]
+            library = "_".join(parts[1:])
+            
+            if library not in results: results[library] = {"concordance": {}, "null_distributions": {}}
+            
+            try:
+                df = pd.read_csv(os.path.join(pathway_dir, f))
+                results[library]["concordance"][algo] = df.to_dict(orient="records")[0]
+            except Exception as e:
+                print(f"Error reading {f}: {e}")
+        
+        if f.startswith("Null_Dist_") and f.endswith(".csv"):
+            # Format: Null_Dist_{algo}_{library}.csv
+            parts = f.replace("Null_Dist_", "").replace(".csv", "").split("_")
+            if len(parts) < 2: continue
+            algo = parts[0]
+            library = "_".join(parts[1:])
+            
+            if library not in results: results[library] = {"concordance": {}, "null_distributions": {}}
+            
+            try:
+                df = pd.read_csv(os.path.join(pathway_dir, f), header=None)
+                results[library]["null_distributions"][algo] = df[0].tolist()
+            except Exception as e:
+                print(f"Error reading {f}: {e}")
+                
+    return results
 
 if __name__ == "__main__":
     import uvicorn

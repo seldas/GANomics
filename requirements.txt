@@ -13,6 +13,7 @@ torch>=1.10.0
 # Data Normalization & Processing
 tqdm>=4.62.0
 pyyaml>=6.0
+gseapy
 
 # Visualization (for scripts/plot.py and results/figures/)
 matplotlib>=3.4.0

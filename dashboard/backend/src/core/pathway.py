@@ -2,6 +2,20 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 import random
+import gseapy
+
+def get_enrichr_gene_sets(library='KEGG_2021_Human'):
+    """
+    Fetch gene sets from Enrichr using gseapy.
+    Common libraries: 'KEGG_2021_Human', 'GO_Biological_Process_2021', 'MSigDB_Hallmark_2020'
+    """
+    try:
+        # Returns a dict {set_name: [genes]}
+        gs = gseapy.get_library(library)
+        return gs
+    except Exception as e:
+        print(f"Error fetching {library} from Enrichr: {e}")
+        return {}
 
 def load_gmt(path):
     """Load MSigDB GMT file into a dictionary {set_name: [genes]}."""
@@ -21,31 +35,40 @@ def gene_set_enrichment(deg_df, gene_sets, how='abs_d'):
     for genes in a set vs. a null distribution or ranking.
     """
     results = []
-    # Statistic to rank by (e.g., cohen_d or abs(cohen_d))
+    # Make a copy and work with uppercase index for matching
+    df = deg_df.copy()
     if how == 'abs_d':
-        deg_df['stat'] = deg_df['cohen_d'].abs()
+        df['stat'] = df['cohen_d'].abs()
     else:
-        deg_df['stat'] = deg_df['cohen_d']
-
-    universe_genes = set(deg_df.index)
+        df['stat'] = df['cohen_d']
+    
+    # Gene names in dataset (ensure uppercase for matching)
+    df.index = df.index.str.upper()
+    universe_genes = set(df.index)
     
     for name, genes in gene_sets.items():
-        set_genes = list(set(genes) & universe_genes)
-        if len(set_genes) < 5:
+        # Match uppercase genes
+        genes_upper = [g.upper() for g in genes]
+        set_genes = list(set(genes_upper) & universe_genes)
+        
+        if len(set_genes) < 3: # Lowered threshold from 5 to 3
             continue
             
-        score = deg_df.loc[set_genes, 'stat'].mean()
+        score = df.loc[set_genes, 'stat'].mean()
         results.append({'set': name, 'score': score})
         
-    df = pd.DataFrame(results)
-    if not df.empty:
-        df['rank'] = df['score'].rank(ascending=False)
-    return df
+    res_df = pd.DataFrame(results)
+    if not res_df.empty:
+        res_df['rank'] = res_df['score'].rank(ascending=False)
+    return res_df
 
 def spearman_rank_concordance(df_real, df_syn):
     """
     Correlate pathway ranks between real and synthetic enrichment tables.
     """
+    if df_real.empty or df_syn.empty or 'set' not in df_real.columns or 'set' not in df_syn.columns:
+        return np.nan
+        
     common = set(df_real['set']) & set(df_syn['set'])
     if len(common) < 3:
         return np.nan

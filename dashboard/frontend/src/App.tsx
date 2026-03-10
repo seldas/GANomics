@@ -81,6 +81,8 @@ const App: React.FC = () => {
   const [runSyncData, setRunSyncData] = useState<any | null>(null);
   const [runDegData, setRunDegData] = useState<any | null>(null);
   const [runPredictionData, setRunPredictionData] = useState<any | null>(null);
+  const [runPathwayData, setRunPathwayData] = useState<any | null>(null);
+  const [selectedPathwayLibrary, setSelectedPathwayLibrary] = useState<string | null>(null);
   const [corrGroup, setCorrGroup] = useState<'MA' | 'RS'>('MA');
   
   const [resultsStatus, setResultsStatus] = useState<{
@@ -371,6 +373,114 @@ const App: React.FC = () => {
     axios.get(`${API_BASE}/runs/${runId}/prediction`)
       .then(res => setRunPredictionData(res.data))
       .catch(() => setRunPredictionData({}));
+  };
+
+  const fetchPathwayMetrics = (runId: string) => {
+    setTaskView('pathway');
+    setRunPathwayData(null);
+    setSelectedPathwayLibrary(null);
+    axios.get(`${API_BASE}/runs/${runId}/pathway`)
+      .then(res => {
+        setRunPathwayData(res.data);
+        const libraries = Object.keys(res.data);
+        if (libraries.length > 0) setSelectedPathwayLibrary(libraries[0]);
+      })
+      .catch(() => setRunPathwayData({}));
+  };
+
+  const renderPathwayAnalysis = () => {
+    if (!runPathwayData) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
+    const libraries = Object.keys(runPathwayData);
+    if (libraries.length === 0) 
+      return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No pathway results found for this run.</div>;
+
+    const currentLib = selectedPathwayLibrary || libraries[0];
+    const libData = runPathwayData[currentLib];
+    
+    if (!libData || !libData.concordance) return null;
+
+    const algos = Object.keys(libData.concordance);
+    const chartData = algos.map(algo => ({
+      name: algo,
+      rho: libData.concordance[algo].Spearman_Rho,
+      p: libData.concordance[algo].P_Value
+    })).sort((a,b) => b.rho - a.rho);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <section className="card" style={{ padding: '2rem' }}>
+          <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Pathway Concordance (Spearman ρ)</h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                Measures the correlation of pathway enrichment scores between real and synthetic data.
+              </p>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              {libraries.map(lib => (
+                <button 
+                  key={lib} 
+                  className={`chip ${selectedPathwayLibrary === lib ? 'selected' : ''}`}
+                  onClick={() => setSelectedPathwayLibrary(lib)}
+                >
+                  {lib.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ height: '400px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 60 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} fontSize={11} />
+                <YAxis domain={[0, 1]} label={{ value: 'Spearman Rho', angle: -90, position: 'insideLeft', fontSize: 12 }} />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+                  formatter={(val: number) => val.toFixed(4)}
+                />
+                <Bar dataKey="rho" fill="var(--primary-color)" radius={[4, 4, 0, 0]} barSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div style={{ marginTop: '2rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', backgroundColor: '#f9fafb', borderBottom: '2px solid var(--border-color)' }}>
+                  <th style={{ padding: '1rem' }}>Algorithm</th>
+                  <th style={{ padding: '1rem' }}>Spearman Rho (ρ)</th>
+                  <th style={{ padding: '1rem' }}>P-Value</th>
+                  <th style={{ padding: '1rem' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chartData.map((d) => (
+                  <tr key={d.name} style={{ borderBottom: '1px solid #f3f4f6' }} className="hover-row">
+                    <td style={{ padding: '0.75rem 1rem', fontWeight: '600' }}>{d.name}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>{d.rho.toFixed(4)}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>{d.p.toFixed(4)}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <span style={{ 
+                        padding: '0.2rem 0.5rem', 
+                        borderRadius: '4px', 
+                        fontSize: '0.7rem',
+                        backgroundColor: d.p < 0.05 ? 'var(--success-color-bg)' : '#fff1f0',
+                        color: d.p < 0.05 ? 'var(--success-color)' : '#ff4d4f',
+                        fontWeight: 'bold'
+                      }}>
+                        {d.p < 0.05 ? 'Significant' : 'Not Significant'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    );
   };
 
   const renderPredictionAnalysis = () => {
@@ -1020,6 +1130,20 @@ const App: React.FC = () => {
       );
     }
 
+    if (taskView === 'pathway') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="chip" onClick={() => setTaskView('overview')} style={{ padding: '0.5rem' }}>
+              <ArrowLeft size={18} />
+            </button>
+            <h2 style={{ margin: 0 }}>Pathway Analysis: {selectedRunId}</h2>
+          </div>
+          {renderPathwayAnalysis()}
+        </div>
+      );
+    }
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -1083,6 +1207,9 @@ const App: React.FC = () => {
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>5. Pathway</div>
             <StatusButton label={isSizeTask ? (status?.pathway ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.pathway || false) : 'unavailable'} />
+            {isSizeTask && status?.pathway && (
+              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchPathwayMetrics(selectedRunId)}>View Results</button>
+            )}
             {isSizeTask && !status?.pathway && (
               <button 
                 className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
@@ -1195,7 +1322,13 @@ const App: React.FC = () => {
                 disabled={!isSizeTask || !status?.deg} 
                 onClick={() => fetchDegMetrics(selectedRunId)}
               />
-              <StepItem num="5" label="Pathway" status={isSizeTask ? status?.pathway : 'unavailable'} disabled={true} />
+              <StepItem 
+                num="5" label="Pathway" 
+                active={taskView === 'pathway'}
+                status={isSizeTask ? status?.pathway : 'unavailable'} 
+                disabled={!isSizeTask || !status?.pathway} 
+                onClick={() => fetchPathwayMetrics(selectedRunId)}
+              />
               <StepItem 
                 num="6" label="Pred. Model" 
                 active={taskView === 'prediction'}
