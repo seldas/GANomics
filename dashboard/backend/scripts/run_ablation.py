@@ -118,6 +118,10 @@ def run_ablation():
     # 2. Beta Sensitivity
     if args.betas:
         for beta in args.betas:
+            # Skip if beta is default (10.0) and size 50 is already in ablation list
+            if beta == 10.0 and args.sizes and 50 in args.sizes:
+                print(f"ℹ️ Skipping Beta={beta} sensitivity (covered by Size=50 ablation)")
+                continue
             base_name = f"{project_name}_Sensitivity_Beta_{beta}"
             cmd = [train_script, "--config", args.config, "--max_samples", "50", "--n_epochs", "250", "--n_epochs_decay", "250", "--lambda_feedback", str(beta)]
             queue_repeats(cmd, base_name, f"Size: 50 | Beta: {beta}")
@@ -125,6 +129,10 @@ def run_ablation():
     # 3. Lambda Sensitivity
     if args.lambdas:
         for lam in args.lambdas:
+            # Skip if lambda is default (10.0) and size 50 is already in ablation list
+            if lam == 10.0 and args.sizes and 50 in args.sizes:
+                print(f"ℹ️ Skipping Lambda={lam} sensitivity (covered by Size=50 ablation)")
+                continue
             base_name = f"{project_name}_Sensitivity_Lambda_{lam}"
             cmd = [train_script, "--config", args.config, "--max_samples", "50", "--n_epochs", "250", "--n_epochs_decay", "250", "--lambda_cycle", str(lam)]
             queue_repeats(cmd, base_name, f"Size: 50 | Lambda: {lam}")
