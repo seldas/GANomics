@@ -150,12 +150,12 @@ const App: React.FC = () => {
     const project = projects.find(p => p.id === selectedProject);
     if (!project) return;
     
-    // In one-dimensional ablation, only the active type has multiple values
+    // Only send the parameters for the active ablation type
     const payload = {
       config_path: project.config_path,
-      sizes: ablationType === 'size' ? selectedSizes : [50],
-      betas: ablationType === 'beta' ? selectedBetas : [10.0],
-      lambdas: ablationType === 'lambda' ? selectedLambdas : [10.0],
+      sizes: ablationType === 'size' ? selectedSizes : [],
+      betas: ablationType === 'beta' ? selectedBetas : [],
+      lambdas: ablationType === 'lambda' ? selectedLambdas : [],
       repeats: selectedRepeats,
       epochs: selectedEpochs === 'custom' ? customEpochs : selectedEpochs,
       use_gpu: useGpu
