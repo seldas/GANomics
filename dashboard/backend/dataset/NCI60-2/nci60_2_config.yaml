@@ -1,45 +1,37 @@
-# GANomics Training Configuration for NCI60 Dataset (HG-U133 A-B)
-
-# Model Parameters
+dataset:
+  max_samples: 59
+  path_A: dataset/NCI60-2/NCI602_ag.tsv
+  path_B: dataset/NCI60-2/NCI602_rs.tsv
+default_ablation:
+  beta: 10.0
+  lambda: 10.0
+  size: 50
+metadata:
+  description: Dataset for NCI60-2 project.
+  genes: 7864
+  name: NCI60-2
+  samples: 59
 model:
+  gan_mode: lsgan
   input_nc: 7864
-  output_nc: 7864
   lambda_A: 10.0
   lambda_B: 10.0
   lambda_feedback: 10.0
   lambda_idt: 0.5
-  gan_mode: 'lsgan'
-
-# Optimizer Parameters
+  output_nc: 7864
 optimizer:
-  lr: 0.0002
   beta1: 0.5
   beta2: 0.999
-
-# Training Parameters
+  lr: 0.0002
+output:
+  checkpoints_dir: results/1_Training/checkpoints
+  logs_dir: results/1_Training/logs
+  name: NCI60_2_GANomics_50
 train:
+  batch_size: 1
+  device: cuda:0
   n_epochs: 500
   n_epochs_decay: 200
-  batch_size: 1
-  device: 'cuda:0'
-  seed: 42
   print_freq: 5
   save_epoch_freq: 50
-
-# Dataset Parameters
-dataset:
-  path_A: 'dataset/NCI60-2/NCI602_ag.tsv'
-  path_B: 'dataset/NCI60-2/NCI602_rs.tsv'
-
-# Output Parameters
-output:
-  checkpoints_dir: 'results/1_Training/checkpoints'
-  name: 'NCI60_2_GANomics_50'
-  logs_dir: 'results/1_Training/logs'
-
-
-default_ablation:
-  size: 50
-  beta: 10.0
-  lambda: 10.0
-
+  seed: 42
