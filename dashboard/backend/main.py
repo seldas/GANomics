@@ -6,11 +6,12 @@ import time
 import sys
 import signal
 from typing import List, Optional, Dict
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Form
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import psutil
+import json
 
 app = FastAPI(title="GANomics API")
 
@@ -488,60 +489,93 @@ async def run_external_inference(
 async def sync_external(
     run_id: str,
     test_ag: Optional[UploadFile] = File(None),
-    test_rs: Optional[UploadFile] = File(None)
+    test_rs: Optional[UploadFile] = File(None),
+    ext_id: str = Form(...),
+    description: str = Form("External Testing dataset")
 ):
-    if not test_ag and not test_rs:
-        raise HTTPException(status_code=400, detail="At least one file (test_ag or test_rs) must be uploaded.")
+    try:
+        if not test_ag and not test_rs:
+            raise HTTPException(status_code=400, detail="At least one file (test_ag or test_rs) must be uploaded.")
 
-    checkpoint_dir = os.path.join(RESULTS_DIR, "1_Training", "checkpoints", run_id)
-    if not os.path.exists(checkpoint_dir):
-        raise HTTPException(status_code=404, detail="Run checkpoint not found.")
+        checkpoint_dir = os.path.join(RESULTS_DIR, "1_Training", "checkpoints", run_id)
+        if not os.path.exists(checkpoint_dir):
+            raise HTTPException(status_code=404, detail="Run checkpoint not found.")
 
-    project_id = run_id.split('_')[0]
-    ext_id = get_next_ext_id(project_id)
-    
-    # 1. Save uploaded files to dataset folder
-    ext_dir = os.path.join(DATASET_DIR, project_id, "external_test", ext_id)
-    os.makedirs(ext_dir, exist_ok=True)
-    
-    # 2. Define output path in SyncData
-    output_dir = os.path.join(RESULTS_DIR, "2_SyncData", run_id, ext_id)
-    os.makedirs(output_dir, exist_ok=True)
-    
-    results = []
+        project_id = run_id.split('_')[0]
+        
+        # 1. Save uploaded files to dataset folder
+        ext_dir = os.path.join(DATASET_DIR, project_id, ext_id)
+        os.makedirs(ext_dir, exist_ok=True)
+        
+        # 2. Define output path in SyncData
+        output_dir = os.path.join(RESULTS_DIR, "2_SyncData", run_id, ext_id)
+        os.makedirs(output_dir, exist_ok=True)
+        
+        results = []
+        samples_count = 0
+        genes_count = 0
 
-    async def process_file(file: UploadFile, direction: str):
-        input_filename = "test_ag.tsv" if direction == 'AtoB' else "test_rs.tsv"
-        abs_input_path = os.path.join(ext_dir, input_filename)
+        async def process_file(file: UploadFile, direction: str):
+            nonlocal samples_count, genes_count
+            input_filename = "test_ag.tsv" if direction == 'AtoB' else "test_rs.tsv"
+            abs_input_path = os.path.join(ext_dir, input_filename)
+            
+            content = await file.read()
+            with open(abs_input_path, "wb") as f:
+                f.write(content)
+
+            # Update metadata stats from the first successful file
+            if samples_count == 0:
+                try:
+                    df_peek = pd.read_csv(abs_input_path, sep='\t', index_col=0)
+                    samples_count = len(df_peek)
+                    genes_count = len(df_peek.columns)
+                except: pass
+            
+            output_filename = "translated_rs.tsv" if direction == 'AtoB' else "translated_ag.tsv"
+            output_path = os.path.join(output_dir, output_filename)
+            
+            script_path = os.path.join(BACKEND_DIR, "scripts", "inference.py")
+            cmd = [sys.executable, script_path, "--run_id", run_id, "--input", abs_input_path, "--direction", direction, "--output", output_path]
+            
+            try:
+                res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                return {"direction": direction, "ext_id": ext_id, "output_file": output_filename, "success": True}
+            except subprocess.CalledProcessError as e:
+                return {"direction": direction, "error": str(e.stderr), "success": False}
+
+        if test_ag:
+            res = await process_file(test_ag, 'AtoB')
+            results.append(res)
         
-        with open(abs_input_path, "wb") as f:
-            f.write(await file.read())
-        
-        output_filename = "translated_rs.tsv" if direction == 'AtoB' else "translated_ag.tsv"
-        output_path = os.path.join(output_dir, output_filename)
-        
-        script_path = os.path.join(BACKEND_DIR, "scripts", "inference.py")
-        cmd = [sys.executable, script_path, "--run_id", run_id, "--input", abs_input_path, "--direction", direction, "--output", output_path]
-        
+        if test_rs:
+            res = await process_file(test_rs, 'BtoA')
+            results.append(res)
+
+        # Save metadata
         try:
-            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            return {"direction": direction, "ext_id": ext_id, "output_file": output_filename, "success": True}
-        except subprocess.CalledProcessError as e:
-            return {"direction": direction, "error": e.stderr, "success": False}
+            metadata = {
+                "id": ext_id,
+                "description": description,
+                "samples": samples_count,
+                "genes": genes_count,
+                "created_at": time.time()
+            }
+            with open(os.path.join(ext_dir, "metadata.json"), "w") as f:
+                json.dump(metadata, f)
+        except: pass
 
-    if test_ag:
-        res = await process_file(test_ag, 'AtoB')
-        results.append(res)
-    
-    if test_rs:
-        res = await process_file(test_rs, 'BtoA')
-        results.append(res)
+        if any(not r['success'] for r in results):
+            errors = [str(r['error']) for r in results if not r['success']]
+            raise HTTPException(status_code=500, detail=f"Sync External failed: {'; '.join(errors)}")
 
-    if any(not r['success'] for r in results):
-        errors = [r['error'] for r in results if not r['success']]
-        raise HTTPException(status_code=500, detail=f"Sync External failed: {'; '.join(errors)}")
-
-    return {"message": "External sync completed successfully", "ext_id": ext_id, "results": results}
+        return {"message": "External sync completed successfully", "ext_id": ext_id, "results": results}
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        print(f"CRITICAL ERROR in sync_external: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/results")
 async def get_results_status():
@@ -609,7 +643,7 @@ async def get_results_status():
         ext_statuses = {}
         sync_run_dir = os.path.join(SYNC_DATA_DIR, run_id)
         project_id = run_id.split('_')[0]
-        ext_dataset_root = os.path.join(DATASET_DIR, project_id, "external_test")
+        ext_dataset_root = os.path.join(DATASET_DIR, project_id)
         
         if os.path.exists(sync_run_dir):
             ext_ids = [d for d in os.listdir(sync_run_dir) if d.startswith("ext_") and os.path.isdir(os.path.join(sync_run_dir, d))]
