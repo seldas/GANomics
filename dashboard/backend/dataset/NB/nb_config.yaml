@@ -29,8 +29,8 @@ train:
 
 # Dataset Parameters
 dataset:
-  path_A: 'dataset/NB/NB_AG.tsv'
-  path_B: 'dataset/NB/NB_NGS.tsv'
+  path_A: 'dataset/NB/df_ag.tsv'
+  path_B: 'dataset/NB/df_rs.tsv'
   max_samples: 500
   force_index_mapping: true
 

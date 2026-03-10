@@ -29,7 +29,7 @@ train:
 # Dataset Parameters
 dataset:
   path_A: 'dataset/METSIM/df_ag.tsv'
-  path_B: 'dataset/METSIM/df_ngs.tsv'
+  path_B: 'dataset/METSIM/df_rs.tsv'
 
 # Output Parameters
 output:

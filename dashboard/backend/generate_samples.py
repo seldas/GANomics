@@ -21,9 +21,10 @@ def generate_samples():
                         path_a = os.path.abspath(os.path.join(BACKEND_DIR, path_a))
                     
                     if os.path.exists(path_a):
-                        # Read only the header to get sample names (columns)
-                        df_headers = pd.read_csv(path_a, index_col=0, nrows=0, sep=None, engine='python')
-                        samples = df_headers.columns.tolist()
+                        # Read only the first few rows to get index (sample names)
+                        # We need the full file or at least the index column
+                        df = pd.read_csv(path_a, index_col=0, sep='\t')
+                        samples = df.index.tolist()
                         
                         samples_path = os.path.join(root, "samples.tsv")
                         pd.DataFrame({'sample_id': samples}).to_csv(samples_path, sep='\t', index=False)
