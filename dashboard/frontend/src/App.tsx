@@ -5,21 +5,24 @@ import {
   Settings, 
   Play, 
   Activity, 
-  Database,
   X,
   Table as TableIcon,
-  BarChart3,
   LineChart as LineChartIcon,
   Loader2,
-  Eye,
-  EyeOff,
   Search,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
-  ArrowLeft
+  ArrowLeft,
+  RefreshCw,
+  Info,
+  Plus,
+  Clock,
+  Timer,
+  Square,
+  RotateCcw
 } from 'lucide-react';
 import {
   LineChart,
@@ -64,8 +67,20 @@ const LOSS_METRICS = [
   { key: 'IDT', color: '#6f42c1', label: 'Identity' },
 ];
 
+const MetaPanel = ({ title, content }: { title: string, content: React.ReactNode }) => (
+  <section className="card" style={{ marginTop: '2rem', padding: '1.5rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: '#475569' }}>
+      <Info size={18} />
+      <h4 style={{ margin: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Analysis Methodology: {title}</h4>
+    </div>
+    <div style={{ fontSize: '0.85rem', color: '#64748b', lineHeight: '1.6' }}>
+      {content}
+    </div>
+  </section>
+);
+
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'train' | 'analysis'>('train');
+  const [activeTab, setActiveTab] = useState<'train' | 'analysis' | 'new-session'>('train');
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [projectAblationTab, setProjectAblationTab] = useState<'size' | 'architecture' | 'sensitivity'>('size');
@@ -76,8 +91,9 @@ const App: React.FC = () => {
   const [selectedEpochs, setSelectedEpochs] = useState<number | 'custom'>(500);
   const [customEpochs, setCustomEpochs] = useState<number>(500);
   const [ablationType, setAblationType] = useState<'size' | 'beta' | 'lambda'>('size');
+  const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [taskView, setTaskView] = useState<'overview' | 'training' | 'comparative'>('overview');
+  const [taskView, setTaskView] = useState<'overview' | 'training' | 'comparative' | 'sync' | 'deg' | 'pathway' | 'prediction'>('overview');
   const [runComparativeData, setRunComparativeData] = useState<any[] | null>(null);
   const [runSyncData, setRunSyncData] = useState<any | null>(null);
   const [runDegData, setRunDegData] = useState<any | null>(null);
@@ -94,6 +110,8 @@ const App: React.FC = () => {
     logs: string[],
     run_statuses?: Record<string, {
       training: 'running' | 'completed' | 'idle',
+      current_epoch?: number,
+      total_epochs?: number,
       sync: boolean,
       comparative: boolean,
       deg: boolean,
@@ -102,7 +120,6 @@ const App: React.FC = () => {
     }>
   }>({checkpoints: [], logs: []});
 
-  const [metrics, setMetrics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Log Viewer State
@@ -117,7 +134,7 @@ const App: React.FC = () => {
   }, [selectedRunId]);
 
   const [logMode, setLogMode] = useState<'structured' | 'chart'>('chart');
-  const [visibleMetrics, setVisibleMetrics] = useState<string[]>(['G_A', 'G_B', 'D_A', 'D_B', 'Cycle', 'Feedback']);
+  const visibleMetrics = ['G_A', 'G_B', 'D_A', 'D_B', 'Cycle', 'Feedback'];
   
   // Pagination & Search State
   const [searchTerm, setSearchTerm] = useState('');
@@ -145,6 +162,8 @@ const App: React.FC = () => {
     try {
       await axios.post(`${API_BASE}/train`, payload);
       alert("Training session started!");
+      setActiveTab('train');
+      setSelectedRunId(null);
     } catch (err) {
       console.error(err);
       alert("Failed to start session");
@@ -271,6 +290,260 @@ const App: React.FC = () => {
       style = { ...style, border: '1px solid #ff4d4f', color: '#ff4d4f', opacity: 0.6 };
     }
     return <div className={className} style={style}>{label}</div>;
+  };
+
+  const handleStopTask = async (runId: string) => {
+    try {
+      await axios.post(`${API_BASE}/runs/${runId}/stop`);
+      // Update local status immediately for snappy UI
+      setResultsStatus(prev => ({
+        ...prev,
+        run_statuses: {
+          ...prev.run_statuses,
+          [runId]: { ...prev.run_statuses![runId], training: 'idle', stopped: true }
+        }
+      } as any));
+    } catch (err) {
+      console.error(err);
+      alert("Failed to stop task");
+    }
+  };
+
+  const handleRestartTask = async (runId: string) => {
+    try {
+      await axios.post(`${API_BASE}/runs/${runId}/restart`);
+      // Update local status
+      setResultsStatus(prev => ({
+        ...prev,
+        run_statuses: {
+          ...prev.run_statuses,
+          [runId]: { ...prev.run_statuses![runId], training: 'running', stopped: false }
+        }
+      } as any));
+    } catch (err) {
+      console.error(err);
+      alert("Failed to restart task");
+    }
+  };
+
+  const renderOngoingTasks = () => {
+    const runningTasks = Object.entries(resultsStatus.run_statuses || {})
+      .filter(([_, s]) => s.training === 'running' || s.stopped)
+      .map(([id, s]) => ({ id, ...s }));
+
+    if (runningTasks.length === 0) return null;
+
+    return (
+      <section className="card" style={{ borderLeft: '4px solid var(--primary-color)', padding: '1.5rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <Clock size={20} className={runningTasks.some(t => t.training === 'running') ? "animate-spin-slow" : ""} style={{ color: 'var(--primary-color)' }} />
+          <h3 style={{ margin: 0, fontSize: '1rem' }}>Task Monitor ({runningTasks.length})</h3>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {runningTasks.map(task => {
+            const progress = task.total_epochs > 0 ? (task.current_epoch / task.total_epochs) * 100 : 0;
+            const isRunning = task.training === 'running';
+            
+            return (
+              <div key={task.id} className="card" style={{ margin: 0, padding: '1rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', opacity: isRunning ? 1 : 0.8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{task.id}</span>
+                    <span className={`status-badge ${isRunning ? 'status-running' : 'status-disabled'}`} style={{ fontSize: '0.65rem', padding: '2px 8px' }}>
+                      {isRunning ? 'RUNNING' : 'STOPPED'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginRight: '0.5rem' }}>
+                      <Timer size={14} /> Epoch {task.current_epoch} / {task.total_epochs}
+                    </div>
+                    
+                    <button 
+                      className="chip" 
+                      style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }} 
+                      onClick={() => { setSelectedRunId(task.id); setTaskView('training'); fetchLogs(task.id); }}
+                    >
+                      Logs
+                    </button>
+
+                    {isRunning ? (
+                      <button 
+                        className="chip" 
+                        style={{ fontSize: '0.7rem', color: '#ff4d4f', border: '1px solid #ff4d4f', display: 'flex', alignItems: 'center', gap: '4px' }} 
+                        onClick={() => handleStopTask(task.id)}
+                      >
+                        <Square size={12} fill="#ff4d4f" /> Stop
+                      </button>
+                    ) : (
+                      <button 
+                        className="chip" 
+                        style={{ fontSize: '0.7rem', color: 'var(--primary-color)', border: '1px solid var(--primary-color)', display: 'flex', alignItems: 'center', gap: '4px' }} 
+                        onClick={() => handleRestartTask(task.id)}
+                      >
+                        <RotateCcw size={12} /> Restart
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div style={{ width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{ 
+                    width: `${progress}%`, 
+                    height: '100%', 
+                    backgroundColor: isRunning ? 'var(--primary-color)' : '#94a3b8', 
+                    transition: 'width 0.5s ease-out',
+                    backgroundImage: isRunning ? 'linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent)' : 'none',
+                    backgroundSize: '1rem 1rem',
+                    animation: isRunning ? 'progress-bar-stripes 1s linear infinite' : 'none'
+                  }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
+  const renderNewSessionPanel = () => {
+    const project = projects.find(p => p.id === selectedProject);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <header className="header" style={{ marginBottom: '0' }}>
+          <div className="header-info">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+              <div style={{ backgroundColor: 'var(--primary-color)', color: 'white', padding: '0.5rem', borderRadius: '8px' }}>
+                <Plus size={24} />
+              </div>
+              <h1 style={{ margin: 0 }}>Start New Experiment</h1>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+              Configure and launch a new ablation study or experimental session.
+            </p>
+          </div>
+          <button className="chip" onClick={() => setActiveTab('train')}>
+            <ArrowLeft size={16} style={{ marginRight: '8px' }} /> Back to Dashboard
+          </button>
+        </header>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem', alignItems: 'start' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <section className="card" style={{ padding: '2rem' }}>
+              <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>1. PROJECT SELECTION</h3>
+              <div className="chip-grid">
+                {projects.map(p => (
+                  <div key={p.id} className={`chip ${selectedProject === p.id ? 'selected' : ''}`} style={{ padding: '0.75rem 1.5rem' }} onClick={() => setSelectedProject(p.id)}>
+                    {p.name}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="card" style={{ padding: '2rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                <h3 style={{ fontSize: '1rem', margin: 0 }}>2. ABLATION MATRIX CONFIGURATION</h3>
+                <div className="chip-grid" style={{ gap: '0.4rem' }}>
+                  <button className={`chip ${ablationType === 'size' ? 'selected' : ''}`} onClick={() => setAblationType('size')}>Size (N)</button>
+                  <button className={`chip ${ablationType === 'beta' ? 'selected' : ''}`} onClick={() => setAblationType('beta')}>Beta (β)</button>
+                  <button className={`chip ${ablationType === 'lambda' ? 'selected' : ''}`} onClick={() => setAblationType('lambda')}>Lambda (λ)</button>
+                </div>
+              </div>
+              
+              <div style={{ backgroundColor: '#f8fafc', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                {ablationType === 'size' && (
+                  <div>
+                    <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Sample Size (N)</label>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Fixed parameters: β=10.0, λ=10.0</p>
+                    <div className="chip-grid">{sizes.map(s => (<div key={s} className={`chip ${selectedSizes.includes(s) ? 'selected' : ''}`} style={{ padding: '0.5rem 1rem' }} onClick={() => toggleSelection(s, selectedSizes, setSelectedSizes)}>N={s}</div>))}</div>
+                  </div>
+                )}
+
+                {ablationType === 'beta' && (
+                  <div>
+                    <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Weight (β) - Feedback Alignment</label>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Fixed parameters: N=50, λ=10.0</p>
+                    <div className="chip-grid">{betas.map(b => (<div key={b} className={`chip ${selectedBetas.includes(b) ? 'selected' : ''}`} style={{ padding: '0.5rem 1rem' }} onClick={() => toggleSelection(b, selectedBetas, setSelectedBetas)}>β={b.toFixed(1)}</div>))}</div>
+                  </div>
+                )}
+
+                {ablationType === 'lambda' && (
+                  <div>
+                    <label style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Weight (λ) - Cycle Reconstruction</label>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Fixed parameters: N=50, β=10.0</p>
+                    <div className="chip-grid">{lambdas.map(l => (<div key={l} className={`chip ${selectedLambdas.includes(l) ? 'selected' : ''}`} style={{ padding: '0.5rem 1rem' }} onClick={() => toggleSelection(l, selectedLambdas, setSelectedLambdas)}>λ={l.toFixed(1)}</div>))}</div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="card" style={{ padding: '2rem' }}>
+              <h3 style={{ fontSize: '1rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>3. SESSION REPEATS</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                <input 
+                  type="number" min={1} max={10} 
+                  value={selectedRepeats} 
+                  onChange={(e) => setSelectedRepeats(parseInt(e.target.value) || 1)}
+                  style={{ width: '100px', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '1.1rem', textAlign: 'center', fontWeight: 'bold' }}
+                />
+                <div style={{ color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-main)' }}>Runs per condition</div>
+                  <div style={{ fontSize: '0.8rem' }}>Ensures statistical significance through independent repeats.</div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', position: 'sticky', top: '2rem' }}>
+            <section className="card" style={{ padding: '1.5rem' }}>
+              <h3 style={{ fontSize: '0.9rem', marginBottom: '1.25rem', color: 'var(--text-muted)' }}>4. QUICK CONFIG</h3>
+              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '600' }}>Training Epochs</label>
+                <div className="chip-grid" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
+                  {[100, 500, 1000].map(e => (
+                    <div key={e} className={`chip ${selectedEpochs === e ? 'selected' : ''}`} style={{ fontSize: '0.8rem' }} onClick={() => setSelectedEpochs(e)}>{e}</div>
+                  ))}
+                  <div className={`chip ${selectedEpochs === 'custom' ? 'selected' : ''}`} style={{ fontSize: '0.8rem' }} onClick={() => setSelectedEpochs('custom')}>Custom</div>
+                </div>
+                {selectedEpochs === 'custom' && (
+                  <input 
+                    type="number" value={customEpochs} 
+                    onChange={(e) => setCustomEpochs(parseInt(e.target.value) || 250)}
+                    style={{ marginTop: '0.75rem', width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}
+                  />
+                )}
+              </div>
+
+              <div style={{ paddingTop: '1.25rem', borderTop: '1px solid var(--border-color)' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '1rem', display: 'block' }}>Base Hyperparameters</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}><span style={{ color: 'var(--text-muted)' }}>Learning Rate</span><span style={{ fontWeight: '600' }}>{project?.config?.optimizer?.lr || "2e-4"}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}><span style={{ color: 'var(--text-muted)' }}>Batch Size</span><span style={{ fontWeight: '600' }}>{project?.config?.train?.batch_size || 1}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}><span style={{ color: 'var(--text-muted)' }}>Lambda Identity</span><span style={{ fontWeight: '600' }}>{project?.config?.model?.lambda_idt || 0}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}><span style={{ color: 'var(--text-muted)' }}>GAN Mode</span><span style={{ fontWeight: '600' }}>{project?.config?.model?.gan_mode || "lsgan"}</span></div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '2rem' }}>
+                <button 
+                  className="chip selected" 
+                  style={{ width: '100%', padding: '1.25rem', borderRadius: '12px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(24, 144, 255, 0.3)' }} 
+                  onClick={handleStartSession}
+                >
+                  <Play size={20} fill="white" /> Launch Experiment
+                </button>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '1rem', lineHeight: '1.4' }}>
+                  Launching will initialize {
+                    ablationType === 'size' ? selectedSizes.length * selectedRepeats : 
+                    ablationType === 'beta' ? selectedBetas.length * selectedRepeats :
+                    selectedLambdas.length * selectedRepeats
+                  } background processes.
+                </p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const fetchComparativeMetrics = (runId: string) => {
@@ -443,7 +716,7 @@ const App: React.FC = () => {
                 <YAxis domain={[0, 1]} label={{ value: 'Spearman Rho', angle: -90, position: 'insideLeft', fontSize: 12 }} />
                 <Tooltip 
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
-                  formatter={(val: number) => val.toFixed(4)}
+                  formatter={(val: any) => val.toFixed(4)}
                 />
                 <Bar dataKey="rho" fill="var(--primary-color)" radius={[4, 4, 0, 0]} barSize={40} />
               </BarChart>
@@ -484,6 +757,18 @@ const App: React.FC = () => {
             </table>
           </div>
         </section>
+
+        <MetaPanel 
+          title="Pathway Concordance"
+          content={
+            <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
+              <li><b>Method:</b> Permutation test for Spearman Rho concordance between Real and Synthetic enrichment profiles.</li>
+              <li><b>Gene Sets:</b> KEGG 2021 Human and GO Biological Process 2021 retrieved via the Enrichr API.</li>
+              <li><b>Significance:</b> P-values calculated through 100 random permutations (B=100) to establish a null distribution.</li>
+              <li><b>Scoring:</b> Spearman's rank correlation (ρ) measures the preservation of pathway-level biological hierarchy.</li>
+            </ul>
+          }
+        />
       </div>
     );
   };
@@ -522,7 +807,7 @@ const App: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {algos.sort((a,b) => a === 'GANomics' ? -1 : 1).map((algo) => (
+                {algos.sort((a) => a === 'GANomics' ? -1 : 1).map((algo) => (
                   <React.Fragment key={algo}>
                     {scenarios.map((scenario, idx) => {
                       const data = runPredictionData[algo].find((d: any) => d.Scenario === scenario);
@@ -550,6 +835,18 @@ const App: React.FC = () => {
             </table>
           </div>
         </section>
+
+        <MetaPanel 
+          title="Cross-Platform Modeling"
+          content={
+            <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
+              <li><b>Algorithm:</b> Random Forest Classifier with 100 estimators and fixed random state (42) for reproducibility.</li>
+              <li><b>Training Logic:</b> "Syn-&gt;Real" approach (Train on Synthetic data, Test on held-out Real data).</li>
+              <li><b>Evaluation:</b> Comprehensive metrics including Matthews Correlation Coefficient (MCC) for balanced assessment.</li>
+              <li><b>Data Split:</b> 50/50 split of aligned samples for training and testing phases.</li>
+            </ul>
+          }
+        />
       </div>
     );
   };
@@ -601,8 +898,9 @@ const App: React.FC = () => {
               <YAxis domain={[0, 1]} fontSize={11} label={{ value: 'Jaccard Index', angle: -90, position: 'insideLeft', fontSize: 12 }} />
               <Tooltip 
                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
-                formatter={(val: number) => val.toFixed(4)}
+                formatter={(val: any) => val.toFixed(4)}
               />
+
               <Legend verticalAlign="top" align="right" height={36} iconType="circle" />
               {algos.map(algo => (
                 <Line 
@@ -618,6 +916,18 @@ const App: React.FC = () => {
             </LineChart>
           </ResponsiveContainer>
         </div>
+
+        <MetaPanel 
+          title="Differential Expression"
+          content={
+            <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
+              <li><b>Statistical Test:</b> Vectorized Welch's t-test (handles unequal variances between groups).</li>
+              <li><b>Multiple Testing Correction:</b> Benjamini-Hochberg (FDR) procedure to control false discovery rate.</li>
+              <li><b>Biological Preservation:</b> Evaluated via Jaccard Similarity index at varying p-value thresholds (0.001 to 0.05).</li>
+              <li><b>Implementation:</b> Custom vectorized implementation using <code>scipy.stats</code> and <code>numpy</code> for high performance.</li>
+            </ul>
+          }
+        />
       </div>
     );
   };
@@ -1448,19 +1758,32 @@ const App: React.FC = () => {
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>4. Bio-marker Analysis</div>
             <StatusButton 
               label={isSizeTask ? (status?.deg && status?.pathway && status?.pred_model ? 'Done' : 'Pending') : 'Unavailable'} 
-              status={isSizeTask ? (status?.deg && status?.pathway && status?.pred_model) : 'unavailable'} 
+              status={isSizeTask ? (status?.deg && status?.pathway && status?.pred_model || false) : 'unavailable'} 
             />
-            {isSizeTask && (status?.deg || status?.pathway || status?.pred_model ? (
-              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchDegMetrics(selectedRunId)}>View Results</button>
-            ) : (
-              <button 
-                className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
-                style={{ fontSize: '0.75rem', opacity: !status?.comparative ? 0.5 : 1, cursor: !status?.comparative ? 'not-allowed' : 'pointer' }} 
-                onClick={() => status?.comparative && handleRunStep(4)}
-              >
-                Start Analysis
-              </button>
-            ))}
+            {isSizeTask && (
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                {(status?.deg || status?.pathway || status?.pred_model) ? (
+                  <>
+                    <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchDegMetrics(selectedRunId)}>View Results</button>
+                    <button 
+                      className="chip" 
+                      style={{ fontSize: '0.75rem', border: '1px solid var(--primary-color)', color: 'var(--primary-color)' }} 
+                      onClick={() => handleRunStep(4)}
+                    >
+                      <RefreshCw size={12} style={{ marginRight: '4px' }} /> Re-run
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
+                    style={{ fontSize: '0.75rem', opacity: !status?.comparative ? 0.5 : 1, cursor: !status?.comparative ? 'not-allowed' : 'pointer' }} 
+                    onClick={() => status?.comparative && handleRunStep(4)}
+                  >
+                    Start Analysis
+                  </button>
+                )}
+              </div>
+            )}
           </section>
         </div>
       </div>
@@ -1511,9 +1834,19 @@ const App: React.FC = () => {
       <aside className="sidebar">
         <div className="sidebar-header"><Activity size={24} /><span>GANomics Dashboard</span></div>
         <nav className="nav-menu">
+          <div style={{ padding: '1rem' }}>
+            <button 
+              className={`chip ${activeTab === 'new-session' ? 'selected' : ''}`} 
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', boxShadow: activeTab === 'new-session' ? 'none' : '0 4px 12px rgba(24, 144, 255, 0.2)', backgroundColor: activeTab === 'new-session' ? 'var(--primary-color)' : '#fff', color: activeTab === 'new-session' ? '#fff' : 'var(--primary-color)', border: activeTab === 'new-session' ? 'none' : '1px solid var(--primary-color)' }}
+              onClick={() => { setActiveTab('new-session'); setSelectedRunId(null); }}
+            >
+              <Plus size={18} /> New Experiment
+            </button>
+          </div>
+
           <div style={{ padding: '0.5rem 1rem', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Menu</div>
           <a className={`nav-item ${activeTab === 'train' && !selectedRunId ? 'active' : ''}`} onClick={() => { setActiveTab('train'); setSelectedRunId(null); setTaskView('overview'); }}>
-            <LayoutDashboard size={18} /> Project
+            <LayoutDashboard size={18} /> Project Dashboard
           </a>
 
           {selectedRunId && (
@@ -1577,137 +1910,91 @@ const App: React.FC = () => {
       </aside>
 
       <main className="main-content">
-        {selectedRunId ? (
+        {renderAblationAnalyticsModal()}
+        {activeTab === 'new-session' ? (
+          renderNewSessionPanel()
+        ) : selectedRunId ? (
           renderTaskDashboard()
         ) : (
           <>
-            <header className="header">
+            <header className="header" style={{ marginBottom: '2rem' }}>
               <div className="header-info">
-                <h1>{activeTab === 'train' ? 'Model Training' : 'Performance Analysis'}</h1>
-                <p>{currentProj ? `Project: ${currentProj.name}` : 'Select a project.'}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <LayoutDashboard size={24} style={{ color: 'var(--primary-color)' }} />
+                  <h1 style={{ margin: 0 }}>Project Dashboard</h1>
+                </div>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  Monitoring {projects.length} active projects and experimental pipelines.
+                </p>
               </div>
-              {activeTab === 'train' && (
-                <button className="chip selected" style={{ borderRadius: '8px', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center' }} onClick={handleStartSession}>
-                  <Play size={16} style={{ marginRight: '8px' }} /> Start Session
-                </button>
-              )}
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div className="card" style={{ padding: '0.75rem 1.5rem', margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '120px' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Runs</span>
+                  <span style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{resultsStatus.logs.length}</span>
+                </div>
+                <div className="card" style={{ padding: '0.75rem 1.5rem', margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '120px', borderLeft: '4px solid #1890ff' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Active</span>
+                  <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1890ff' }}>
+                    {Object.values(resultsStatus.run_statuses || {}).filter(s => s.training === 'running').length}
+                  </span>
+                </div>
+                <div className="card" style={{ padding: '0.75rem 1.5rem', margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '120px', borderLeft: '4px solid #52c41a' }}>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Completed</span>
+                  <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#52c41a' }}>
+                    {Object.values(resultsStatus.run_statuses || {}).filter(s => s.training === 'completed').length}
+                  </span>
+                </div>
+              </div>
             </header>
 
-            {activeTab === 'train' ? (
-              <>
-                <section className="card">
-                  <h3>Project Selection</h3>
-                  <div className="chip-grid">
-                    {projects.map(p => (<div key={p.id} className={`chip ${selectedProject === p.id ? 'selected' : ''}`} onClick={() => setSelectedProject(p.id)}>{p.name}</div>))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              {renderOngoingTasks()}
+
+              <section className="card" style={{ padding: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1rem' }}>Select Project</h3>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    {currentProj ? `${currentProj.genes.toLocaleString()} Genes | ${currentProj.samples.toLocaleString()} Samples` : 'No project selected'}
                   </div>
-                </section>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '2rem' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    <section className="card">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <h3 style={{ margin: 0 }}>Ablation Matrix</h3>
-                        <div className="chip-grid" style={{ gap: '0.5rem' }}>
-                          <button className={`chip ${ablationType === 'size' ? 'selected' : ''}`} style={{ fontSize: '0.7rem' }} onClick={() => setAblationType('size')}>Vary Size (N)</button>
-                          <button className={`chip ${ablationType === 'beta' ? 'selected' : ''}`} style={{ fontSize: '0.7rem' }} onClick={() => setAblationType('beta')}>Vary Beta (β)</button>
-                          <button className={`chip ${ablationType === 'lambda' ? 'selected' : ''}`} style={{ fontSize: '0.7rem' }} onClick={() => setAblationType('lambda')}>Vary Lambda (λ)</button>
-                        </div>
+                </div>
+                <div className="chip-grid">
+                  {projects.length > 0 ? (
+                    projects.map(p => (
+                      <div key={p.id} className={`chip ${selectedProject === p.id ? 'selected' : ''}`} style={{ padding: '0.5rem 1.25rem' }} onClick={() => setSelectedProject(p.id)}>
+                        {p.name}
                       </div>
-                      
-                      {ablationType === 'size' && (
-                        <div style={{ marginBottom: '1.5rem' }}>
-                          <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Experiment: Sample Size (N)</label>
-                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>β and λ will be fixed at 10.0</p>
-                          <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{sizes.map(s => (<div key={s} className={`chip ${selectedSizes.includes(s) ? 'selected' : ''}`} onClick={() => toggleSelection(s, selectedSizes, setSelectedSizes)}>N={s}</div>))}</div>
-                        </div>
-                      )}
-
-                      {ablationType === 'beta' && (
-                        <div style={{ marginBottom: '1.5rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Experiment: Weights (β)</label>
-                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Bio-Feedback Alignment</span>
-                          </div>
-                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>N will be fixed at 50, λ at 10.0</p>
-                          <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{betas.map(b => (<div key={b} className={`chip ${selectedBetas.includes(b) ? 'selected' : ''}`} onClick={() => toggleSelection(b, selectedBetas, setSelectedBetas)}>β={b.toFixed(1)}</div>))}</div>
-                        </div>
-                      )}
-
-                      {ablationType === 'lambda' && (
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Experiment: Weights (λ)</label>
-                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Cycle Reconstruction</span>
-                          </div>
-                          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>N will be fixed at 50, β at 10.0</p>
-                          <div className="chip-grid" style={{ marginTop: '0.5rem' }}>{lambdas.map(l => (<div key={l} className={`chip ${selectedLambdas.includes(l) ? 'selected' : ''}`} onClick={() => toggleSelection(l, selectedLambdas, setSelectedLambdas)}>λ={l.toFixed(1)}</div>))}</div>
-                        </div>
-                      )}
-
-                      <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>Session Repeats:</label>
-                        <input 
-                          type="number" min={1} max={10} 
-                          value={selectedRepeats} 
-                          onChange={(e) => setSelectedRepeats(parseInt(e.target.value) || 1)}
-                          style={{ width: '60px', padding: '0.25rem', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                        />
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>* How many runs for each condition</span>
-                      </div>
-                    </section>
-                    <section className="card">
-                      <h3>Project Status</h3>
-                      {renderProjectStatus()}
-                    </section>
-                  </div>
-                  {renderAblationAnalyticsModal()}
-                  <section className="card">
-                    <h3>Quick Config</h3>
-                    <div className="config-form" style={{ gridTemplateColumns: '1fr', gap: '1.25rem' }}>
-                      <div className="form-group">
-                        <label style={{ fontSize: '0.8rem', fontWeight: '600' }}>Training Epochs</label>
-                        <div className="chip-grid" style={{ marginTop: '0.5rem', gap: '0.4rem' }}>
-                          {[100, 500, 1000].map(e => (
-                            <div key={e} className={`chip ${selectedEpochs === e ? 'selected' : ''}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }} onClick={() => setSelectedEpochs(e)}>{e}</div>
-                          ))}
-                          <div className={`chip ${selectedEpochs === 'custom' ? 'selected' : ''}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }} onClick={() => setSelectedEpochs('custom')}>Custom</div>
-                        </div>
-                        {selectedEpochs === 'custom' && (
-                          <input 
-                            type="number" value={customEpochs} 
-                            onChange={(e) => setCustomEpochs(parseInt(e.target.value) || 250)}
-                            style={{ marginTop: '0.5rem', width: '100%', padding: '0.4rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}
-                          />
-                        )}
-                      </div>
-
-                      <div style={{ marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
-                        <label style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem', display: 'block' }}>Fixed Parameters</label>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.7rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>LR</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.optimizer?.lr || "0.0002"}</span></div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Batch Size</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.train?.batch_size || 1}</span></div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Input NC</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.model?.input_nc}</span></div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>Output NC</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.model?.output_nc}</span></div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>λ IDT</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.model?.lambda_idt}</span></div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}><span style={{ color: 'var(--text-muted)' }}>GAN Mode</span><span style={{ fontWeight: '600' }}>{currentProj?.config?.model?.gan_mode}</span></div>
-                        </div>
-                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '1rem 0' }}>
+                      No projects found in dataset directory.
                     </div>
-                  </section>                </div>
-              </>
-            ) : (
-              <section className="card">
-                <h3>Comparison: {selectedProject}</h3>
-                {metrics.length > 0 ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-                    <thead><tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border-color)' }}><th style={{ padding: '0.75rem' }}>Algorithm</th><th style={{ padding: '0.75rem' }}>Pearson</th><th style={{ padding: '0.75rem' }}>Spearman</th><th style={{ padding: '0.75rem' }}>MAE</th></tr></thead>
-                    <tbody>{metrics.map((m, i) => (<tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}><td style={{ padding: '0.75rem', fontWeight: '600' }}>{m.Algorithm}</td><td style={{ padding: '0.75rem' }}>{m.Pearson}</td><td style={{ padding: '0.75rem' }}>{m.Spearman}</td><td style={{ padding: '0.75rem' }}>{m.MAE}</td></tr>))}</tbody>
-                  </table>
-                ) : (<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No metrics found.</div>)}
+                  )}
+                </div>
               </section>
-            )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+                <section className="card" style={{ padding: '2rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <Activity size={20} style={{ color: 'var(--primary-color)' }} />
+                      <h3 style={{ margin: 0 }}>Project Status & Experimental Analysis</h3>
+                    </div>
+                    <button 
+                      className="chip selected" 
+                      style={{ fontSize: '0.8rem', padding: '0.5rem 1rem' }}
+                      onClick={() => setActiveTab('new-session')}
+                    >
+                      <Plus size={14} style={{ marginRight: '6px' }} /> New Experiment
+                    </button>
+                  </div>
+                  {renderProjectStatus()}
+                </section>
+              </div>
+            </div>
           </>
         )}
       </main>
+
     </div>
   );
 };

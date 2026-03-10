@@ -4,13 +4,34 @@ import subprocess
 import re
 import time
 import sys
-from typing import List, Optional
+import signal
+from typing import List, Optional, Dict
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
+import psutil
 
 app = FastAPI(title="GANomics API")
+
+# Global process tracker: { run_id: { pid: int, command: List[str], type: 'training' | 'step', step?: int } }
+running_processes: Dict[str, dict] = {}
+
+def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True,
+                   timeout=None, on_terminate=None):
+    """Kill a process tree (including children) with psutil."""
+    try:
+        parent = psutil.Process(pid)
+        children = parent.children(recursive=True)
+        for child in children:
+            child.send_signal(sig)
+        if include_parent:
+            parent.send_signal(sig)
+        gone, alive = psutil.wait_procs(children + ([parent] if include_parent else []),
+                                        timeout=timeout, on_terminate=on_terminate)
+        return gone, alive
+    except psutil.NoSuchProcess:
+        return [], []
 
 app.add_middleware(
     CORSMiddleware,
@@ -133,7 +154,16 @@ async def get_results_status():
     checkpoints = os.listdir(CHECKPOINTS_DIR) if os.path.exists(CHECKPOINTS_DIR) else []
     logs = [l.replace("_log.txt", "") for l in os.listdir(LOGS_DIR) if l.endswith("_log.txt")]
     
-        # Define status for each log (run)
+    # Load ongoing/incomplete tasks
+    ongoing_task_file = os.path.join(TRAINING_DIR, "ongoing_tasks.txt")
+    ongoing_task_ids = []
+    if os.path.exists(ongoing_task_file):
+        try:
+            with open(ongoing_task_file, 'r') as f:
+                ongoing_task_ids = [line.strip() for line in f if line.strip()]
+        except: pass
+
+    # Define status for each log (run)
     run_statuses = {}
     now = time.time()
     for run_id in logs:
@@ -144,12 +174,47 @@ async def get_results_status():
         
         # Check if log was updated in the last 60 seconds
         is_running = False
+        current_epoch = 0
+        total_epochs = 0
+        
         if os.path.exists(log_path):
-            if now - os.path.getmtime(log_path) < 60:
+            mtime = os.path.getmtime(log_path)
+            if now - mtime < 60:
                 is_running = True
+                # ... (rest of parsing logic)
+                # Try to get current progress from the last few lines
+                try:
+                    with open(log_path, 'rb') as f:
+                        f.seek(0, os.SEEK_END)
+                        pos = f.tell()
+                        # Read last 2KB to find the last (epoch:...) line
+                        f.seek(max(0, pos - 2048))
+                        last_lines = f.read().decode('utf-8', errors='ignore').splitlines()
+                        for line in reversed(last_lines):
+                            parsed = parse_log_line(line)
+                            if parsed and 'epoch' in parsed:
+                                current_epoch = int(parsed['epoch'])
+                                break
+                    # Try to infer total epochs from the first few lines of the log
+                    # The script usually prints arguments at start
+                    with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        for _ in range(20): # Check first 20 lines
+                            line = f.readline()
+                            if not line: break
+                            if "epochs" in line.lower() or "n_epochs" in line.lower():
+                                match = re.search(r'epochs[:\s=]+(\d+)', line.lower())
+                                if match:
+                                    total_epochs = int(match.group(1))
+                                    break
+                except: pass
+
+        if total_epochs == 0: total_epochs = 500 # Default fallback
         
         run_statuses[run_id] = {
             "training": "running" if is_running else ("completed" if os.path.exists(checkpoint_latest) else "idle"),
+            "stopped": running_processes.get(run_id, {}).get('stopped', False) or (run_id == 'training_session' and running_processes.get('training_session', {}).get('stopped', False)),
+            "current_epoch": current_epoch,
+            "total_epochs": total_epochs,
             "sync": os.path.exists(sync_path),
             "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")),
             "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Jaccard_Curve_GANomics.csv")),
@@ -166,19 +231,165 @@ async def get_results_status():
 @app.post("/api/train")
 async def start_training(req: TrainRequest):
     run_ablation_script = os.path.join(SCRIPTS_DIR, "run_ablation.py")
-    # Use sys.executable to ensure we use the same environment's python
     cmd = [sys.executable, run_ablation_script, "--config", req.config_path, "--repeats", str(req.repeats)]
     if req.sizes: cmd += ["--sizes"] + [str(s) for s in req.sizes]
     if req.betas: cmd += ["--betas"] + [str(b) for b in req.betas]
     if req.lambdas: cmd += ["--lambdas"] + [str(l) for l in req.lambdas]
     
-    print(f"Starting training command: {' '.join(cmd)}")
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    
+    try:
+        kwargs = {}
+        if os.name == 'nt':
+            kwargs['creationflags'] = subprocess.CREATE_NEW_CONSOLE
+        
+        process = subprocess.Popen(cmd, cwd=BACKEND_DIR, env=env, **kwargs)
+        
+        # For training, we track it by config name or a generic training key
+        # Since run_ablation starts multiple runs, we'll use 'training_session'
+        running_processes['training_session'] = {
+            "pid": process.pid,
+            "cmd": cmd,
+            "env": env,
+            "cwd": BACKEND_DIR,
+            "type": "training"
+        }
+        return {"message": "Training session started", "pid": process.pid}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/runs/{run_id}/stop")
+async def stop_task(run_id: str):
+    # 1. Check if it's explicitly in our tracker
+    proc_info = running_processes.get(run_id)
+    
+    # 2. If not found, and it looks like a training run, check if we have a generic training session
+    if not proc_info and ("Ablation" in run_id or "Sensitivity" in run_id):
+        proc_info = running_processes.get('training_session')
+        # verify it's the right project (heuristic)
+        if proc_info:
+            cmd_str = " ".join(proc_info.get('cmd', []))
+            project_id = run_id.split('_')[0]
+            if project_id.lower() not in cmd_str.lower():
+                proc_info = None
+
+    if proc_info:
+        try:
+            kill_proc_tree(proc_info['pid'])
+            # If it was the training session, remove that key
+            if running_processes.get('training_session') == proc_info:
+                del running_processes['training_session']
+            if run_id in running_processes:
+                del running_processes[run_id]
+        except: pass
+        
+        # Also remove from ongoing_tasks.txt
+        ongoing_file = os.path.join(TRAINING_DIR, "ongoing_tasks.txt")
+        if os.path.exists(ongoing_file):
+            try:
+                with open(ongoing_file, 'r') as f:
+                    tasks = [line.strip() for line in f if line.strip()]
+                if run_id in tasks:
+                    tasks.remove(run_id)
+                    with open(ongoing_file, 'w') as f:
+                        for t in tasks: f.write(f"{t}\n")
+            except: pass
+            
+        return {"message": f"Task {run_id} stopped"}
+    
+    # 3. Fallback: find by name in psutil (essential if backend restarted)
+    stopped_any = False
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            cmdline = proc.info['cmdline']
+            # Search for run_id in any of the command line arguments
+            if cmdline and any(run_id in arg for arg in cmdline):
+                kill_proc_tree(proc.info['pid'])
+                stopped_any = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied): continue
+    
+    if stopped_any:
+        # Cleanup ongoing_tasks.txt even in fallback
+        ongoing_file = os.path.join(TRAINING_DIR, "ongoing_tasks.txt")
+        if os.path.exists(ongoing_file):
+            try:
+                with open(ongoing_file, 'r') as f:
+                    tasks = [line.strip() for line in f if line.strip()]
+                new_tasks = [t for t in tasks if t != run_id]
+                if len(new_tasks) < len(tasks):
+                    with open(ongoing_file, 'w') as f:
+                        for t in new_tasks: f.write(f"{t}\n")
+            except: pass
+        return {"message": f"Task {run_id} stopped (found via psutil)"}
+        
+    raise HTTPException(status_code=404, detail=f"Process for {run_id} not found. It may have already finished or the PID is lost.")
+
+@app.post("/api/runs/{run_id}/restart")
+async def restart_task(run_id: str):
+    # This requires knowing the command. If it's in our tracker, we use that.
+    # Otherwise, we might need to reconstruct it or only allow restart for tracked tasks.
+    proc_info = running_processes.get(run_id)
+    if not proc_info:
+        raise HTTPException(status_code=404, detail="Restart info not found for this task")
+    
+    # Stop first if running
+    try: kill_proc_tree(proc_info['pid'])
+    except: pass
+    
+    try:
+        kwargs = {}
+        if os.name == 'nt':
+            kwargs['creationflags'] = subprocess.CREATE_NEW_CONSOLE
+        
+        process = subprocess.Popen(
+            proc_info['cmd'], 
+            cwd=proc_info['cwd'], 
+            env=proc_info['env'], 
+            **kwargs
+        )
+        running_processes[run_id] = {**proc_info, "pid": process.pid}
+        return {"message": f"Task {run_id} restarted", "pid": process.pid}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to restart: {str(e)}")
+
+@app.post("/api/runs/{run_id}/run_step")
+async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] = None):
+    # Map step numbers to scripts
+    scripts = {
+        2: "test_sync.py",
+        3: "comparative_analysis.py",
+        4: "biomarker.py" # Covers both DEG and Prediction
+    }
+    
+    if step not in scripts:
+        raise HTTPException(status_code=400, detail=f"Invalid step: {step}")
+        
+    script_path = os.path.join(SCRIPTS_DIR, scripts[step])
+    if not os.path.exists(script_path):
+        raise HTTPException(status_code=404, detail=f"Script not found: {scripts[step]}")
+        
+    cmd = [sys.executable, script_path, "--run_id", run_id]
+    
+    # Step 2 needs config
+    if step == 2:
+        if not config_path:
+            raise HTTPException(status_code=400, detail="Step 2 requires config_path")
+        cmd += ["--config", config_path]
+    
+    # Step 4 might need labels (defaults to NB clinical_info)
+    if step == 4:
+        # Check if project is NB or other to set labels
+        if "NB" in run_id:
+            cmd += ["--labels", os.path.join(DATASET_DIR, "NB", "clinical_info.tsv")]
+        elif "METSIM" in run_id:
+            cmd += ["--labels", os.path.join(DATASET_DIR, "METSIM", "clinical_info.tsv")]
+            
+    print(f"Running step {step} command: {' '.join(cmd)}")
     
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
     
-    # Use Popen to start a completely detached process
-    # creationflags=subprocess.CREATE_NEW_CONSOLE opens a new terminal window on Windows
     try:
         kwargs = {}
         if os.name == 'nt':
@@ -188,13 +399,22 @@ async def start_training(req: TrainRequest):
             cmd, 
             cwd=BACKEND_DIR, 
             env=env, 
-            stdout=None, # Let it print to its own console
+            stdout=None, 
             stderr=None, 
             **kwargs
         )
-        return {"message": "Training session started in separate process", "pid": process.pid, "command": " ".join(cmd)}
+        
+        running_processes[run_id] = {
+            "pid": process.pid,
+            "cmd": cmd,
+            "env": env,
+            "cwd": BACKEND_DIR,
+            "type": "step",
+            "step": step
+        }
+        return {"message": f"Step {step} started", "pid": process.pid}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start training: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start step {step}: {str(e)}")
 
 @app.get("/api/runs/{run_id}/logs")
 async def stream_run_logs(run_id: str):
@@ -358,61 +578,6 @@ async def get_run_prediction_metrics(run_id: str):
                 print(f"Error reading {f}: {e}")
                 
     return results
-
-@app.post("/api/runs/{run_id}/run_step")
-async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] = None):
-    # Map step numbers to scripts
-    scripts = {
-        2: "test_sync.py",
-        3: "comparative_analysis.py",
-        4: "biomarker.py" # Covers both DEG and Prediction
-    }
-    
-    if step not in scripts:
-        raise HTTPException(status_code=400, detail=f"Invalid step: {step}")
-        
-    script_path = os.path.join(SCRIPTS_DIR, scripts[step])
-    if not os.path.exists(script_path):
-        raise HTTPException(status_code=404, detail=f"Script not found: {scripts[step]}")
-        
-    cmd = [sys.executable, script_path, "--run_id", run_id]
-    
-    # Step 2 needs config
-    if step == 2:
-        if not config_path:
-            # Try to find config from run_id or projects
-            raise HTTPException(status_code=400, detail="Step 2 requires config_path")
-        cmd += ["--config", config_path]
-    
-    # Step 4 might need labels (defaults to NB clinical_info)
-    if step == 4:
-        # Check if project is NB or other to set labels
-        if "NB" in run_id:
-            cmd += ["--labels", os.path.join(DATASET_DIR, "NB", "clinical_info.tsv")]
-        elif "METSIM" in run_id:
-            cmd += ["--labels", os.path.join(DATASET_DIR, "METSIM", "clinical_info.tsv")]
-            
-    print(f"Running step {step} command: {' '.join(cmd)}")
-    
-    env = os.environ.copy()
-    env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
-    
-    try:
-        kwargs = {}
-        if os.name == 'nt':
-            kwargs['creationflags'] = subprocess.CREATE_NEW_CONSOLE
-        
-        process = subprocess.Popen(
-            cmd, 
-            cwd=BACKEND_DIR, 
-            env=env, 
-            stdout=None, 
-            stderr=None, 
-            **kwargs
-        )
-        return {"message": f"Step {step} started", "pid": process.pid}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start step {step}: {str(e)}")
 
 @app.get("/api/runs/{run_id}/pathway")
 async def get_run_pathway_metrics(run_id: str):

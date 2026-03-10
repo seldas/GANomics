@@ -5,8 +5,38 @@ import sys
 import time
 from multiprocessing import Pool, Manager
 
+def update_ongoing_tasks(run_id, action='add'):
+    # File is in results/1_Training/ongoing_tasks.txt
+    # We are in scripts/, so ../results/1_Training/ongoing_tasks.txt
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    task_file = os.path.join(base_dir, "results", "1_Training", "ongoing_tasks.txt")
+    
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(task_file), exist_ok=True)
+    
+    # Use simple file locking/retries if needed, but for now just atomic-ish read/write
+    tasks = []
+    if os.path.exists(task_file):
+        with open(task_file, 'r') as f:
+            tasks = [line.strip() for line in f if line.strip()]
+            
+    if action == 'add':
+        if run_id not in tasks:
+            tasks.append(run_id)
+    else: # remove
+        if run_id in tasks:
+            tasks.remove(run_id)
+            
+    with open(task_file, 'w') as f:
+        for t in tasks:
+            f.write(f"{t}\n")
+
 def run_trial(args_tuple):
     cmd, run_name, device_str, env, progress_dict = args_tuple
+    
+    # Track as ongoing
+    update_ongoing_tasks(run_name, 'add')
+    
     # Override device for this specific run and add quiet mode
     cmd = cmd + ["--device", device_str, "--quiet"]
     
@@ -20,14 +50,17 @@ def run_trial(args_tuple):
         if line.startswith("[PROGRESS]"):
             progress_dict[run_name] = f"Epoch: {line.replace('[PROGRESS] ', '')}"
         elif "Traceback" in line or "Error" in line:
-            # If there's an error, we probably want to see it or note it
             progress_dict[run_name] = "Error"
 
     process.wait()
-    if process.returncode != 0 and progress_dict[run_name] != "Error":
-        progress_dict[run_name] = "Failed"
-    elif progress_dict[run_name] != "Error":
+    
+    # If completed successfully, remove from ongoing
+    if process.returncode == 0:
+        update_ongoing_tasks(run_name, 'remove')
         progress_dict[run_name] = "Completed"
+    else:
+        if progress_dict[run_name] != "Error":
+            progress_dict[run_name] = "Failed"
 
 def run_ablation():
     parser = argparse.ArgumentParser(description="Run GANomics Ablation & Sensitivity Study")
