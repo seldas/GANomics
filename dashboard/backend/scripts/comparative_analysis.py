@@ -5,12 +5,10 @@ import yaml
 import torch
 import pandas as pd
 import numpy as np
-import pickle
+from scipy.stats import pearsonr, spearmanr
 
 # Add the parent directory to sys.path to make 'src' importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.datasets.genomics_dataset import GenomicsDataset
-from src.models.ganomics_model import GANomicsModel
 from src.core.evaluation import compute_metrics
 from src.bio_utils import (
     combat_evaluate_paired, fit_cublock_translator, translate_cublock,
@@ -19,70 +17,84 @@ from src.bio_utils import (
 
 def measure_perf_detailed(df_real, df_fake):
     """
-    Compute per-sample metrics and return summary with CI.
+    Compute per-sample metrics and return summary with CI (standard deviation).
     """
-    metrics = []
-    for i in range(len(df_real)):
-        m = compute_metrics(df_real.values[i:i+1], df_fake.values[i:i+1])
-        metrics.append(m)
+    pearsons, spearmans, maes, rmses, l1s, l2s = [], [], [], [], [], []
     
-    df_metrics = pd.DataFrame(metrics)
+    for i in range(len(df_real)):
+        r = df_real.values[i]
+        f = df_fake.values[i]
+        
+        # Pearson/Spearman
+        p_val, _ = pearsonr(r, f)
+        s_val, _ = spearmanr(r, f)
+        pearsons.append(p_val)
+        spearmans.append(s_val)
+        
+        # Errors
+        diff = r - f
+        maes.append(np.abs(diff).mean())
+        rmses.append(np.sqrt((diff**2).mean()))
+        l1s.append(np.abs(diff).sum())
+        l2s.append(np.sqrt((diff**2).sum()))
+    
+    metrics = {
+        'Pearson': pearsons,
+        'Spearman': spearmans,
+        'MAE': maes,
+        'RMSE': rmses,
+        'L1': l1s,
+        'L2': l2s
+    }
+    
     summary = {}
-    for col in df_metrics.columns:
-        mean = df_metrics[col].mean()
-        std = df_metrics[col].std()
-        summary[col] = f"{mean:.3f} (±{std:.3f})"
+    for k, vals in metrics.items():
+        mean = np.mean(vals)
+        std = np.std(vals)
+        summary[k] = f"{mean:.3f} (±{std:.3f})"
     return summary
 
 def main():
     parser = argparse.ArgumentParser(description="Comparative Analysis with Baseline Methods")
-    parser.add_argument("--config", type=str, required=True, help="Path to config file")
-    parser.add_argument("--project", type=str, default="NB", help="Project name")
-    parser.add_argument("--sample_size", type=int, default=50, help="Training size")
-    parser.add_argument("--run_id", type=int, default=0, help="Run ID")
+    parser.add_argument("--run_id", type=str, required=True, help="Full run ID (e.g. NB_Ablation_Size_50_Run_0)")
     parser.add_argument("--no_adjust_path", action='store_true', help="Don't adjust PYTHONPATH")
-    parser.add_argument("--save_full", action='store_true', help="Save full results")
     args = parser.parse_args()
     
     if not args.no_adjust_path:
-        # Add the parent directory to sys.path to make 'src' importable
         sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-    
-    with open(args.config, 'r') as f:
-        config = yaml.safe_load(f)
-        
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
     # Determine backend directory
     backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     def resolve_path(p):
         return os.path.join(backend_dir, p) if not os.path.isabs(p) else p
 
-    # 1. Load Data and Split
-    train_dir = resolve_path(os.path.join("results", "2_SyncData", f"{args.project}_{args.sample_size}_{args.run_id}", "train"))
+    # 1. Load Sync Data
+    sync_root = resolve_path(os.path.join("results", "2_SyncData", args.run_id))
+    train_dir = os.path.join(sync_root, "train")
+    test_dir = os.path.join(sync_root, "test")
+    
+    if not os.path.exists(train_dir) or not os.path.exists(test_dir):
+        raise FileNotFoundError(f"Sync data for {args.run_id} not found in {sync_root}. Run test_sync.py first.")
+
     train_ag = pd.read_csv(os.path.join(train_dir, "microarray_real.csv"), index_col=0)
     train_ngs = pd.read_csv(os.path.join(train_dir, "rnaseq_real.csv"), index_col=0)
-    test_dir = resolve_path(os.path.join("results", "2_SyncData", f"{args.project}_{args.sample_size}_{args.run_id}", "test"))
     test_ag = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
     test_ngs = pd.read_csv(os.path.join(test_dir, "rnaseq_real.csv"), index_col=0)
     
-    # 2. GANomics Results
-    sync_dir = resolve_path(os.path.join("results", "2_SyncData", f"{args.project}_{args.sample_size}_{args.run_id}", "test"))
-    df_ma_fake = pd.read_csv(os.path.join(sync_dir, "microarray_fake.csv"), index_col=0)
-    df_rs_fake = pd.read_csv(os.path.join(sync_dir, "rnaseq_fake.csv"), index_col=0)
+    # GANomics Results (Fake)
+    df_ma_fake = pd.read_csv(os.path.join(test_dir, "microarray_fake.csv"), index_col=0)
+    df_rs_fake = pd.read_csv(os.path.join(test_dir, "rnaseq_fake.csv"), index_col=0)
     
-    # 3. Run Baselines
-    print("Running Baseline Comparisons...")
+    # 2. Run Baselines
+    print(f"[{args.run_id}] Running Baseline Comparisons...")
     
     # ComBat
     res_combat = combat_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
-    df_ma_combat = res_combat['rnaseq_to_microarray']
-    df_rs_combat = res_combat['microarray_to_rnaseq']
+    df_ma_combat, df_rs_combat = res_combat['rnaseq_to_microarray'], res_combat['microarray_to_rnaseq']
     
     # YuGene
     res_yugene = yugene_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
-    df_ma_yugene = res_yugene['rnaseq_to_microarray']
-    df_rs_yugene = res_yugene['microarray_to_rnaseq']
+    df_ma_yugene, df_rs_yugene = res_yugene['rnaseq_to_microarray'], res_yugene['microarray_to_rnaseq']
     
     # CuBlock
     trans_rs = fit_cublock_translator(train_ag, train_ngs)
@@ -92,30 +104,27 @@ def main():
     
     # TDM
     res_tdm = tdm_normalize(train_ag, test_ag, train_ngs, test_ngs)
-    df_ma_tdm = res_tdm['rnaseq_to_microarray']
-    df_rs_tdm = res_tdm['microarray_to_rnaseq']
+    df_ma_tdm, df_rs_tdm = res_tdm['rnaseq_to_microarray'], res_tdm['microarray_to_rnaseq']
     
     # Quantile
     res_qn = quantile_normalize(train_ag, test_ag, train_ngs, test_ngs)
-    df_ma_qn = res_qn['rnaseq_to_microarray']
-    df_rs_qn = res_qn['microarray_to_rnaseq']
+    df_ma_qn, df_rs_qn = res_qn['rnaseq_to_microarray'], res_qn['microarray_to_rnaseq']
 
-    # save fake data of all algorithm into the sync_data folder:
-    sync_dir_fake = os.path.join("results", "2_SyncData", f"{args.project}_{args.sample_size}_{args.run_id}", "algorithms")
-    if not os.path.exists(sync_dir_fake):
-        os.makedirs(sync_dir_fake, exist_ok=True)
+    # 3. Save Algorithm Profiles
+    algo_dir = os.path.join(sync_root, "algorithms")
+    os.makedirs(algo_dir, exist_ok=True)
 
-    df_ma_combat.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_combat.csv'))
-    df_ma_yugene.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_yugene.csv'))
-    df_ma_cublock.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_cublock.csv'))
-    df_ma_tdm.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_tdm.csv'))
-    df_ma_qn.to_csv(os.path.join(sync_dir_fake, 'microarray_fake_qn.csv'))
+    algos = {
+        'combat': (df_ma_combat, df_rs_combat),
+        'yugene': (df_ma_yugene, df_rs_yugene),
+        'cublock': (df_ma_cublock, df_rs_cublock),
+        'tdm': (df_ma_tdm, df_rs_tdm),
+        'qn': (df_ma_qn, df_rs_qn)
+    }
 
-    df_ma_combat.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_combat.csv'))
-    df_ma_yugene.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_yugene.csv'))
-    df_ma_cublock.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_cublock.csv'))
-    df_ma_tdm.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_tdm.csv'))
-    df_ma_qn.to_csv(os.path.join(sync_dir_fake, 'rnaseq_fake_qn.csv'))
+    for name, (ma, rs) in algos.items():
+        ma.to_csv(os.path.join(algo_dir, f'microarray_fake_{name}.csv'))
+        rs.to_csv(os.path.join(algo_dir, f'rnaseq_fake_{name}.csv'))
 
     # 4. Aggregate Metrics
     comparisons = [
@@ -141,10 +150,11 @@ def main():
         final_results.append(perf)
         
     df_final = pd.DataFrame(final_results)
-    output_path = resolve_path(os.path.join("results", "3_ComparativeAnalysis", f"Table_2_Comparison_{args.project}.csv"))
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df_final.to_csv(output_path, index=False)
-    print(f"\nComparative analysis saved to {output_path}")
+    out_dir = resolve_path(os.path.join("results", "3_ComparativeAnalysis", args.run_id))
+    os.makedirs(out_dir, exist_ok=True)
+    df_final.to_csv(os.path.join(out_dir, "Test_performance.csv"), index=False)
+    
+    print(f"Results saved to {out_dir}/Test_performance.csv")
     print(df_final[['Algorithm', 'Pearson', 'Spearman', 'L1']])
 
 if __name__ == "__main__":

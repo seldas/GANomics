@@ -10,106 +10,102 @@ from src.core.analysis import run_deg_analysis, train_eval_rf
 from src.core.pathway import load_gmt, run_permutation_test, jaccard_threshold_curve
 
 def main():
-    parser = argparse.ArgumentParser(description="Biomarker and Cross-Platform Modeling")
-    parser.add_argument("--real_A", type=str, required=True, help="Path to Real Domain A")
-    parser.add_argument("--real_B", type=str, required=True, help="Path to Real Domain B")
-    parser.add_argument("--syn_A", type=str, required=True, help="Path to Synthetic Domain A (from B)")
-    parser.add_argument("--syn_B", type=str, required=True, help="Path to Synthetic Domain B (from A)")
-    parser.add_argument("--labels", type=str, default=os.path.join("plan", "SEQC_NB_249_ValidationSamples_ClinicalInfo_20121128.txt"), help="Path to clinical labels")
-    parser.add_argument("--label_col", type=str, default="D_FAV_All", help="Column name for labels")
+    parser = argparse.ArgumentParser(description="Biomarker and Cross-Platform Modeling for all algorithms")
+    parser.add_argument("--run_id", type=str, required=True, help="Full run ID (e.g. NB_Ablation_Size_50_Run_0)")
+    parser.add_argument("--labels", type=str, default=os.path.join("dataset", "NB", "clinical_info.csv"), help="Path to clinical labels")
     parser.add_argument("--gmt", type=str, help="Path to MSigDB GMT file for pathway analysis")
+    parser.add_argument("--no_adjust_path", action='store_true', help="Don't adjust PYTHONPATH")
     args = parser.parse_args()
     
+    if not args.no_adjust_path:
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
     # Determine backend directory
     backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     def resolve_path(p):
         return os.path.join(backend_dir, p) if not os.path.isabs(p) else p
 
-    # 1. Load Data
-    df_rA = pd.read_csv(args.real_A, index_col=0)
-    df_rB = pd.read_csv(args.real_B, index_col=0)
-    df_sA = pd.read_csv(args.syn_A, index_col=0)
-    df_sB = pd.read_csv(args.syn_B, index_col=0)
+    # 1. Paths Setup
+    sync_root = resolve_path(os.path.join("results", "2_SyncData", args.run_id))
+    test_dir = os.path.join(sync_root, "test")
+    algo_dir = os.path.join(sync_root, "algorithms")
     
-    # Load labels
-    if args.labels.endswith('.txt'):
-        df_labels = pd.read_csv(args.labels, sep='\t')
-        if 'SEQC_NB_SampleID' in df_labels.columns:
-            df_labels.set_index('SEQC_NB_SampleID', inplace=True)
-    else:
-        df_labels = pd.read_csv(args.labels, index_col=0)
-
-    # Determine label column
-    if args.label_col in df_labels.columns:
-        label_col = args.label_col
-    elif "label" in df_labels.columns:
-        label_col = "label"
-    else:
-        raise ValueError(f"Label column '{args.label_col}' or 'label' not found in {args.labels}")
+    # 2. Load Real Data and Labels
+    real_ma = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
+    df_labels = pd.read_csv(resolve_path(args.labels), index_col=0)
     
-    # Filter samples
-    df_labels = df_labels.dropna(subset=[label_col])
-    
-    # Align samples
-    idx = df_rA.index.intersection(df_labels.index)
-    if len(idx) == 0:
-        print(f"Warning: No matching samples found between data and labels.")
+    # Align labels with real_ma samples
+    common_idx = real_ma.index.intersection(df_labels.index)
+    if len(common_idx) == 0:
+        print(f"Error: No matching samples between labels ({args.labels}) and data.")
         return
+    
+    real_ma = real_ma.loc[common_idx]
+    y = df_labels.loc[common_idx, 'label']
+    print(f"[{args.run_id}] Aligned {len(common_idx)} samples for biomarker analysis.")
 
-    df_rA, df_rB = df_rA.loc[idx], df_rB.loc[idx]
-    df_sA, df_sB = df_sA.loc[idx], df_sB.loc[idx]
-    y = df_labels.loc[idx, label_col]
-    
-    if pd.api.types.is_numeric_dtype(y):
-        y = y.map({0: 'Favorable', 1: 'Unfavorable'})
-    
-    print(f"Total aligned samples with labels: {len(idx)}")
-    
-    # Split for classification
-    n = len(idx) // 2
-    train_idx, test_idx = idx[:n], idx[n:]
-    
-    # 2. Modeling Scenarios (Table 4)
-    scenarios = [
-        ("Real->Real", df_rA.loc[train_idx], df_rA.loc[test_idx]),
-        ("Real->Syn",  df_rA.loc[train_idx], df_sA.loc[test_idx]),
-        ("Syn->Real",  df_sA.loc[train_idx], df_rA.loc[test_idx]),
-        ("Syn->Syn",   df_sA.loc[train_idx], df_sA.loc[test_idx])
+    # 3. Identify all synthetic profiles
+    profiles = [
+        ('GANomics', os.path.join(test_dir, "microarray_fake.csv"))
     ]
     
-    results = []
-    print("\nRunning Modeling Scenarios...")
-    for name, train_x, test_x in scenarios:
-        metrics = train_eval_rf(train_x, y.loc[train_idx], test_x, y.loc[test_idx])
-        metrics['Scenario'] = name
-        results.append(metrics)
-        
-    table_4 = pd.DataFrame(results)
-    pred_dir = resolve_path("results/4_Biomarkers/Prediction")
-    os.makedirs(pred_dir, exist_ok=True)
-    table_4.to_csv(os.path.join(pred_dir, "Table_4_Classifier_Performance.csv"), index=False)
-    print(table_4)
+    if os.path.exists(algo_dir):
+        for f in os.listdir(algo_dir):
+            if f.startswith("microarray_fake_") and f.endswith(".csv"):
+                algo_name = f.replace("microarray_fake_", "").replace(".csv", "").upper()
+                profiles.append((algo_name, os.path.join(algo_dir, f)))
 
-    # 3. Pathway & DEG Validation (Figure 9)
-    print("\nRunning DEG and Pathway Validation...")
-    deg_rA = run_deg_analysis(df_rA, y)
-    deg_sA = run_deg_analysis(df_sA, y)
-    
-    # Jaccard overlap curve (Fig 9a)
-    jac_curve = jaccard_threshold_curve(deg_rA, deg_sA)
-    deg_dir = resolve_path("results/4_Biomarkers/DEG")
-    os.makedirs(deg_dir, exist_ok=True)
-    jac_curve.to_csv(os.path.join(deg_dir, "Table_Fig9a_Jaccard_Curve.csv"), index=False)
-    
-    if args.gmt:
-        gene_sets = load_gmt(args.gmt)
-        obs_rho, null_dist, p_val = run_permutation_test(deg_rA, deg_sA, gene_sets)
-        print(f"Pathway Rank Concordance (Spearman rho): {obs_rho:.3f}, p-value: {p_val:.4f}")
+    # 4. Precompute Real DEGs (Reference)
+    print("Running DEG analysis for Real Microarray (Reference)...")
+    deg_real = run_deg_analysis(real_ma, y)
+
+    # 5. Process each algorithm
+    for algo_name, syn_path in profiles:
+        print(f"\n>>> Processing Algorithm: {algo_name}")
         
-        # Save null distribution for Fig 9b-e
-        pathway_dir = resolve_path("results/4_Biomarkers/Pathway")
-        os.makedirs(pathway_dir, exist_ok=True)
-        pd.Series(null_dist).to_csv(os.path.join(pathway_dir, "Table_Fig9_Null_Dist.csv"), index=False)
+        # Load synthetic data
+        syn_ma = pd.read_csv(syn_path, index_col=0).loc[common_idx]
+        
+        # A. Prediction Model (Train on Syn -> Test on Real)
+        # We split common_idx into train/test for this scenario
+        n = len(common_idx) // 2
+        train_idx, test_idx = common_idx[:n], common_idx[n:]
+        
+        print(f"[{algo_name}] Training Random Forest (Synthetic -> Real)...")
+        metrics = train_eval_rf(syn_ma.loc[train_idx], y.loc[train_idx], real_ma.loc[test_idx], y.loc[test_idx])
+        
+        pred_dir = resolve_path(os.path.join("results", "4_Biomarkers", "Prediction", args.run_id))
+        os.makedirs(pred_dir, exist_ok=True)
+        pd.DataFrame([metrics]).to_csv(os.path.join(pred_dir, f"Table_4_Classifier_Performance_{algo_name}.csv"), index=False)
+
+        # B. DEG Analysis
+        print(f"[{algo_name}] Running DEG Analysis...")
+        deg_syn = run_deg_analysis(syn_ma, y)
+        
+        # Jaccard overlap curve
+        jac_curve = jaccard_threshold_curve(deg_real, deg_syn)
+        deg_dir = resolve_path(os.path.join("results", "4_Biomarkers", "DEG", args.run_id))
+        os.makedirs(deg_dir, exist_ok=True)
+        jac_curve.to_csv(os.path.join(deg_dir, f"Table_Fig9a_Jaccard_Curve_{algo_name}.csv"), index=False)
+
+        # C. Pathway Enrichment (Optional)
+        if args.gmt:
+            print(f"[{algo_name}] Running Pathway Concordance (Permutation Test)...")
+            gene_sets = load_gmt(resolve_path(args.gmt))
+            obs_rho, null_dist, p_val = run_permutation_test(deg_real, deg_syn, gene_sets, B=100) # Reduced B for speed
+            
+            pathway_dir = resolve_path(os.path.join("results", "4_Biomarkers", "Pathway", args.run_id))
+            os.makedirs(pathway_dir, exist_ok=True)
+            
+            pathway_results = {
+                'Algorithm': algo_name,
+                'Spearman_Rho': obs_rho,
+                'P_Value': p_val
+            }
+            pd.DataFrame([pathway_results]).to_csv(os.path.join(pathway_results, f"Pathway_Concordance_{algo_name}.csv"), index=False)
+            pd.Series(null_dist).to_csv(os.path.join(pathway_dir, f"Table_Fig9_Null_Dist_{algo_name}.csv"), index=False)
+
+    print(f"\n✅ All biomarker analyses for {args.run_id} completed.")
 
 if __name__ == "__main__":
     main()
