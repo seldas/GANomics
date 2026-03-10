@@ -1116,20 +1116,10 @@ const App: React.FC = () => {
             const summaryData = Object.entries(variants).map(([name, logs]) => {
               const stats: any = { name };
               metricKeys.forEach(k => {
-                const reductions = logs.map(l => {
-                  const first = l.first[k] || 0;
-                  const last = l.last[k] || 0;
-                  return first !== 0 ? ((first - last) / first) * 100 : 0;
-                });
                 const finalValues = logs.map(l => l.last[k] || 0);
-                
-                const avgRed = (reductions.reduce((a, b) => a + b, 0) / (reductions.length || 1));
-                const stdRed = Math.sqrt(reductions.map(x => Math.pow(x - avgRed, 2)).reduce((a, b) => a + b, 0) / (reductions.length || 1));
-                
                 const avgFinal = (finalValues.reduce((a, b) => a + b, 0) / (finalValues.length || 1));
                 const stdFinal = Math.sqrt(finalValues.map(x => Math.pow(x - avgFinal, 2)).reduce((a, b) => a + b, 0) / (finalValues.length || 1));
-
-                stats[k] = { avgRed, stdRed, avgFinal, stdFinal };
+                stats[k] = { avgFinal, stdFinal };
               });
               return stats;
             });
@@ -1137,19 +1127,23 @@ const App: React.FC = () => {
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 <section className="card">
-                  <h3 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Loss Reduction Summary (%)</h3>
+                  <h3 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Final Loss Values</h3>
                   <div style={{ height: '400px' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={summaryData} margin={{ bottom: 60 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} fontSize={11} />
-                        <YAxis label={{ value: 'Avg. Reduction (%)', angle: -90, position: 'insideLeft' }} fontSize={11} />
+                        <YAxis label={{ value: 'Avg. Final Loss', angle: -90, position: 'insideLeft' }} fontSize={11} />
                         <Tooltip />
                         <Legend verticalAlign="top" height={36}/>
-                        <Bar dataKey="G_A.avgRed" name="Gen A" fill="#007bff" />
-                        <Bar dataKey="G_B.avgRed" name="Gen B" fill="#0056b3" />
-                        <Bar dataKey="cycle_A.avgRed" name="Cycle A" fill="#10b981" />
-                        <Bar dataKey="feedback_A.avgRed" name="Feedback A" fill="#f59e0b" />
+                        <Bar dataKey="G_A.avgFinal" name="Gen A" fill="#007bff" />
+                        <Bar dataKey="G_B.avgFinal" name="Gen B" fill="#0056b3" />
+                        <Bar dataKey="D_A.avgFinal" name="Disc A" fill="#ef4444" />
+                        <Bar dataKey="D_B.avgFinal" name="Disc B" fill="#991b1b" />
+                        <Bar dataKey="cycle_A.avgFinal" name="Cycle A" fill="#10b981" />
+                        <Bar dataKey="cycle_B.avgFinal" name="Cycle B" fill="#065f46" />
+                        <Bar dataKey="feedback_A.avgFinal" name="Feedback A" fill="#f59e0b" />
+                        <Bar dataKey="feedback_B.avgFinal" name="Feedback B" fill="#92400e" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1163,18 +1157,9 @@ const App: React.FC = () => {
                         <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid var(--border-color)' }}>
                           <th style={{ padding: '0.75rem', textAlign: 'left' }}>Variant</th>
                           {metricKeys.map(k => (
-                            <th key={k} style={{ padding: '0.75rem', textAlign: 'center' }} colSpan={2}>
+                            <th key={k} style={{ padding: '0.75rem', textAlign: 'center' }}>
                               {k.replace('_', ' ')}
                             </th>
-                          ))}
-                        </tr>
-                        <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid var(--border-color)' }}>
-                          <th style={{ padding: '0.5rem' }}></th>
-                          {metricKeys.map(k => (
-                            <React.Fragment key={`${k}-sub`}>
-                              <th style={{ padding: '0.5rem', fontSize: '0.6rem', fontWeight: 'normal' }}>Final Loss</th>
-                              <th style={{ padding: '0.5rem', fontSize: '0.6rem', fontWeight: 'normal' }}>Red. %</th>
-                            </React.Fragment>
                           ))}
                         </tr>
                       </thead>
@@ -1183,14 +1168,9 @@ const App: React.FC = () => {
                           <tr key={s.name} style={{ borderBottom: '1px solid #f0f0f0' }}>
                             <td style={{ padding: '0.75rem', fontWeight: 'bold' }}>{s.name}</td>
                             {metricKeys.map(k => (
-                              <React.Fragment key={`${s.name}-${k}`}>
-                                <td style={{ padding: '0.5rem', textAlign: 'center' }}>
-                                  {s[k].avgFinal.toFixed(3)} <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>±{s[k].stdFinal.toFixed(3)}</span>
-                                </td>
-                                <td style={{ padding: '0.5rem', textAlign: 'center', backgroundColor: 'rgba(24, 144, 255, 0.02)' }}>
-                                  {s[k].avgRed.toFixed(1)}% <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>±{s[k].stdRed.toFixed(1)}</span>
-                                </td>
-                              </React.Fragment>
+                              <td key={`${s.name}-${k}`} style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                {s[k].avgFinal.toFixed(3)} <span style={{ color: 'var(--text-muted)', fontSize: '0.6rem' }}>±{s[k].stdFinal.toFixed(3)}</span>
+                              </td>
                             ))}
                           </tr>
                         ))}
