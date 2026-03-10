@@ -1605,38 +1605,54 @@ const App: React.FC = () => {
           ) : ablationLogs.length === 0 ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No logs found for this category.</div>
           ) : (() => {
-            const variants: Record<string, any[]> = {};
+            // Group and Parse Data
+            const groups: Record<string, { logs: any[], type: string, val: number, name: string }> = {};
+            
             ablationLogs.forEach(log => {
-              let variant = "Other";
+              let name = "Other";
+              let type = "other";
+              let val = 0;
+
               if (viewingAblationCategory === 'size') {
                 const m = log.run_id.match(/Size_(\d+)/);
-                if (m) variant = `Size ${m[1]}`;
+                if (m) { val = parseInt(m[1]); name = `Size ${val}`; type = 'size'; }
               } else if (viewingAblationCategory === 'architecture') {
-                if (log.run_id.includes("AtoB")) variant = "A → B Only";
-                else if (log.run_id.includes("BtoA")) variant = "B → A Only";
-                else variant = "Both";
-              }
- else if (viewingAblationCategory === 'sensitivity') {
+                if (log.run_id.includes("AtoB")) { name = "A → B Only"; type = "arch"; val = 1; }
+                else if (log.run_id.includes("BtoA")) { name = "B → A Only"; type = "arch"; val = 2; }
+                else { name = "Both"; type = "arch"; val = 0; }
+              } else if (viewingAblationCategory === 'sensitivity') {
                 const bm = log.run_id.match(/Beta_([\d.]+)/);
                 const lm = log.run_id.match(/Lambda_([\d.]+)/);
-                if (bm) variant = `Beta ${bm[1]}`;
-                else if (lm) variant = `Lambda ${lm[1]}`;
+                if (bm) { val = parseFloat(bm[1]); name = `Beta ${val.toFixed(1)}`; type = 'beta'; }
+                else if (lm) { val = parseFloat(lm[1]); name = `Lambda ${val.toFixed(1)}`; type = 'lambda'; }
               }
-              if (!variants[variant]) variants[variant] = [];
-              variants[variant].push(log);
+
+              if (!groups[name]) groups[name] = { logs: [], type, val, name };
+              groups[name].logs.push(log);
             });
 
             const metricKeys = ['G_A', 'G_B', 'D_A', 'D_B', 'cycle_A', 'cycle_B', 'feedback_A', 'feedback_B'];
-            const summaryData = Object.entries(variants).map(([name, logs]) => {
-              const stats: any = { name };
+            let summaryData = Object.values(groups).map(g => {
+              const stats: any = { name: g.name, type: g.type, val: g.val };
               metricKeys.forEach(k => {
-                const finalValues = logs.map(l => l.last[k] || 0);
+                const finalValues = g.logs.map(l => l.last[k] || 0);
                 const avgFinal = (finalValues.reduce((a, b) => a + b, 0) / (finalValues.length || 1));
                 const stdFinal = Math.sqrt(finalValues.map(x => Math.pow(x - avgFinal, 2)).reduce((a, b) => a + b, 0) / (finalValues.length || 1));
                 stats[k] = { avgFinal, stdFinal };
               });
               return stats;
             });
+
+            // Filtering and Sorting
+            if (viewingAblationCategory === 'sensitivity') {
+              summaryData = summaryData
+                .filter(s => s.type === sensitivityType)
+                .sort((a, b) => a.val - b.val);
+            } else if (viewingAblationCategory === 'size') {
+              summaryData = summaryData.sort((a, b) => a.val - b.val);
+            } else if (viewingAblationCategory === 'architecture') {
+              summaryData = summaryData.sort((a, b) => a.val - b.val);
+            }
 
             const formatValue = (val: { avgFinal: number, stdFinal: number }) => {
               if (!val || val.avgFinal < 0.00001) return <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.75rem' }}>Unavailable</span>;
@@ -1650,9 +1666,30 @@ const App: React.FC = () => {
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                {viewingAblationCategory === 'sensitivity' && (
+                  <div style={{ display: 'flex', justifyContent: 'center', backgroundColor: '#f1f5f9', padding: '0.5rem', borderRadius: '12px', alignSelf: 'center' }}>
+                    <button 
+                      className={`chip ${sensitivityType === 'beta' ? 'selected' : ''}`} 
+                      style={{ border: 'none', padding: '0.5rem 1.5rem' }} 
+                      onClick={() => setSensitivityType('beta')}
+                    >
+                      Beta (Feedback Weight)
+                    </button>
+                    <button 
+                      className={`chip ${sensitivityType === 'lambda' ? 'selected' : ''}`} 
+                      style={{ border: 'none', padding: '0.5rem 1.5rem' }} 
+                      onClick={() => setSensitivityType('lambda')}
+                    >
+                      Lambda (Cycle Weight)
+                    </button>
+                  </div>
+                )}
+
                 {viewingAblationCategory !== 'architecture' && (
                   <section className="card">
-                    <h3 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Final Loss Values</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                      <h3 style={{ fontSize: '0.9rem', margin: 0 }}>Final Loss Values ({viewingAblationCategory === 'sensitivity' ? (sensitivityType === 'beta' ? 'β Sensitivity' : 'λ Sensitivity') : 'Trend'})</h3>
+                    </div>
                     <div style={{ height: '400px' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={summaryData} margin={{ bottom: 60 }}>
