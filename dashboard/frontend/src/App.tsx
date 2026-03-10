@@ -99,7 +99,8 @@ const App: React.FC = () => {
   const [ablationType, setAblationType] = useState<'size' | 'beta' | 'lambda'>('size');
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [taskView, setTaskView] = useState<'overview' | 'training' | 'comparative' | 'sync' | 'deg' | 'pathway' | 'prediction'>('overview');
+  const [selectedExtId, setSelectedExtId] = useState<string | null>(null);
+  const [taskView, setTaskView] = useState<'overview' | 'training' | 'sync' | 'comparative' | 'deg' | 'pathway' | 'prediction'>('overview');
   const [runComparativeData, setRunComparativeData] = useState<any[] | null>(null);
   const [runSyncData, setRunSyncData] = useState<any | null>(null);
   const [runDegData, setRunDegData] = useState<any | null>(null);
@@ -1940,7 +1941,10 @@ const App: React.FC = () => {
 
   const renderTaskDashboard = () => {
     if (!selectedRunId) return null;
-    const status = resultsStatus.run_statuses?.[selectedRunId];
+    const runStatus = resultsStatus.run_statuses?.[selectedRunId];
+    const status = (selectedExtId && runStatus?.ext_statuses?.[selectedExtId]) 
+      ? { ...runStatus, ...runStatus.ext_statuses[selectedExtId] }
+      : runStatus;
     const isSizeTask = selectedRunId.includes("Size") && !selectedRunId.includes("Architecture");
     
     if (taskView === 'training') {
@@ -2022,11 +2026,35 @@ const App: React.FC = () => {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button className="chip" onClick={() => setSelectedRunId(null)} style={{ padding: '0.5rem' }}>
-            <ArrowLeft size={18} />
-          </button>
-          <h2 style={{ margin: 0 }}>Task: {selectedRunId}</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="chip" onClick={() => setSelectedRunId(null)} style={{ padding: '0.5rem' }}>
+              <ArrowLeft size={18} />
+            </button>
+            <h2 style={{ margin: 0 }}>Task: {selectedRunId}</h2>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#f1f5f9', padding: '0.5rem 1rem', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#475569' }}>DATASET BRANCH:</div>
+            <select 
+              className="chip" 
+              style={{ border: 'none', padding: '0.25rem 0.5rem', fontWeight: '600' }}
+              value={selectedExtId || 'main'}
+              onChange={(e) => {
+                if (e.target.value === 'ADD_NEW') {
+                  setShowSyncExternalModal(true);
+                } else {
+                  setSelectedExtId(e.target.value === 'main' ? null : e.target.value);
+                }
+              }}
+            >
+              <option value="main">Standard Internal Test</option>
+              {runStatus?.ext_ids?.map((id: string) => (
+                <option key={id} value={id}>{id} (External)</option>
+              ))}
+              <option value="ADD_NEW" style={{ color: 'var(--primary-color)', fontWeight: 'bold' }}>+ Create New Test Set</option>
+            </select>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
@@ -2061,14 +2089,6 @@ const App: React.FC = () => {
                   Start Sync
                 </button>
               )}
-              <button 
-                className={`chip ${status?.training !== 'completed' ? 'disabled' : ''}`}
-                style={{ fontSize: '0.75rem', border: '1px solid var(--primary-color)', color: 'var(--primary-color)' }}
-                onClick={() => status?.training === 'completed' && setShowInferenceModal(true)}
-                disabled={status?.training !== 'completed'}
-              >
-                <Upload size={12} style={{ marginRight: '4px' }} /> External Inference
-              </button>
             </div>
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
@@ -2121,6 +2141,28 @@ const App: React.FC = () => {
             )}
           </section>
         </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+          <div style={{ padding: '1.25rem', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Dataset Description</div>
+                <div style={{ fontSize: '0.95rem', fontWeight: '600' }}>{status?.metadata?.description || "No description provided."}</div>
+                {status?.metadata?.note && <div style={{ fontSize: '0.8rem', color: 'var(--primary-color)', marginTop: '0.25rem', fontWeight: '500' }}>ℹ️ {status.metadata.note}</div>}
+              </div>
+              <div style={{ display: 'flex', gap: '1.5rem', textAlign: 'right' }}>
+                <div>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Samples</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '700' }}>{status?.metadata?.samples || 0}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Genes</div>
+                  <div style={{ fontSize: '1rem', fontWeight: '700' }}>{status?.metadata?.genes || 0}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -2148,33 +2190,33 @@ const App: React.FC = () => {
     }
   };
 
-  const [showSyncExternalModal, setShowSyncExternalModal] = useState(false);
-  const [extAgFile, setExtAgFile] = useState<File | null>(null);
-  const [extRsFile, setExtRsFile] = useState<File | null>(null);
-  const [isRunningExtSync, setIsRunningExtSync] = useState(false);
-  const [extSyncResult, setExtSyncResult] = useState<any>(null);
-
-  const handleDownloadGenelist = () => {
-    if (!selectedProject) return;
-    window.open(`${API_BASE}/projects/${selectedProject}/genelist/download`);
-  };
+  const [extCustomSuffix, setExtCustomSuffix] = useState('1');
+  const extCustomId = `ext_${extCustomSuffix}`;
 
   const handleRunExtSync = async () => {
     if (!selectedRunId || (!extAgFile && !extRsFile)) {
       alert("Please upload at least one file (test_ag or test_rs).");
       return;
     }
+    if (!extCustomSuffix) {
+      alert("Please enter a suffix for the test set name.");
+      return;
+    }
 
     const formData = new FormData();
     if (extAgFile) formData.append('test_ag', extAgFile);
     if (extRsFile) formData.append('test_rs', extRsFile);
+    formData.append('ext_id', extCustomId);
+    formData.append('description', extDescription);
 
     setIsRunningExtSync(true);
     setExtSyncResult(null);
     try {
       const res = await axios.post(`${API_BASE}/runs/${selectedRunId}/sync_external`, formData);
       setExtSyncResult(res.data);
-      alert("External sync completed successfully!");
+      alert("External dataset created successfully!");
+      const resResults = await axios.get(`${API_BASE}/results`);
+      setResultsStatus(resResults.data);
     } catch (err: any) {
       console.error(err);
       alert(err.response?.data?.detail || "External sync failed");
@@ -2194,13 +2236,41 @@ const App: React.FC = () => {
               <div style={{ backgroundColor: '#f0fdf4', padding: '0.5rem', borderRadius: '8px' }}>
                 <RefreshCw size={20} style={{ color: '#16a34a' }} />
               </div>
-              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>2.1 Sync External Dataset</h2>
+              <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Create New External Test Set</h2>
             </div>
             <button className="chip" onClick={() => { setShowSyncExternalModal(false); setExtSyncResult(null); setExtAgFile(null); setExtRsFile(null); }}><X size={18} /></button>
           </div>
 
           {!extSyncResult ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#475569' }}>TEST SET NAME</label>
+                  <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                    <div style={{ backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRight: 'none', borderTopLeftRadius: '8px', borderBottomLeftRadius: '8px', display: 'flex', alignItems: 'center', padding: '0 0.75rem', fontSize: '0.9rem', fontWeight: 'bold', color: '#64748b' }}>
+                      ext_
+                    </div>
+                    <input 
+                      type="text" 
+                      style={{ flex: 1, padding: '0.6rem', border: '1px solid #cbd5e1', borderTopRightRadius: '8px', borderBottomRightRadius: '8px', fontSize: '0.9rem', outline: 'none' }}
+                      value={extCustomSuffix}
+                      onChange={(e) => setExtCustomSuffix(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ''))}
+                      placeholder="1"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem', color: '#475569' }}>DESCRIPTION</label>
+                  <input 
+                    type="text" 
+                    className="chip" 
+                    style={{ width: '100%', padding: '0.6rem', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+                    value={extDescription}
+                    onChange={(e) => setExtDescription(e.target.value)}
+                  />
+                </div>
+              </div>
+
               <div style={{ padding: '1.25rem', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', marginBottom: '0.75rem', fontWeight: 'bold', fontSize: '0.85rem' }}>
                   <Info size={16} /> DATA PREPARATION
@@ -2227,8 +2297,8 @@ const App: React.FC = () => {
                 disabled={(!extAgFile && !extRsFile) || isRunningExtSync}
                 onClick={handleRunExtSync}
               >
-                {isRunningExtSync ? <Loader2 size={20} className="animate-spin" /> : <Play size={20} />}
-                {isRunningExtSync ? 'Syncing External Data...' : 'Start External Analysis'}
+                {isRunningExtSync ? <Loader2 size={20} className="animate-spin" /> : <Plus size={20} />}
+                {isRunningExtSync ? 'Creating Test Set...' : 'Create External Test Set'}
               </button>
             </div>
           ) : (
@@ -2237,7 +2307,8 @@ const App: React.FC = () => {
                 <div style={{ backgroundColor: 'var(--success-color-bg)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
                   <RefreshCw size={32} />
                 </div>
-                <h3 style={{ margin: 0 }}>External Sync Complete</h3>
+                <h3 style={{ margin: 0 }}>External Test Set Created</h3>
+                <p>Branch <b>{extCustomId}</b> is now available.</p>
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -2254,9 +2325,9 @@ const App: React.FC = () => {
               <button 
                 className="chip selected" 
                 style={{ marginTop: '2rem', width: '100%', padding: '1rem' }}
-                onClick={() => { setShowSyncExternalModal(false); setExtSyncResult(null); setExtAgFile(null); setExtRsFile(null); }}
+                onClick={() => { setShowSyncExternalModal(false); setExtSyncResult(null); setExtAgFile(null); setExtRsFile(null); setSelectedExtId(extCustomId); }}
               >
-                Close
+                Switch to New Test Set
               </button>
             </div>
           )}

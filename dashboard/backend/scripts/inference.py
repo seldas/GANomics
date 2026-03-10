@@ -87,8 +87,13 @@ def main():
             output_tensor = model.netG_B(input_tensor)
             
     # 5. Save Results
+    # Squeeze the 4D output (batch, genes, 1, 1) back to 2D (batch, genes)
+    output_np = output_tensor.cpu().numpy()
+    if output_np.ndim == 4:
+        output_np = output_np.squeeze(-1).squeeze(-1)
+        
     df_output = pd.DataFrame(
-        output_tensor.cpu().numpy(),
+        output_np,
         index=df_input.index,
         columns=expected_genes
     )
