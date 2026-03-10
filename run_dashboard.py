@@ -34,10 +34,25 @@ def main():
     backend_log = os.path.join(logs_dir, "backend.log")
     frontend_log = os.path.join(logs_dir, "frontend.log")
     
+    # Detect OS for python path and npm command
+    if os.name == 'nt':  # Windows
+        python_exe = os.path.join(root_dir, "venv", "Scripts", "python.exe")
+        npm_cmd = ["npm.cmd", "run", "dev"]
+        use_shell = True
+    else:  # Linux/Mac
+        python_exe = os.path.join(root_dir, "venv", "bin", "python")
+        npm_cmd = ["npm", "run", "dev"]
+        use_shell = False
+
+    # Fallback to sys.executable if venv python doesn't exist
+    if not os.path.exists(python_exe):
+        print(f"[WARNING] Virtual environment python not found at {python_exe}. Using current python.")
+        python_exe = sys.executable
+
     # 1. Start Backend (FastAPI)
     print(f"\n[SYSTEM] Starting Backend on http://localhost:8832 (Logging to {backend_log})...")
     backend_proc = subprocess.Popen(
-        ['./venv/bin/python', "dashboard/backend/main.py"],
+        [python_exe, "dashboard/backend/main.py"],
         cwd=root_dir,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -56,12 +71,13 @@ def main():
     # 2. Start Frontend (Vite)
     print(f"[SYSTEM] Starting Frontend on http://localhost:8831 (Logging to {frontend_log})...")
     frontend_proc = subprocess.Popen(
-        ["npm", "run", "dev"],
+        npm_cmd,
         cwd=os.path.join(root_dir, "dashboard", "frontend"),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        bufsize=1
+        bufsize=1,
+        shell=use_shell
     )
     
     # Start thread to stream frontend logs
