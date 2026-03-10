@@ -78,6 +78,10 @@ const App: React.FC = () => {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [taskView, setTaskView] = useState<'overview' | 'training' | 'comparative'>('overview');
   const [runComparativeData, setRunComparativeData] = useState<any[] | null>(null);
+  const [runSyncData, setRunSyncData] = useState<any | null>(null);
+  const [runDegData, setRunDegData] = useState<any | null>(null);
+  const [runPredictionData, setRunPredictionData] = useState<any | null>(null);
+  const [corrGroup, setCorrGroup] = useState<'MA' | 'RS'>('MA');
   
   const [resultsStatus, setResultsStatus] = useState<{
     checkpoints: string[], 
@@ -98,6 +102,14 @@ const App: React.FC = () => {
   // Log Viewer State
   const [viewingLog, setViewingLog] = useState<string | null>(null);
   const [logData, setLogData] = useState<LogResponse | null>(null);
+  const [previouslySelected, setPreviouslySelected] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (selectedRunId && !previouslySelected.includes(selectedRunId)) {
+      setPreviouslySelected(prev => [selectedRunId, ...prev].slice(0, 5));
+    }
+  }, [selectedRunId]);
+
   const [logMode, setLogMode] = useState<'structured' | 'chart'>('chart');
   const [visibleMetrics, setVisibleMetrics] = useState<string[]>(['G_A', 'G_B', 'D_A', 'D_B', 'Cycle', 'Feedback']);
   
@@ -134,25 +146,33 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchProjects = async () => {
       try {
-        const [projRes, resStatus] = await Promise.all([
-          axios.get(`${API_BASE}/projects`),
-          axios.get(`${API_BASE}/results`)
-        ]);
+        const projRes = await axios.get(`${API_BASE}/projects`);
         setProjects(projRes.data);
         if (projRes.data.length > 0 && !selectedProject) setSelectedProject(projRes.data[0].id);
-        setResultsStatus(resStatus.data);
       } catch (err) {
-        console.error("Failed to fetch dashboard data", err);
+        console.error("Failed to fetch projects", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
-    const interval = setInterval(fetchData, 10000);
+    fetchProjects();
+  }, []); // Only fetch projects once on mount
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const resStatus = await axios.get(`${API_BASE}/results`);
+        setResultsStatus(resStatus.data);
+      } catch (err) {
+        console.error("Failed to fetch results status", err);
+      }
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30000); // Poll results every 30 seconds
     return () => clearInterval(interval);
-  }, [selectedProject]);
+  }, []); // Poll status globally
 
   useEffect(() => {
     if (activeTab === 'analysis' && selectedProject) {
@@ -236,7 +256,238 @@ const App: React.FC = () => {
       .catch(() => setRunComparativeData([]));
   };
 
-  const [corrGroup, setCorrGroup] = useState<'MA' | 'RS'>('MA');
+  const fetchSyncStatus = (runId: string) => {
+    setTaskView('sync');
+    setRunSyncData(null);
+    axios.get(`${API_BASE}/runs/${runId}/sync`)
+      .then(res => setRunSyncData(res.data))
+      .catch(() => setRunSyncData({ exists: false }));
+  };
+
+  const renderSyncStatus = () => {
+    if (!runSyncData) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
+    if (!runSyncData.exists) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>Sync data not found for this run.</div>;
+
+    const details = runSyncData.details;
+    const platforms = ["Microarray", "RNA-Seq"];
+    const CheckIcon = ({ checked }: { checked: boolean }) => (
+      <div style={{ 
+        color: checked ? 'var(--success-color)' : '#ff4d4f', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        fontWeight: 'bold'
+      }}>
+        {checked ? "✓" : "✗"}
+      </div>
+    );
+
+    return (
+      <div className="card" style={{ padding: '2rem' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
+              <th style={{ padding: '1rem' }}>Category / Row</th>
+              {platforms.map(p => <th key={p} style={{ padding: '1rem', textAlign: 'center' }}>{p}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ backgroundColor: '#f9fafb', fontWeight: 'bold' }}>
+              <td colSpan={3} style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>GANOMICS (TRAINING)</td>
+            </tr>
+            {["Real", "Fake"].map(type => (
+              <tr key={`train-${type}`} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                <td style={{ padding: '0.75rem 1rem', paddingLeft: '2rem' }}>{type}</td>
+                {platforms.map(p => (
+                  <td key={p} style={{ textAlign: 'center' }}>
+                    <CheckIcon checked={details.train[p]?.[type]} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+
+            <tr style={{ backgroundColor: '#f9fafb', fontWeight: 'bold' }}>
+              <td colSpan={3} style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>GANOMICS (TESTING)</td>
+            </tr>
+            {["Real", "Fake"].map(type => (
+              <tr key={`test-${type}`} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                <td style={{ padding: '0.75rem 1rem', paddingLeft: '2rem' }}>{type}</td>
+                {platforms.map(p => (
+                  <td key={p} style={{ textAlign: 'center' }}>
+                    <CheckIcon checked={details.test[p]?.[type]} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+
+            <tr style={{ backgroundColor: '#f9fafb', fontWeight: 'bold' }}>
+              <td colSpan={3} style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>BASELINE ALGORITHMS (FAKE ONLY)</td>
+            </tr>
+            {["ComBat", "CuBlock", "QN", "TDM", "YuGene"].map(algo => (
+              <tr key={algo} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                <td style={{ padding: '0.75rem 1rem', paddingLeft: '2rem' }}>{algo}</td>
+                {platforms.map(p => (
+                  <td key={p} style={{ textAlign: 'center' }}>
+                    <CheckIcon checked={details.algorithms[p]?.[algo]} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const fetchDegMetrics = (runId: string) => {
+    setTaskView('deg');
+    setRunDegData(null);
+    axios.get(`${API_BASE}/runs/${runId}/deg`)
+      .then(res => setRunDegData(res.data))
+      .catch(() => setRunDegData({}));
+  };
+
+  const fetchPredictionMetrics = (runId: string) => {
+    setTaskView('prediction');
+    setRunPredictionData(null);
+    axios.get(`${API_BASE}/runs/${runId}/prediction`)
+      .then(res => setRunPredictionData(res.data))
+      .catch(() => setRunPredictionData({}));
+  };
+
+  const renderPredictionAnalysis = () => {
+    if (!runPredictionData) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
+    if (Object.keys(runPredictionData).length === 0) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No prediction results found for this run.</div>;
+
+    const scenarios = ["Real->Real", "Real->Syn", "Syn->Real", "Syn->Syn"];
+    const algos = Object.keys(runPredictionData);
+    
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <section className="card">
+          <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Classifier Performance (RandomForest, 100 Trees)</h3>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Evaluates how well a classifier trained on one domain performs on another. 
+                Focus on <b>Syn-&gt;Real</b> to measure synthetic data utility.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', backgroundColor: '#f9fafb', borderBottom: '2px solid var(--border-color)' }}>
+                  <th style={{ padding: '1rem' }}>Algorithm</th>
+                  <th style={{ padding: '1rem' }}>Scenario</th>
+                  <th style={{ padding: '1rem' }}>MCC</th>
+                  <th style={{ padding: '1rem' }}>Accuracy</th>
+                  <th style={{ padding: '1rem' }}>Precision</th>
+                  <th style={{ padding: '1rem' }}>Recall</th>
+                  <th style={{ padding: '1rem' }}>F1-Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {algos.sort((a,b) => a === 'GANomics' ? -1 : 1).map((algo) => (
+                  <React.Fragment key={algo}>
+                    {scenarios.map((scenario, idx) => {
+                      const data = runPredictionData[algo].find((d: any) => d.Scenario === scenario);
+                      if (!data) return null;
+                      return (
+                        <tr key={`${algo}-${scenario}`} style={{ 
+                          borderBottom: idx === 3 ? '2px solid var(--border-color)' : '1px solid #f3f4f6',
+                          backgroundColor: algo === 'GANomics' ? 'rgba(24, 144, 255, 0.02)' : 'transparent'
+                        }} className="hover-row">
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: idx === 0 ? '700' : '400', color: idx === 0 ? 'inherit' : 'transparent' }}>
+                            {algo}
+                          </td>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: '500', color: 'var(--text-muted)' }}>{scenario}</td>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: scenario === 'Syn->Real' ? '700' : '400', color: scenario === 'Syn->Real' && data.MCC > 0.7 ? 'var(--success-color)' : 'inherit' }}>{data.MCC.toFixed(4)}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>{data.Accuracy.toFixed(4)}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>{data.Precision.toFixed(4)}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>{data.Recall.toFixed(4)}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>{data.F1.toFixed(4)}</td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const renderDegAnalysis = () => {
+    if (!runDegData) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
+    if (Object.keys(runDegData).length === 0) return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No DEG results found for this run.</div>;
+
+    const algos = Object.keys(runDegData);
+    const colors = {
+      GANomics: 'var(--primary-color)',
+      ComBat: '#818cf8',
+      CuBlock: '#ec4899',
+      QN: '#f59e0b',
+      TDM: '#10b981',
+      YuGene: '#6366f1'
+    };
+
+    // Prepare data for Recharts: array of { threshold, GANomics, ComBat, ... }
+    // First, find all unique thresholds
+    const allThresholds = Array.from(new Set(
+      Object.values(runDegData).flatMap((points: any) => points.map((p: any) => p.threshold))
+    )).sort((a: any, b: any) => a - b);
+
+    const chartData = allThresholds.map(t => {
+      const entry: any = { threshold: t, label: `p<${t}` };
+      algos.forEach(algo => {
+        const point = runDegData[algo].find((p: any) => p.threshold === t);
+        if (point) entry[algo] = point.jaccard;
+      });
+      return entry;
+    });
+
+    return (
+      <div className="card" style={{ padding: '2rem' }}>
+        <div style={{ marginBottom: '2rem' }}>
+          <h3 style={{ margin: 0 }}>Jaccard Similarity (Bio-Marker Preservation)</h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+            Measures the overlap between differentially expressed genes (DEGs) in real vs. fake data. 
+            Higher jaccard index indicates better preservation of biological signals.
+          </p>
+        </div>
+
+        <div style={{ height: '500px' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 40 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="label" fontSize={11} />
+              <YAxis domain={[0, 1]} fontSize={11} label={{ value: 'Jaccard Index', angle: -90, position: 'insideLeft', fontSize: 12 }} />
+              <Tooltip 
+                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+                formatter={(val: number) => val.toFixed(4)}
+              />
+              <Legend verticalAlign="top" align="right" height={36} iconType="circle" />
+              {algos.map(algo => (
+                <Line 
+                  key={algo} 
+                  type="monotone" 
+                  dataKey={algo} 
+                  stroke={colors[algo as keyof typeof colors] || '#94a3b8'} 
+                  strokeWidth={algo === 'GANomics' ? 3 : 2}
+                  dot={{ r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    );
+  };
 
   const renderComparativeAnalysis = () => {
     if (!runComparativeData) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
@@ -695,6 +946,20 @@ const App: React.FC = () => {
       );
     }
 
+    if (taskView === 'sync') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="chip" onClick={() => setTaskView('overview')} style={{ padding: '0.5rem' }}>
+              <ArrowLeft size={18} />
+            </button>
+            <h2 style={{ margin: 0 }}>Sync Data Details: {selectedRunId}</h2>
+          </div>
+          {renderSyncStatus()}
+        </div>
+      );
+    }
+
     if (taskView === 'comparative') {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -705,6 +970,34 @@ const App: React.FC = () => {
             <h2 style={{ margin: 0 }}>Comparative Analysis: {selectedRunId}</h2>
           </div>
           {renderComparativeAnalysis()}
+        </div>
+      );
+    }
+
+    if (taskView === 'deg') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="chip" onClick={() => setTaskView('overview')} style={{ padding: '0.5rem' }}>
+              <ArrowLeft size={18} />
+            </button>
+            <h2 style={{ margin: 0 }}>Bio-Marker Analysis (DEG): {selectedRunId}</h2>
+          </div>
+          {renderDegAnalysis()}
+        </div>
+      );
+    }
+
+    if (taskView === 'prediction') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="chip" onClick={() => setTaskView('overview')} style={{ padding: '0.5rem' }}>
+              <ArrowLeft size={18} />
+            </button>
+            <h2 style={{ margin: 0 }}>Prediction Model Performance: {selectedRunId}</h2>
+          </div>
+          {renderPredictionAnalysis()}
         </div>
       );
     }
@@ -727,6 +1020,9 @@ const App: React.FC = () => {
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>2. Sync Data</div>
             <StatusButton label={status?.sync ? 'Generated' : 'Pending'} status={status?.sync || false} />
+            {status?.sync && (
+              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchSyncStatus(selectedRunId)}>View Details</button>
+            )}
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>3. Comparative</div>
@@ -738,6 +1034,9 @@ const App: React.FC = () => {
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>4. DEG</div>
             <StatusButton label={isSizeTask ? (status?.deg ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
+            {isSizeTask && status?.deg && (
+              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchDegMetrics(selectedRunId)}>View Results</button>
+            )}
           </section>
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>5. Pathway</div>
@@ -746,6 +1045,9 @@ const App: React.FC = () => {
           <section className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center', opacity: isSizeTask ? 1 : 0.5 }}>
             <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>6. Pred. Model</div>
             <StatusButton label={isSizeTask ? (status?.pred_model ? 'Done' : 'Pending') : 'Unavailable'} status={isSizeTask ? (status?.pred_model || false) : 'unavailable'} />
+            {isSizeTask && status?.pred_model && (
+              <button className="chip" style={{ fontSize: '0.75rem' }} onClick={() => fetchPredictionMetrics(selectedRunId)}>View Results</button>
+            )}
           </section>
         </div>
       </div>
@@ -800,9 +1102,6 @@ const App: React.FC = () => {
           <a className={`nav-item ${activeTab === 'train' && !selectedRunId ? 'active' : ''}`} onClick={() => { setActiveTab('train'); setSelectedRunId(null); setTaskView('overview'); }}>
             <LayoutDashboard size={18} /> Project
           </a>
-          <a className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => { setActiveTab('analysis'); setSelectedRunId(null); setTaskView('overview'); }}>
-            <BarChart3 size={18} /> Global Analysis
-          </a>
 
           {selectedRunId && (
             <>
@@ -818,8 +1117,10 @@ const App: React.FC = () => {
               />
               <StepItem 
                 num="2" label="Sync Data" 
+                active={taskView === 'sync'}
                 status={status?.sync}
-                disabled={true} 
+                disabled={!status?.sync} 
+                onClick={() => fetchSyncStatus(selectedRunId)}
               />
               <StepItem 
                 num="3" label="Comparative" 
@@ -828,14 +1129,43 @@ const App: React.FC = () => {
                 disabled={!isSizeTask || !status?.comparative}
                 onClick={() => fetchComparativeMetrics(selectedRunId)}
               />
-              <StepItem num="4" label="DEG" status={isSizeTask ? status?.deg : 'unavailable'} disabled={true} />
+              <StepItem 
+                num="4" label="DEG" 
+                active={taskView === 'deg'}
+                status={isSizeTask ? status?.deg : 'unavailable'} 
+                disabled={!isSizeTask || !status?.deg} 
+                onClick={() => fetchDegMetrics(selectedRunId)}
+              />
               <StepItem num="5" label="Pathway" status={isSizeTask ? status?.pathway : 'unavailable'} disabled={true} />
-              <StepItem num="6" label="Pred. Model" status={isSizeTask ? status?.pred_model : 'unavailable'} disabled={true} />
+              <StepItem 
+                num="6" label="Pred. Model" 
+                active={taskView === 'prediction'}
+                status={isSizeTask ? status?.pred_model : 'unavailable'} 
+                disabled={!isSizeTask || !status?.pred_model} 
+                onClick={() => fetchPredictionMetrics(selectedRunId)}
+              />
             </>
           )}
 
           <div style={{ marginTop: 'auto', padding: '1rem' }}>
-            <div className="nav-item"><Database size={18} /> Datasets</div>
+            {previouslySelected.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ padding: '0 0 0.5rem 0', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                   Quick Re-visit
+                </div>
+                {previouslySelected.map(runId => (
+                  <div 
+                    key={runId} 
+                    className={`nav-item ${selectedRunId === runId ? 'active' : ''}`}
+                    onClick={() => { setSelectedRunId(runId); setTaskView('overview'); }}
+                    style={{ fontSize: '0.7rem', padding: '0.4rem 0.75rem', borderRadius: '6px', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    title={runId}
+                  >
+                    {runId}
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="nav-item"><Settings size={18} /> Settings</div>
           </div>
         </nav>

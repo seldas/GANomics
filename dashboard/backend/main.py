@@ -133,21 +133,11 @@ async def get_results_status():
     checkpoints = os.listdir(CHECKPOINTS_DIR) if os.path.exists(CHECKPOINTS_DIR) else []
     logs = [l.replace("_log.txt", "") for l in os.listdir(LOGS_DIR) if l.endswith("_log.txt")]
     
-    # Define status for each log (run)
+        # Define status for each log (run)
     run_statuses = {}
     now = time.time()
     for run_id in logs:
-        parts = run_id.split("_")
-        project = parts[0]
-        
-        size = "50" # default
-        run_idx = "0"
-        if "Size" in parts:
-            size = parts[parts.index("Size") + 1]
-        if "Run" in parts:
-            run_idx = parts[parts.index("Run") + 1]
-            
-        sync_folder = f"{project}_{size}_{run_idx}"
+        sync_folder = run_id
         sync_path = os.path.join(SYNC_DATA_DIR, sync_folder, "test", "microarray_fake.csv")
         log_path = os.path.join(LOGS_DIR, f"{run_id}_log.txt")
         
@@ -161,9 +151,9 @@ async def get_results_status():
             "training": "running" if is_running else ("completed" if run_id in checkpoints else "idle"),
             "sync": os.path.exists(sync_path),
             "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")),
-            "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Table_Fig9a_Jaccard_Curve_GANomics.csv")),
+            "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Jaccard_Curve_GANomics.csv")),
             "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", run_id, "Table_Fig9_Null_Dist_GANomics.csv")),
-            "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", run_id, "Table_4_Classifier_Performance_GANomics.csv")),
+            "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", run_id, "Classifier_Performance_GANomics.csv")),
         }
 
     return {
@@ -280,6 +270,93 @@ async def get_run_comparative_metrics(run_id: str):
     except Exception as e: 
         print(f"Error reading comparative metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/runs/{run_id}/sync")
+async def get_run_sync_status(run_id: str):
+    run_dir = os.path.join(SYNC_DATA_DIR, run_id)
+    if not os.path.exists(run_dir):
+        return {"exists": False, "details": {}}
+    
+    status = {
+        "exists": True,
+        "details": {
+            "train": {
+                "Microarray": {
+                    "Real": os.path.exists(os.path.join(run_dir, "train", "microarray_real.csv")),
+                    "Fake": os.path.exists(os.path.join(run_dir, "train", "microarray_fake.csv")),
+                },
+                "RNA-Seq": {
+                    "Real": os.path.exists(os.path.join(run_dir, "train", "rnaseq_real.csv")),
+                    "Fake": os.path.exists(os.path.join(run_dir, "train", "rnaseq_fake.csv")),
+                }
+            },
+            "test": {
+                "Microarray": {
+                    "Real": os.path.exists(os.path.join(run_dir, "test", "microarray_real.csv")),
+                    "Fake": os.path.exists(os.path.join(run_dir, "test", "microarray_fake.csv")),
+                },
+                "RNA-Seq": {
+                    "Real": os.path.exists(os.path.join(run_dir, "test", "rnaseq_real.csv")),
+                    "Fake": os.path.exists(os.path.join(run_dir, "test", "rnaseq_fake.csv")),
+                }
+            },
+            "algorithms": {
+                "Microarray": {
+                    "ComBat": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_combat.csv")),
+                    "CuBlock": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_cublock.csv")),
+                    "QN": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_qn.csv")),
+                    "TDM": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_tdm.csv")),
+                    "YuGene": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_yugene.csv")),
+                },
+                "RNA-Seq": {
+                    "ComBat": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_combat.csv")),
+                    "CuBlock": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_cublock.csv")),
+                    "QN": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_qn.csv")),
+                    "TDM": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_tdm.csv")),
+                    "YuGene": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_yugene.csv")),
+                }
+            }
+        }
+    }
+    return status
+
+@app.get("/api/runs/{run_id}/deg")
+async def get_run_deg_metrics(run_id: str):
+    deg_dir = os.path.join(BIOMARKERS_DIR, "DEG", run_id)
+    if not os.path.exists(deg_dir):
+        raise HTTPException(status_code=404, detail="DEG results not found")
+    
+    results = {}
+    for f in os.listdir(deg_dir):
+        if f.startswith("Jaccard_Curve_") and f.endswith(".csv"):
+            algo = f.replace("Jaccard_Curve_", "").replace(".csv", "")
+            try:
+                df = pd.read_csv(os.path.join(deg_dir, f))
+                # Ensure it has threshold and jaccard
+                if 'threshold' in df.columns and 'jaccard' in df.columns:
+                    results[algo] = df.to_dict(orient="records")
+            except Exception as e:
+                print(f"Error reading {f}: {e}")
+                
+    return results
+
+@app.get("/api/runs/{run_id}/prediction")
+async def get_run_prediction_metrics(run_id: str):
+    pred_dir = os.path.join(BIOMARKERS_DIR, "Prediction", run_id)
+    if not os.path.exists(pred_dir):
+        raise HTTPException(status_code=404, detail="Prediction results not found")
+    
+    results = {}
+    for f in os.listdir(pred_dir):
+        if f.startswith("Classifier_Performance_") and f.endswith(".csv"):
+            algo = f.replace("Classifier_Performance_", "").replace(".csv", "")
+            try:
+                df = pd.read_csv(os.path.join(pred_dir, f))
+                results[algo] = df.to_dict(orient="records")
+            except Exception as e:
+                print(f"Error reading {f}: {e}")
+                
+    return results
 
 if __name__ == "__main__":
     import uvicorn
