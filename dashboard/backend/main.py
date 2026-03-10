@@ -70,6 +70,7 @@ class ProjectInfo(BaseModel):
     genes: int
     samples: int
     config_path: str
+    has_label: bool
     config: Optional[dict] = None
 
 class TrainRequest(BaseModel):
@@ -149,14 +150,86 @@ async def list_projects():
                 pid = os.path.basename(root).upper()
                 genes, samples = get_project_stats(full_path)
                 
+                # Check for label.txt
+                has_label = os.path.exists(os.path.join(root, "label.txt"))
+                
                 config_data = {}
                 try:
                     with open(full_path, 'r') as f:
                         config_data = yaml.safe_load(f)
                 except: pass
                 
-                projects.append(ProjectInfo(id=pid, name=pid, genes=genes, samples=samples, config_path=full_path, config=config_data))
+                projects.append(ProjectInfo(id=pid, name=pid, genes=genes, samples=samples, config_path=full_path, has_label=has_label, config=config_data))
     return projects
+
+from fastapi import UploadFile, File
+from fastapi.responses import FileResponse
+
+@app.get("/api/projects/{project_id}/samples/download")
+async def download_samples(project_id: str):
+    # Find project directory
+    proj_dir = os.path.join(DATASET_DIR, project_id)
+    # Handle case-sensitivity/heuristic
+    if not os.path.exists(proj_dir):
+        for d in os.listdir(DATASET_DIR):
+            if d.upper() == project_id.upper():
+                proj_dir = os.path.join(DATASET_DIR, d)
+                break
+    
+    samples_path = os.path.join(proj_dir, "samples.tsv")
+    if not os.path.exists(samples_path):
+        raise HTTPException(status_code=404, detail="samples.tsv not found for this project")
+    
+    return FileResponse(samples_path, filename=f"{project_id}_samples.tsv")
+
+@app.post("/api/projects/{project_id}/labels/upload")
+async def upload_labels(project_id: str, file: UploadFile = File(...)):
+    # Find project directory
+    proj_dir = os.path.join(DATASET_DIR, project_id)
+    if not os.path.exists(proj_dir):
+        for d in os.listdir(DATASET_DIR):
+            if d.upper() == project_id.upper():
+                proj_dir = os.path.join(DATASET_DIR, d)
+                break
+    
+    if not os.path.exists(proj_dir):
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    # Save to temporary location first for validation
+    temp_path = os.path.join(proj_dir, "label_temp.txt")
+    with open(temp_path, "wb") as f:
+        f.write(await file.read())
+    
+    try:
+        # Validation
+        # 1. Check if it's readable and has correct columns
+        df_uploaded = pd.read_csv(temp_path)
+        if 'sample_id' not in df_uploaded.columns or 'label' not in df_uploaded.columns:
+            os.remove(temp_path)
+            raise HTTPException(status_code=400, detail="label.txt must contain 'sample_id' and 'label' columns")
+        
+        # 2. Check against samples.tsv
+        samples_path = os.path.join(proj_dir, "samples.tsv")
+        if os.path.exists(samples_path):
+            df_samples = pd.read_csv(samples_path, sep='\t')
+            valid_ids = set(df_samples['sample_id'])
+            uploaded_ids = set(df_uploaded['sample_id'])
+            
+            invalid_ids = uploaded_ids - valid_ids
+            if len(invalid_ids) > 0:
+                os.remove(temp_path)
+                raise HTTPException(status_code=400, detail=f"Uploaded labels contain invalid sample IDs: {list(invalid_ids)[:5]}...")
+        
+        # Validation passed, rename to label.txt
+        final_path = os.path.join(proj_dir, "label.txt")
+        if os.path.exists(final_path): os.remove(final_path)
+        os.rename(temp_path, final_path)
+        
+        return {"message": "label.txt uploaded and validated successfully"}
+    except Exception as e:
+        if os.path.exists(temp_path): os.remove(temp_path)
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/results")
 async def get_results_status():
@@ -434,13 +507,13 @@ async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] =
             raise HTTPException(status_code=400, detail="Step 2 requires config_path")
         cmd += ["--config", config_path]
     
-    # Step 4 might need labels (defaults to NB clinical_info)
+    # Step 4 might need labels (defaults to NB label.txt)
     if step == 4:
         # Check if project is NB or other to set labels
         if "NB" in run_id:
-            cmd += ["--labels", os.path.join(DATASET_DIR, "NB", "clinical_info.tsv")]
+            cmd += ["--labels", os.path.join(DATASET_DIR, "NB", "label.txt")]
         elif "METSIM" in run_id:
-            cmd += ["--labels", os.path.join(DATASET_DIR, "METSIM", "clinical_info.tsv")]
+            cmd += ["--labels", os.path.join(DATASET_DIR, "METSIM", "label.txt")]
             
     print(f"Running step {step} command: {' '.join(cmd)}")
     
