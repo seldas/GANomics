@@ -106,8 +106,6 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
     const filteredItems = items.filter(id => {
       const status = resultsStatus.run_statuses?.[id];
-      
-      // 1. Global Step Filter
       if (globalStepFilter !== 'all') {
         if (globalStepFilter === 'training') {
           if (status?.training !== 'completed') return false;
@@ -116,7 +114,6 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           if (!status?.[stepKey]) return false;
         }
       }
-
       const key = filterKey;
       if (statusFilters[key] === 'all') return true;
       if (statusFilters[key] === 'running') return status?.training === 'running';
@@ -125,9 +122,19 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       return true;
     });
 
+    // Grouping logic for Repeats (Run_0, Run_1, etc.)
+    const groups: Record<string, string[]> = {};
+    filteredItems.forEach(id => {
+      const baseId = id.replace(/_Run_\d+$/, '');
+      if (!groups[baseId]) groups[baseId] = [];
+      groups[baseId].push(id);
+    });
+
     return (
       <div style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem' }}>
+        <div 
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem' }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }} onClick={() => togglePanel(filterKey)}>
               {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
@@ -156,24 +163,60 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         </div>
         
         {!isCollapsed && (
-          <div className="queue-list">
-            {filteredItems.map(runId => {
-              const status = resultsStatus.run_statuses?.[runId];
-              const isSizeTask = runId.includes("Size") && !runId.includes("Architecture");
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {Object.entries(groups).map(([baseId, runIds]) => {
+              const isExpanded = collapsedPanels[baseId];
+              const statuses = runIds.map(rid => resultsStatus.run_statuses?.[rid]);
+              const runningCount = statuses.filter(s => s?.training === 'running').length;
+              const completedCount = statuses.filter(s => s?.training === 'completed').length;
+              
               return (
-                <div key={runId} className="queue-item" onClick={() => onSelectRun(runId)} style={{ cursor: 'pointer', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
-                  <div style={{ fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {runId}
-                    {status?.training === 'running' && <Loader2 size={12} className="animate-spin" style={{ color: '#1890ff' }} />}
+                <div key={baseId} className="card" style={{ margin: 0, padding: '0.75rem', border: '1px solid #e2e8f0', backgroundColor: '#fdfdfd' }}>
+                  <div 
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                    onClick={() => togglePanel(baseId)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {runIds.length > 1 ? (isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : <div style={{ width: 14 }} />}
+                      <span style={{ fontWeight: '700', fontSize: '0.85rem' }}>{baseId}</span>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {runningCount > 0 && <span className="status-badge status-running" style={{ fontSize: '0.6rem', padding: '1px 6px' }}>{runningCount} Running</span>}
+                        {completedCount > 0 && <span className="status-badge status-success" style={{ fontSize: '0.6rem', padding: '1px 6px' }}>{completedCount} / {runIds.length} Done</span>}
+                      </div>
+                    </div>
+                    {runIds.length === 1 && (
+                      <button className="chip" style={{ fontSize: '0.7rem' }} onClick={(e) => { e.stopPropagation(); onSelectRun(runIds[0]); }}>Open Task</button>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                    <StatusButton label="Training" status={status?.training || 'idle'} />
-                    <StatusButton label="Sync Data" status={status?.sync || false} />
-                    <StatusButton label="Comparative" status={isSizeTask ? (status?.comparative || false) : 'unavailable'} />
-                    <StatusButton label="DEG" status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
-                    <StatusButton label="Pathway" status={isSizeTask ? (status?.pathway || false) : 'unavailable'} />
-                    <StatusButton label="Pred. Model" status={isSizeTask ? (status?.pred_model || false) : 'unavailable'} />
-                  </div>
+
+                  {(isExpanded || runIds.length === 1) && (
+                    <div style={{ marginTop: runIds.length > 1 ? '1rem' : '0.5rem', paddingLeft: runIds.length > 1 ? '1.5rem' : '0', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: runIds.length > 1 ? '2px solid #f1f5f9' : 'none' }}>
+                      {runIds.map(runId => {
+                        const status = resultsStatus.run_statuses?.[runId];
+                        const isSizeTask = runId.includes("Size") && !runId.includes("Architecture");
+                        return (
+                          <div 
+                            key={runId} 
+                            className="queue-item" 
+                            onClick={() => onSelectRun(runId)}
+                            style={{ padding: '0.5rem', border: '1px solid #f1f5f9', cursor: 'pointer', borderRadius: '8px' }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                              <div style={{ fontSize: '0.8rem', fontWeight: '500', color: '#475569' }}>
+                                {runIds.length > 1 ? runId.split('_').pop() : runId}
+                              </div>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <StatusButton label="TR" status={status?.training || 'idle'} />
+                                <StatusButton label="SYNC" status={status?.sync || false} />
+                                <StatusButton label="COMP" status={isSizeTask ? (status?.comparative || false) : 'unavailable'} />
+                                <StatusButton label="BIO" status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
