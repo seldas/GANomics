@@ -554,6 +554,7 @@ async def get_results_status():
     run_statuses = {}
     now = time.time()
     for run_id in logs:
+        project_id = run_id.split('_')[0]
         sync_folder = run_id
         sync_path = os.path.join(SYNC_DATA_DIR, sync_folder, "test", "microarray_fake.csv")
         log_path = os.path.join(LOGS_DIR, f"{run_id}_log.txt")
