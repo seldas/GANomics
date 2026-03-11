@@ -115,16 +115,37 @@ def main():
         # Load synthetic data
         syn_ma = pd.read_csv(syn_path, index_col=0).loc[common_idx]
         
-        # A. Prediction Model (Train on Syn -> Test on Real)
+        # A. Prediction Model (Four Scenarios)
         n = len(common_idx) // 2
         train_idx, test_idx = common_idx[:n], common_idx[n:]
         
-        print(f"[{algo_name}] Training Random Forest (Synthetic -> Real)...")
-        metrics = train_eval_rf(syn_ma.loc[train_idx], y.loc[train_idx], real_ma.loc[test_idx], y.loc[test_idx])
+        print(f"[{algo_name}] Running Cross-Platform Prediction Modeling...")
+        
+        all_metrics = []
+        
+        # 1. Real -> Real
+        m_rr = train_eval_rf(real_ma.loc[train_idx], y.loc[train_idx], real_ma.loc[test_idx], y.loc[test_idx])
+        m_rr['Scenario'] = 'Real->Real'
+        all_metrics.append(m_rr)
+        
+        # 2. Real -> Syn
+        m_rs = train_eval_rf(real_ma.loc[train_idx], y.loc[train_idx], syn_ma.loc[test_idx], y.loc[test_idx])
+        m_rs['Scenario'] = 'Real->Syn'
+        all_metrics.append(m_rs)
+        
+        # 3. Syn -> Real
+        m_sr = train_eval_rf(syn_ma.loc[train_idx], y.loc[train_idx], real_ma.loc[test_idx], y.loc[test_idx])
+        m_sr['Scenario'] = 'Syn->Real'
+        all_metrics.append(m_sr)
+        
+        # 4. Syn -> Syn
+        m_ss = train_eval_rf(syn_ma.loc[train_idx], y.loc[train_idx], syn_ma.loc[test_idx], y.loc[test_idx])
+        m_ss['Scenario'] = 'Syn->Syn'
+        all_metrics.append(m_ss)
         
         pred_dir = os.path.join(out_root, "Prediction", args.run_id) if not args.ext_id else os.path.join(out_root, "Prediction")
         os.makedirs(pred_dir, exist_ok=True)
-        pd.DataFrame([metrics]).to_csv(os.path.join(pred_dir, f"Classifier_Performance_{algo_name}.csv"), index=False)
+        pd.DataFrame(all_metrics).to_csv(os.path.join(pred_dir, f"Classifier_Performance_{algo_name}.csv"), index=False)
 
         # B. DEG Analysis
         print(f"[{algo_name}] Running DEG Analysis...")

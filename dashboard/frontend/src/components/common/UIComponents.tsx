@@ -22,6 +22,38 @@ export const StatusButton = ({ label, status }: { label: string, status: 'runnin
   return <div className={className} style={style}>{label}</div>;
 };
 
+export const StepItem = ({ num, label, active, status, onClick, disabled }: any) => (
+  <div 
+    onClick={!disabled ? onClick : undefined} 
+    className={`nav-item ${active ? 'active' : ''} ${disabled ? 'disabled' : ''}`} 
+    style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '12px', 
+      paddingLeft: '24px', 
+      fontSize: '0.85rem', 
+      opacity: disabled ? 0.5 : 1,
+      cursor: disabled ? 'not-allowed' : 'pointer'
+    }}
+  >
+    <div style={{ 
+      width: '20px', 
+      height: '20px', 
+      borderRadius: '50%', 
+      backgroundColor: active ? 'var(--primary-color)' : (status === 'completed' || status === true ? 'var(--success-color)' : '#e5e7eb'), 
+      color: 'white', 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      fontSize: '0.7rem',
+      fontWeight: 'bold'
+    }}>
+      {num}
+    </div>
+    <span style={{ flex: 1 }}>{label}</span>
+  </div>
+);
+
 export const FileUploadBox = ({ label, file, setFile, accept, required }: any) => (
   <div style={{ marginBottom: '1.5rem' }}>
     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-main)' }}>

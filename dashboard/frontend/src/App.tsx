@@ -11,7 +11,7 @@ import {
 
 import type { Project, RunStatus, ResultsStatus, LogResponse } from './types';
 import { API_BASE, SIZES, BETAS, LAMBDAS } from './constants';
-import { StatusButton, FileUploadBox, MetaPanel } from './components/common/UIComponents';
+import { StatusButton, StepItem, FileUploadBox, MetaPanel } from './components/common/UIComponents';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { SyncExternalModal } from './components/modals/SyncExternalModal';
 import { ProjectDashboard } from './components/dashboard/ProjectDashboard';

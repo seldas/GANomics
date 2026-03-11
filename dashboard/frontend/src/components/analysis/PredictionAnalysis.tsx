@@ -14,9 +14,9 @@ export const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ data }) 
   return (
     <section className="card">
       <div style={{ marginBottom: '1.5rem' }}>
-        <h3>Classifier Performance (Syn-&gt;Real)</h3>
+        <h3>Classifier Performance Analysis</h3>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          Random Forest models trained on synthetic data and evaluated on independent real microarray test samples.
+          Random Forest models evaluated across multiple cross-platform scenarios (Real vs Synthetic).
         </p>
       </div>
       
@@ -27,19 +27,23 @@ export const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ data }) 
               <th style={{ padding: '1rem' }}>Algorithm</th>
               <th style={{ padding: '1rem' }}>Scenario</th>
               <th style={{ padding: '1rem', textAlign: 'right' }}>MCC</th>
+              <th style={{ padding: '1rem', textAlign: 'right' }}>Accuracy</th>
+              <th style={{ padding: '1rem', textAlign: 'right' }}>Recall</th>
+              <th style={{ padding: '1rem', textAlign: 'right' }}>Precision</th>
               <th style={{ padding: '1rem', textAlign: 'right' }}>F1 Score</th>
-              <th style={{ padding: '1rem', textAlign: 'right' }}>AUC</th>
             </tr>
           </thead>
           <tbody>
             {algos.map(algo => (
-              data[algo].filter((d: any) => d.Scenario === 'Syn->Real').map((d: any, i: number) => (
+              data[algo].map((d: any, i: number) => (
                 <tr key={`${algo}-${i}`} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: algo === 'GANomics' ? '#f0fdf4' : 'transparent' }}>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 'bold' }}>{algo}</td>
+                  <td style={{ padding: '0.75rem 1rem', fontWeight: 'bold' }}>{i === 0 ? algo : ''}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>{d.Scenario}</td>
                   <td style={{ padding: '0.75rem 1rem', textAlign: 'right', fontWeight: '600' }}>{d.MCC.toFixed(4)}</td>
+                  <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>{d.Accuracy.toFixed(4)}</td>
+                  <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>{d.Recall.toFixed(4)}</td>
+                  <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>{d.Precision.toFixed(4)}</td>
                   <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>{d.F1.toFixed(4)}</td>
-                  <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>{d.AUC?.toFixed(4) || 'N/A'}</td>
                 </tr>
               ))
             ))}
