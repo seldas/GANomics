@@ -29,6 +29,7 @@ def main():
 
     # 1. Paths Setup
     sync_root = resolve_path(os.path.join("results", "2_SyncData", args.run_id))
+    dataset_dir = resolve_path("dataset")
     
     if args.ext_id:
         ext_dir = os.path.join(sync_root, args.ext_id)
@@ -43,7 +44,7 @@ def main():
         
         # Metadata from dataset folder
         project_id = args.run_id.split('_')[0]
-        ext_data_dir = os.path.join(backend_dir, "dataset", project_id, args.ext_id)
+        ext_data_dir = os.path.join(dataset_dir, project_id, args.ext_id)
         
         # Labels for external test
         label_path = args.labels if args.labels else os.path.join(ext_data_dir, "label.txt")
@@ -66,7 +67,7 @@ def main():
         if not label_path:
             # Try default project label
             project_id = args.run_id.split('_')[0]
-            label_path = os.path.join(backend_dir, "dataset", project_id, "label.txt")
+            label_path = os.path.join(dataset_dir, project_id, "label.txt")
             
         profiles = [
             ('GANomics', os.path.join(test_dir, "microarray_fake.csv"))
@@ -99,7 +100,7 @@ def main():
     deg_real = run_deg_analysis(real_ma, y)
 
     # 5. Load Mapping Table for Pathway Analysis
-    mapping_path = os.path.join(DATASET_DIR, project_id, "gene_mapping.tsv")
+    mapping_path = os.path.join(dataset_dir, project_id, "gene_mapping.tsv")
     gene_map = None
     if os.path.exists(mapping_path):
         print(f"Loading gene mapping from {mapping_path}...")

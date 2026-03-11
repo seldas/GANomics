@@ -93,7 +93,7 @@ def run_tsne_analysis(df_ma_real, df_ma_fake, df_rs_real, df_rs_fake):
     n_samples = len(combined_data)
     perp = min(30, max(5, n_samples // 4))
     
-    tsne = TSNE(n_components=2, random_state=42, perplexity=perp, n_iter=1000)
+    tsne = TSNE(n_components=2, random_state=42, perplexity=perp, max_iter=1000)
     tsne_results = tsne.fit_transform(scaled_data)
     
     # 4. Format for JSON/CSV
