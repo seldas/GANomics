@@ -1,0 +1,39 @@
+dataset:
+  force_index_mapping: true
+  max_samples: 588
+  path_A: dataset/BRCA-2/df_ag.tsv
+  path_B: dataset/BRCA-2/df_rs.tsv
+default_ablation:
+  beta: 10.0
+  lambda: 10.0
+  size: 50
+metadata:
+  description: 'obtained via Synapse (microarray: syn2319914; RNA seq: syn2320114)'
+  genes: 15686
+  name: BRCA-2
+  samples: 588
+model:
+  gan_mode: lsgan
+  input_nc: 15686
+  lambda_A: 10.0
+  lambda_B: 10.0
+  lambda_feedback: 10.0
+  lambda_idt: 0.5
+  output_nc: 15686
+optimizer:
+  beta1: 0.5
+  beta2: 0.999
+  lr: 0.0002
+output:
+  checkpoints_dir: results/1_Training/checkpoints
+  logs_dir: results/1_Training/logs
+  name: BRCA-2_GANomics
+train:
+  batch_size: 1
+  device: cuda:0
+  explosion_factor: 3.0
+  n_epochs: 500
+  n_epochs_decay: 50
+  print_freq: 10
+  save_epoch_freq: 10
+  seed: 42

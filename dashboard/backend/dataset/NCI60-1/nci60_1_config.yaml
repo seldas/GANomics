@@ -1,15 +1,15 @@
 dataset:
   max_samples: 59
-  path_A: dataset/NCI60/NCI601_ag.tsv
-  path_B: dataset/NCI60/NCI601_rs.tsv
+  path_A: dataset/NCI60-1/df_ag.tsv
+  path_B: dataset/NCI60-1/df_rs.tsv
 default_ablation:
   beta: 10.0
   lambda: 10.0
   size: 50
 metadata:
-  description: Dataset for NCI60 project.
+  description: Dataset for NCI60 project (subset-1).
   genes: 8784
-  name: NCI60
+  name: NCI60-1
   samples: 59
 model:
   gan_mode: lsgan

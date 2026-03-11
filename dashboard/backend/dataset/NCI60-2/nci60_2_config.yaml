@@ -1,7 +1,7 @@
 dataset:
   max_samples: 59
-  path_A: dataset/NCI60-2/NCI602_ag.tsv
-  path_B: dataset/NCI60-2/NCI602_rs.tsv
+  path_A: dataset/NCI60-2/df_ag.tsv
+  path_B: dataset/NCI60-2/df_rs.tsv
 default_ablation:
   beta: 10.0
   lambda: 10.0

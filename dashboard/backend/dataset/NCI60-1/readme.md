@@ -1,1 +1,0 @@
-this folder is for NCI60-1 dataset.
