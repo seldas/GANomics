@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import type { Project, ResultsStatus } from '../../types';
 import { StatusButton } from '../common/UIComponents';
+import { AblationCharts } from '../analysis/AblationCharts';
 
 interface ProjectDashboardProps {
   projects: Project[];
@@ -16,11 +17,15 @@ interface ProjectDashboardProps {
   onStopTask: (id: string) => void;
   onRestartTask: (id: string) => void;
   onFetchLogs: (id: string) => void;
+  ablationData: any[];
+  sensitivityType: 'beta' | 'lambda';
+  onSetSensitivityType: (type: 'beta' | 'lambda') => void;
 }
 
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   projects, selectedProject, onSelectProject, resultsStatus, onSelectRun, 
-  onFetchAblationLogs, onStopTask, onRestartTask, onFetchLogs
+  onFetchAblationLogs, onStopTask, onRestartTask, onFetchLogs,
+  ablationData, sensitivityType, onSetSensitivityType
 }) => {
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
   const [statusFilters, setStatusFilters] = useState<Record<string, string>>({
@@ -212,6 +217,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             ))}
           </div>
         </section>
+
+        <AblationCharts ablationData={ablationData} sensitivityType={sensitivityType} onSetSensitivityType={onSetSensitivityType} />
 
         <section className="card" style={{ padding: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>

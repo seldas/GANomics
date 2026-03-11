@@ -2,6 +2,7 @@ import React from 'react';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
+import { Activity, Info } from 'lucide-react';
 
 interface AblationChartsProps {
   ablationData: any[];

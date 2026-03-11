@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { 
   LayoutDashboard, Activity, X, Loader2, ChevronsLeft, ChevronsRight, ArrowLeft, RotateCcw, 
-  ChevronRight, Info, Plus, Download, Upload, LineChart as LineChartIcon, Table as TableIcon
+  ChevronRight, Info, Plus, Download, Upload, LineChart as LineChartIcon, Table as TableIcon,
+  Settings
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -273,10 +274,18 @@ const App: React.FC = () => {
       <aside className="sidebar">
         <div className="sidebar-header"><Activity size={24} /><span>GANomics Dashboard</span></div>
         <nav className="nav-menu">
-          <div style={{ padding: '1rem' }}><button className="chip selected" style={{ width: '100%' }} onClick={() => setActiveTab('new-session')}><Plus size={18} /> New Experiment</button></div>
+          <div style={{ padding: '1rem' }}><button className="chip selected" style={{ width: '100%', padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 'bold' }} onClick={() => setActiveTab('new-session')}><Plus size={18} /> New Experiment</button></div>
+          <div style={{ padding: '0.5rem 1rem', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Menu</div>
           <a className={`nav-item ${activeTab === 'train' && !selectedRunId ? 'active' : ''}`} onClick={() => { setActiveTab('train'); setSelectedRunId(null); }}><LayoutDashboard size={18} /> Project Dashboard</a>
-          <a className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}><LineChartIcon size={18} /> Ablation Analysis</a>
-          <div style={{ marginTop: 'auto', padding: '1rem' }}><div className="nav-item" onClick={() => setShowSettingsModal(true)}><Upload size={18} /> Create Project</div></div>
+          {selectedRunId && (
+            <><div style={{ padding: '1.5rem 1rem 0.5rem 1rem', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Task Pipeline</div>
+              <StepItem num="1" label="Training" active={taskView === 'training'} status={status?.training} onClick={() => setTaskView('training')} />
+              <StepItem num="2" label="Sync Data" active={taskView === 'sync'} status={status?.sync} onClick={() => setTaskView('sync')} />
+              <StepItem num="3" label="Comparative" active={taskView === 'comparative'} status={status?.comparative} onClick={() => setTaskView('comparative')} />
+              <StepItem num="4" label="Bio-markers" active={['deg','pathway','prediction'].includes(taskView)} status={status?.deg} onClick={() => setTaskView('deg')} />
+            </>
+          )}
+          <div style={{ marginTop: 'auto', padding: '1rem' }}><div className="nav-item" onClick={() => setShowSettingsModal(true)}><Settings size={18} /> Create Project</div></div>
         </nav>
       </aside>
 
@@ -315,8 +324,6 @@ const App: React.FC = () => {
             useGpu={useGpu} setUseGpu={setUseGpu} onStartSession={handleStartSession}
             onBack={() => setActiveTab('train')} toggleSelection={toggleSelection}
           />
-        ) : activeTab === 'analysis' ? (
-          <AblationCharts ablationData={ablationData} sensitivityType={sensitivityType} onSetSensitivityType={setSensitivityType} />
         ) : selectedRunId ? (
           <TaskDashboard 
             selectedRunId={selectedRunId} selectedExtId={selectedExtId} runStatus={runStatus} status={status}
@@ -336,6 +343,7 @@ const App: React.FC = () => {
             resultsStatus={resultsStatus} onSelectRun={(id) => setSelectedRunId(id)}
             onFetchAblationLogs={fetchAblationLogs}
             onStopTask={handleStopTask} onRestartTask={handleRestartTask} onFetchLogs={fetchLogs}
+            ablationData={ablationData} sensitivityType={sensitivityType} onSetSensitivityType={setSensitivityType}
           />
         )}
       </main>

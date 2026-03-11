@@ -45,12 +45,44 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
   logData, runSyncData, runComparativeData, runDegData, runPathwayData, runPredictionData
 }) => {
 
-  if (taskView === 'training') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><LogViewer logData={logData} runId={selectedRunId} /></div>;
-  if (taskView === 'sync') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><SyncStatusDetails data={runSyncData} /></div>;
-  if (taskView === 'comparative') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><ComparativeAnalysis data={runComparativeData} /></div>;
-  if (taskView === 'deg') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><DegAnalysis data={runDegData} /></div>;
-  if (taskView === 'pathway') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><PathwayAnalysis data={runPathwayData} /></div>;
-  if (taskView === 'prediction') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><PredictionAnalysis data={runPredictionData} /></div>;
+  if (taskView === 'training') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><h2 style={{ margin: 0 }}>Training Performance: {selectedRunId}</h2></div><LogViewer logData={logData} runId={selectedRunId} /></div>;
+  if (taskView === 'sync') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><h2 style={{ margin: 0 }}>Sync Data Details: {selectedRunId}</h2></div><SyncStatusDetails data={runSyncData} /></div>;
+  if (taskView === 'comparative') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><h2 style={{ margin: 0 }}>Comparative Analysis: {selectedRunId}</h2></div><ComparativeAnalysis data={runComparativeData} /></div>;
+  
+  if (['deg', 'pathway', 'prediction'].includes(taskView)) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="chip" onClick={() => onSetTaskView('overview')} style={{ padding: '0.5rem' }}>
+              <ArrowLeft size={18} />
+            </button>
+            <h2 style={{ margin: 0 }}>Bio-marker Analysis: {selectedRunId}</h2>
+          </div>
+          <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: '#f3f4f6', padding: '0.25rem', borderRadius: '8px' }}>
+            <button 
+              className={`chip ${taskView === 'deg' ? 'selected' : ''}`} 
+              style={{ border: 'none' }}
+              onClick={() => fetchDegMetrics(selectedRunId)}
+            >DEG</button>
+            <button 
+              className={`chip ${taskView === 'pathway' ? 'selected' : ''}`} 
+              style={{ border: 'none' }}
+              onClick={() => fetchPathwayMetrics(selectedRunId)}
+            >Pathway</button>
+            <button 
+              className={`chip ${taskView === 'prediction' ? 'selected' : ''}`} 
+              style={{ border: 'none' }}
+              onClick={() => fetchPredictionMetrics(selectedRunId)}
+            >Prediction</button>
+          </div>
+        </div>
+        {taskView === 'deg' && <DegAnalysis data={runDegData} />}
+        {taskView === 'pathway' && <PathwayAnalysis data={runPathwayData} />}
+        {taskView === 'prediction' && <PredictionAnalysis data={runPredictionData} />}
+      </div>
+    );
+  }
 
   const WorkflowArrow = () => <div style={{ display: 'flex', alignItems: 'center', padding: '0 0.5rem', color: '#cbd5e1' }}><ChevronRight size={32} /></div>;
   const WorkflowStep = ({ title, num, statusLabel, stepStatus, children, isActive = true }: any) => (
