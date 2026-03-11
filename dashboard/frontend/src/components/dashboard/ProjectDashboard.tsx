@@ -261,7 +261,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
           </div>
         </section>
 
-        <AblationCharts ablationData={ablationData} sensitivityType={sensitivityType} onSetSensitivityType={onSetSensitivityType} />
+        {/* Ablation Analysis trends hidden for now */}
+        {/* <AblationCharts ablationData={ablationData} sensitivityType={sensitivityType} onSetSensitivityType={onSetSensitivityType} /> */}
 
         <section className="card" style={{ padding: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>

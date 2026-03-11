@@ -9,6 +9,7 @@ import { ComparativeAnalysis } from '../analysis/ComparativeAnalysis';
 import { DegAnalysis } from '../analysis/DegAnalysis';
 import { PathwayAnalysis } from '../analysis/PathwayAnalysis';
 import { PredictionAnalysis } from '../analysis/PredictionAnalysis';
+import { TsneVisualization } from '../analysis/TsneVisualization';
 
 interface TaskDashboardProps {
   selectedRunId: string;
@@ -30,23 +31,38 @@ interface TaskDashboardProps {
   fetchDegMetrics: (id: string) => void;
   fetchPathwayMetrics: (id: string) => void;
   fetchPredictionMetrics: (id: string) => void;
+  fetchTsneCoords: (id: string) => void;
   logData: LogResponse | null;
   runSyncData: any | null;
   runComparativeData: any[] | null;
   runDegData: any | null;
   runPathwayData: any | null;
   runPredictionData: any | null;
+  runTsneData: any[] | null;
 }
 
 export const TaskDashboard: React.FC<TaskDashboardProps> = ({
   selectedRunId, selectedExtId, runStatus, status, isSizeTask, currentProj, taskView,
   onBack, onSetTaskView, onSetSelectedExtId, onShowSyncModal, onRestartTask, onRunStep,
-  fetchLogs, fetchSyncStatus, fetchComparativeMetrics, fetchDegMetrics, fetchPathwayMetrics, fetchPredictionMetrics,
-  logData, runSyncData, runComparativeData, runDegData, runPathwayData, runPredictionData
+  fetchLogs, fetchSyncStatus, fetchComparativeMetrics, fetchDegMetrics, fetchPathwayMetrics, fetchPredictionMetrics, fetchTsneCoords,
+  logData, runSyncData, runComparativeData, runDegData, runPathwayData, runPredictionData, runTsneData
 }) => {
 
   if (taskView === 'training') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><h2 style={{ margin: 0 }}>Training Performance: {selectedRunId}</h2></div><LogViewer logData={logData} runId={selectedRunId} /></div>;
-  if (taskView === 'sync') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><h2 style={{ margin: 0 }}>Sync Data Details: {selectedRunId}</h2></div><SyncStatusDetails data={runSyncData} /></div>;
+  
+  if (taskView === 'sync') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button>
+          <h2 style={{ margin: 0 }}>Sync Data Details: {selectedRunId}</h2>
+        </div>
+        <SyncStatusDetails data={runSyncData} />
+        <TsneVisualization data={runTsneData} />
+      </div>
+    );
+  }
+
   if (taskView === 'comparative') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><h2 style={{ margin: 0 }}>Comparative Analysis: {selectedRunId}</h2></div><ComparativeAnalysis data={runComparativeData} /></div>;
   
   if (['deg', 'pathway', 'prediction'].includes(taskView)) {

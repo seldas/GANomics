@@ -61,6 +61,49 @@ def run_deg_analysis(df, labels, group1=1, group2=0):
     
     return results
 
+from sklearn.manifold import TSNE
+from sklearn.preprocessing import StandardScaler
+
+def run_tsne_analysis(df_ma_real, df_ma_fake, df_rs_real, df_rs_fake):
+    """
+    Compute t-SNE coordinates for the four data groups.
+    """
+    # 1. Combine and Label
+    datasets = [
+        (df_ma_real, 'MA Real'),
+        (df_ma_fake, 'MA Fake'),
+        (df_rs_real, 'RS Real'),
+        (df_rs_fake, 'RS Fake')
+    ]
+    
+    # Filter out None or empty datasets
+    active_datasets = [d for d in datasets if d[0] is not None and not d[0].empty]
+    
+    combined_data = np.vstack([d[0].values for d in active_datasets])
+    labels = []
+    for d, label in active_datasets:
+        labels.extend([label] * len(d))
+        
+    # 2. Standardize
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(combined_data)
+    
+    # 3. Apply t-SNE
+    # Low perplexity for small datasets
+    n_samples = len(combined_data)
+    perp = min(30, max(5, n_samples // 4))
+    
+    tsne = TSNE(n_components=2, random_state=42, perplexity=perp, n_iter=1000)
+    tsne_results = tsne.fit_transform(scaled_data)
+    
+    # 4. Format for JSON/CSV
+    df_tsne = pd.DataFrame({
+        'x': tsne_results[:, 0],
+        'y': tsne_results[:, 1],
+        'label': labels
+    })
+    return df_tsne
+
 def train_eval_rf(train_x, train_y, test_x, test_y):
     """
     Train and evaluate a Random Forest classifier.
