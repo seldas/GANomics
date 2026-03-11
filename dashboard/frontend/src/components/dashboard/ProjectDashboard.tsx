@@ -193,7 +193,6 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                     <div style={{ marginTop: runIds.length > 1 ? '1rem' : '0.5rem', paddingLeft: runIds.length > 1 ? '1.5rem' : '0', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: runIds.length > 1 ? '2px solid #f1f5f9' : 'none' }}>
                       {[...runIds].sort((a, b) => parseInt(a.split('_').pop() || '0', 10) - parseInt(b.split('_').pop() || '0', 10)).map(runId => {
                         const status = resultsStatus.run_statuses?.[runId];
-                        const isSizeTask = runId.includes("Size") && !runId.includes("Architecture");
                         return (
                           <div 
                             key={runId} 
@@ -208,8 +207,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                               <div style={{ display: 'flex', gap: '4px' }}>
                                 <StatusButton label="TR" status={status?.training || 'idle'} />
                                 <StatusButton label="SYNC" status={status?.sync || false} />
-                                <StatusButton label="COMP" status={isSizeTask ? (status?.comparative || false) : 'unavailable'} />
-                                <StatusButton label="BIO" status={isSizeTask ? (status?.deg || false) : 'unavailable'} />
+                                <StatusButton label="COMP" status={status?.comparative || false} />
+                                <StatusButton label="BIO" status={status?.deg || false} />
                               </div>
                             </div>
                           </div>

@@ -1,10 +1,7 @@
 package-lock.json
-/dataset/
 venv/
 
 *.docx
-results/checkpoints/*
-results/sync_data/*
 
 __pycache__/
 results_old/
@@ -12,6 +9,7 @@ app_logs/
 
 dashboard/backend/results/1_Training/checkpoints/
 dashboard/backend/results/2_SyncData/
+dashboard/backend/results/*
 
 # ignore raw data files
 dashboard/backend/dataset/*/df_ag.tsv

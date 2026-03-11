@@ -182,9 +182,9 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="Comparative" num="3" statusLabel={isSizeTask ? (status?.comparative ? 'Done' : 'Pending') : 'Unavailable'} stepStatus={isSizeTask ? status?.comparative : 'unavailable'} isActive={isSizeTask}>
+        <WorkflowStep title="Comparative" num="3" statusLabel={status?.comparative ? 'Done' : 'Pending'} stepStatus={status?.comparative || 'pending'}>
           <button className="chip" disabled={!status?.comparative} onClick={() => fetchComparativeMetrics(selectedRunId)}>Results</button>
-          {isSizeTask && !status?.comparative && (
+          {!status?.comparative && (
             <button 
               className={`chip selected ${!status?.sync ? 'disabled' : ''}`} 
               disabled={!status?.sync}
@@ -196,9 +196,9 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="Bio-markers" num="4" statusLabel={isSizeTask ? (status?.deg ? 'Done' : 'Pending') : 'Unavailable'} stepStatus={isSizeTask ? status?.deg : 'unavailable'} isActive={isSizeTask}>
+        <WorkflowStep title="Bio-markers" num="4" statusLabel={status?.deg ? 'Done' : 'Pending'} stepStatus={status?.deg || 'pending'}>
           <button className="chip" disabled={!status?.deg} onClick={() => { fetchDegMetrics(selectedRunId); fetchPathwayMetrics(selectedRunId); fetchPredictionMetrics(selectedRunId); }}>Results</button>
-          {isSizeTask && !status?.deg && (
+          {!status?.deg && (
             <button 
               className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
               disabled={!status?.comparative}
