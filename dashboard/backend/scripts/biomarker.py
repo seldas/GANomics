@@ -3,6 +3,7 @@ import sys
 import argparse
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split
 
 # Add the parent directory to sys.path to make 'src' importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -30,6 +31,7 @@ def main():
     # 1. Paths Setup
     sync_root = resolve_path(os.path.join("results", "2_SyncData", args.run_id))
     dataset_dir = resolve_path("dataset")
+    project_id = args.run_id.split('_')[0]
     
     if args.ext_id:
         ext_dir = os.path.join(sync_root, args.ext_id)
@@ -38,12 +40,15 @@ def main():
         # Real data from synced results (Step 2)
         real_ma_path = os.path.join(ext_dir, "microarray_real.csv")
         if not os.path.exists(real_ma_path):
-            real_ma_path = os.path.join(ext_dir, "rnaseq_real.csv") # Fallback to RS if MA not available
+            real_ma_path = os.path.join(ext_dir, "rnaseq_real.csv") 
+            
+        if not os.path.exists(real_ma_path):
+            print(f"Error: Synced real data not found in {ext_dir}. Run sync step first.")
+            return
             
         real_ma = pd.read_csv(real_ma_path, index_col=0)
         
         # Metadata from dataset folder
-        project_id = args.run_id.split('_')[0]
         ext_data_dir = os.path.join(dataset_dir, project_id, args.ext_id)
         
         # Labels for external test
@@ -61,14 +66,23 @@ def main():
     else:
         test_dir = os.path.join(sync_root, "test")
         algo_dir = os.path.join(sync_root, "algorithms")
-        real_ma = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
+        
+        real_ma_path = os.path.join(test_dir, "microarray_real.csv")
+        if not os.path.exists(real_ma_path):
+            print(f"Error: Synced real data not found in {test_dir}. Run sync step first.")
+            return
+            
+        real_ma = pd.read_csv(real_ma_path, index_col=0)
         
         label_path = resolve_path(args.labels) if args.labels else None
         if not label_path:
             # Try default project label
-            project_id = args.run_id.split('_')[0]
             label_path = os.path.join(dataset_dir, project_id, "label.txt")
             
+        if not os.path.exists(label_path):
+            print(f"Error: label.txt not found at {label_path}. Skipping biomarker analysis.")
+            return
+
         profiles = [
             ('GANomics', os.path.join(test_dir, "microarray_fake.csv"))
         ]
@@ -114,10 +128,7 @@ def main():
         # Rename index from Probe to Symbol
         df.index = [mapping.get(x, x) for x in df.index]
         # Remove entries that didn't map to a symbol (heuristic: symbols are usually not UKv4...)
-        df = df[~df.index.str.startswith('UKv4_')]
-        # If multiple probes map to same gene, they will now have same index name.
-        # pathway.py handles this via df.index = df.index.str.upper() and df.loc[set_genes]
-        # but it's better to ensure unique index here if possible, or let pathway.py handle it.
+        df = df[~df.index.astype(str).str.startswith('UKv4_')]
         return df
 
     # Map real DEGs
@@ -135,8 +146,6 @@ def main():
             all_gene_sets[lib] = gs
 
     # 7. Process each algorithm
-    from sklearn.model_selection import train_test_split
-    
     for algo_name, syn_path in profiles:
         if not os.path.exists(syn_path): continue
         print(f"\n>>> Processing Algorithm: {algo_name}")
@@ -211,8 +220,6 @@ def main():
             # Save with library name in filename
             pd.DataFrame([pathway_results]).to_csv(os.path.join(pathway_dir, f"Pathway_Concordance_{algo_name}_{gs_name}.csv"), index=False)
             pd.Series(null_dist).to_csv(os.path.join(pathway_dir, f"Null_Dist_{algo_name}_{gs_name}.csv"), index=False)
-
-    print(f"\n✅ All biomarker analyses for {args.run_id} completed.")
 
     print(f"\n✅ All biomarker analyses for {args.run_id} completed.")
 
