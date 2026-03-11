@@ -989,8 +989,48 @@ async def get_run_comparative_metrics(run_id: str, ext_id: Optional[str] = None)
 
 @app.get("/api/runs/{run_id}/sync")
 async def get_run_sync_status(run_id: str, ext_id: Optional[str] = None):
-    # ... (preserving previous logic)
-    pass
+    if ext_id:
+        sync_dir = os.path.join(SYNC_DATA_DIR, run_id, ext_id)
+    else:
+        sync_dir = os.path.join(SYNC_DATA_DIR, run_id, "test")
+        
+    exists = os.path.exists(sync_dir)
+    details = {"train": {}, "test": {}}
+    
+    if exists:
+        # Standard filenames
+        files = {
+            "Microarray": {"Real": "microarray_real.csv", "Fake": "microarray_fake.csv"},
+            "RNA-Seq": {"Real": "rnaseq_real.csv", "Fake": "rnaseq_fake.csv"}
+        }
+        
+        # Check standard folder
+        for platform, types in files.items():
+            details["test"][platform] = {}
+            for t, f in types.items():
+                details["test"][platform][t] = os.path.exists(os.path.join(sync_dir, f))
+        
+        # Also check for translated_... filenames (common in external inference)
+        if ext_id:
+            project_id = run_id.split('_')[0]
+            if not details["test"]["Microarray"]["Real"]:
+                details["test"]["Microarray"]["Real"] = os.path.exists(os.path.join(DATASET_DIR, project_id, ext_id, "test_ag.tsv"))
+            if not details["test"]["RNA-Seq"]["Real"]:
+                details["test"]["RNA-Seq"]["Real"] = os.path.exists(os.path.join(DATASET_DIR, project_id, ext_id, "test_rs.tsv"))
+
+    return {"exists": exists, "details": details}
+
+@app.get("/api/runs/{run_id}/sync/download")
+async def download_sync_file(run_id: str, filename: str, ext_id: Optional[str] = None):
+    if ext_id:
+        file_path = os.path.join(SYNC_DATA_DIR, run_id, ext_id, filename)
+    else:
+        file_path = os.path.join(SYNC_DATA_DIR, run_id, "test", filename)
+        
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Requested file not found.")
+        
+    return FileResponse(file_path, filename=f"{run_id}_{ext_id or 'test'}_{filename}")
 
 @app.get("/api/runs/{run_id}/tsne")
 async def get_run_tsne_coords(run_id: str, ext_id: Optional[str] = None):

@@ -1,10 +1,10 @@
 import React from 'react';
-import { ArrowLeft, RotateCcw, ChevronRight, Info, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RotateCcw, ChevronRight, Info, RefreshCw, Download } from 'lucide-react';
 import { StatusButton } from '../common/UIComponents';
 import type { RunStatus, Project, LogResponse } from '../../types';
+import { API_BASE } from '../../constants';
 
 import { LogViewer } from '../analysis/LogViewer';
-import { SyncStatusDetails } from '../analysis/SyncStatusDetails';
 import { ComparativeAnalysis } from '../analysis/ComparativeAnalysis';
 import { DegAnalysis } from '../analysis/DegAnalysis';
 import { PathwayAnalysis } from '../analysis/PathwayAnalysis';
@@ -48,6 +48,33 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
   logData, runSyncData, runComparativeData, runDegData, runPathwayData, runPredictionData, runTsneData
 }) => {
 
+  const handleDownloadResults = (filename: string) => {
+    const url = `${API_BASE}/runs/${selectedRunId}/sync/download?filename=${filename}${selectedExtId ? `&ext_id=${selectedExtId}` : ''}`;
+    window.open(url);
+  };
+
+  const DownloadBox = () => (
+    <div className="card" style={{ padding: '1.5rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+      <h3 style={{ fontSize: '1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Download size={18} /> Export Synchronized Datasets
+      </h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+        <button className="chip" style={{ justifyContent: 'space-between', padding: '0.75rem 1rem', backgroundColor: '#fff' }} onClick={() => handleDownloadResults('microarray_real.csv')}>
+          <span>Microarray (Real)</span><Download size={14} />
+        </button>
+        <button className="chip" style={{ justifyContent: 'space-between', padding: '0.75rem 1rem', backgroundColor: '#fff' }} onClick={() => handleDownloadResults('microarray_fake.csv')}>
+          <span>Microarray (Synthetic)</span><Download size={14} />
+        </button>
+        <button className="chip" style={{ justifyContent: 'space-between', padding: '0.75rem 1rem', backgroundColor: '#fff' }} onClick={() => handleDownloadResults('rnaseq_real.csv')}>
+          <span>RNA-Seq (Real)</span><Download size={14} />
+        </button>
+        <button className="chip" style={{ justifyContent: 'space-between', padding: '0.75rem 1rem', backgroundColor: '#fff' }} onClick={() => handleDownloadResults('rnaseq_fake.csv')}>
+          <span>RNA-Seq (Synthetic)</span><Download size={14} />
+        </button>
+      </div>
+    </div>
+  );
+
   if (taskView === 'training') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><h2 style={{ margin: 0 }}>Training Performance: {selectedRunId}</h2></div><LogViewer logData={logData} runId={selectedRunId} /></div>;
   
   if (taskView === 'sync') {
@@ -55,10 +82,10 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button>
-          <h2 style={{ margin: 0 }}>Sync Data Details: {selectedRunId}</h2>
+          <h2 style={{ margin: 0 }}>Sync Data Analysis: {selectedRunId}</h2>
         </div>
-        <SyncStatusDetails data={runSyncData} />
         <TsneVisualization data={runTsneData} />
+        <DownloadBox />
       </div>
     );
   }
@@ -189,4 +216,3 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
     </div>
   );
 };
-
