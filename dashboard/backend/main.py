@@ -989,42 +989,24 @@ async def get_run_comparative_metrics(run_id: str, ext_id: Optional[str] = None)
 
 @app.get("/api/runs/{run_id}/sync")
 async def get_run_sync_status(run_id: str, ext_id: Optional[str] = None):
+    # ... (preserving previous logic)
+    pass
+
+@app.get("/api/runs/{run_id}/tsne")
+async def get_run_tsne_coords(run_id: str, ext_id: Optional[str] = None):
     if ext_id:
-        sync_dir = os.path.join(SYNC_DATA_DIR, run_id, ext_id)
+        tsne_path = os.path.join(SYNC_DATA_DIR, run_id, ext_id, "tsne_coords.csv")
     else:
-        sync_dir = os.path.join(SYNC_DATA_DIR, run_id, "test")
+        tsne_path = os.path.join(SYNC_DATA_DIR, run_id, "test", "tsne_coords.csv")
 
-    exists = os.path.exists(sync_dir)
-    details = {"train": {}, "test": {}}
+    if not os.path.exists(tsne_path):
+        raise HTTPException(status_code=404, detail="t-SNE coordinates not found. Run sync step first.")
 
-    if exists:
-        # Standard filenames
-        files = {
-            "Microarray": {"Real": "microarray_real.csv", "Fake": "microarray_fake.csv"},
-            "RNA-Seq": {"Real": "rnaseq_real.csv", "Fake": "rnaseq_fake.csv"}
-        }
-
-        # Check standard folder
-        for platform, types in files.items():
-            details["test"][platform] = {}
-            for t, f in types.items():
-                details["test"][platform][t] = os.path.exists(os.path.join(sync_dir, f))
-
-        # Also check for translated_... filenames (common in external inference)
-        if ext_id:
-            if not details["test"]["Microarray"]["Fake"]:
-                details["test"]["Microarray"]["Fake"] = os.path.exists(os.path.join(sync_dir, "translated_ag.tsv"))
-            if not details["test"]["RNA-Seq"]["Fake"]:
-                details["test"]["RNA-Seq"]["Fake"] = os.path.exists(os.path.join(sync_dir, "translated_rs.tsv"))
-
-            project_id = run_id.split('_')[0]
-            if not details["test"]["Microarray"]["Real"]:
-                details["test"]["Microarray"]["Real"] = os.path.exists(os.path.join(DATASET_DIR, project_id, ext_id, "test_ag.tsv"))
-            if not details["test"]["RNA-Seq"]["Real"]:
-                details["test"]["RNA-Seq"]["Real"] = os.path.exists(os.path.join(DATASET_DIR, project_id, ext_id, "test_rs.tsv"))
-
-    return {"exists": exists, "details": details}
-@app.get("/api/runs/{run_id}/deg")
+    try:
+        df = pd.read_csv(tsne_path)
+        return df.to_dict(orient="records")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))@app.get("/api/runs/{run_id}/deg")
 async def get_run_deg_metrics(run_id: str, ext_id: Optional[str] = None):
     if ext_id:
         deg_dir = os.path.join(SYNC_DATA_DIR, run_id, ext_id, "DEG")

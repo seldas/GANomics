@@ -75,15 +75,15 @@ def main():
     if args.ext_id:
         # For external datasets, we look in the ext_id folder
         ext_dir = os.path.join(sync_root, args.ext_id)
-        # We need the real external data too, which is in dataset/<project>/external_test/<ext_id>
-        project_id = args.run_id.split('_')[0]
-        ext_data_dir = os.path.join(backend_dir, "dataset", project_id, "external_test", args.ext_id)
         
-        # Determine what we have
-        path_ag_real = os.path.join(ext_data_dir, "test_ag.tsv")
-        path_rs_real = os.path.join(ext_data_dir, "test_rs.tsv")
-        path_ag_fake = os.path.join(ext_dir, "translated_ag.tsv")
-        path_rs_fake = os.path.join(ext_dir, "translated_rs.tsv")
+        # Load the Real data produced by Step 2 (test_sync.py)
+        # This is better because Step 2 already handled gene list alignment
+        path_ag_real = os.path.join(ext_dir, "microarray_real.csv")
+        path_rs_real = os.path.join(ext_dir, "rnaseq_real.csv")
+        
+        # GANomics Results (Fake) produced by Step 2
+        path_ag_fake = os.path.join(ext_dir, "microarray_fake.csv")
+        path_rs_fake = os.path.join(ext_dir, "rnaseq_fake.csv")
         
         # Load whatever is available
         test_ag = pd.read_csv(path_ag_real, index_col=0) if os.path.exists(path_ag_real) else None

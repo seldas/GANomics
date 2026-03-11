@@ -44,6 +44,7 @@ const App: React.FC = () => {
   const [runDegData, setRunDegData] = useState<any | null>(null);
   const [runPredictionData, setRunPredictionData] = useState<any | null>(null);
   const [runPathwayData, setRunPathwayData] = useState<any | null>(null);
+  const [runTsneData, setRunTsneData] = useState<any[] | null>(null);
   const [ablationData, setAblationData] = useState<any[]>([]);
   const [sensitivityType, setSensitivityType] = useState<'beta' | 'lambda'>('beta');
 
@@ -214,6 +215,7 @@ const App: React.FC = () => {
     setTaskView('sync');
     setRunSyncData(null);
     axios.get(`${API_BASE}/runs/${runId}/sync`, { params: { ext_id: selectedExtId } }).then(res => setRunSyncData(res.data));
+    fetchTsneCoords(runId);
   };
 
   const fetchComparativeMetrics = (runId: string) => {
@@ -238,6 +240,13 @@ const App: React.FC = () => {
     setTaskView('prediction');
     setRunPredictionData(null);
     axios.get(`${API_BASE}/runs/${runId}/prediction`, { params: { ext_id: selectedExtId } }).then(res => setRunPredictionData(res.data));
+  };
+
+  const fetchTsneCoords = (runId: string) => {
+    setRunTsneData(null);
+    axios.get(`${API_BASE}/runs/${runId}/tsne`, { params: { ext_id: selectedExtId } })
+      .then(res => setRunTsneData(res.data))
+      .catch(() => setRunTsneData([]));
   };
 
   const fetchAblationLogs = (category: string) => {
@@ -332,8 +341,10 @@ const App: React.FC = () => {
             onShowSyncModal={() => setShowSyncExternalModal(true)} onRestartTask={handleRestartTask} onRunStep={handleRunStep}
             fetchLogs={fetchLogs} fetchSyncStatus={fetchSyncStatus} fetchComparativeMetrics={fetchComparativeMetrics} 
             fetchDegMetrics={fetchDegMetrics} fetchPathwayMetrics={fetchPathwayMetrics} fetchPredictionMetrics={fetchPredictionMetrics}
+            fetchTsneCoords={fetchTsneCoords}
             logData={logData} runSyncData={runSyncData} runComparativeData={runComparativeData} 
             runDegData={runDegData} runPathwayData={runPathwayData} runPredictionData={runPredictionData}
+            runTsneData={runTsneData}
             renderLogViewer={renderLogViewer} renderSyncStatus={renderSyncStatus} renderComparativeAnalysis={renderComparativeAnalysis}
             renderDegAnalysis={renderDegAnalysis} renderPathwayAnalysis={renderPathwayAnalysis} renderPredictionAnalysis={renderPredictionAnalysis}
           />
