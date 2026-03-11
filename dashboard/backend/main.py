@@ -371,7 +371,7 @@ async def get_run_tsne_coords(run_id: str, ext_id: Optional[str] = None):
 
 @app.get("/api/runs/{run_id}/deg")
 async def get_run_deg_metrics(run_id: str, ext_id: Optional[str] = None):
-    deg_dir = os.path.join(SYNC_DATA_DIR if ext_id else BIOMARKERS_DIR, run_id if not ext_id else os.path.join(run_id, ext_id), "DEG")
+    deg_dir = os.path.join(BIOMARKERS_DIR, "DEG", run_id)
     if not os.path.exists(deg_dir): raise HTTPException(status_code=404)
     res = {}
     for f in os.listdir(deg_dir):
@@ -380,7 +380,7 @@ async def get_run_deg_metrics(run_id: str, ext_id: Optional[str] = None):
 
 @app.get("/api/runs/{run_id}/prediction")
 async def get_run_prediction_metrics(run_id: str, ext_id: Optional[str] = None):
-    pred_dir = os.path.join(SYNC_DATA_DIR if ext_id else BIOMARKERS_DIR, run_id if not ext_id else os.path.join(run_id, ext_id), "Prediction")
+    pred_dir = os.path.join(BIOMARKERS_DIR, "Prediction", run_id)
     if not os.path.exists(pred_dir): raise HTTPException(status_code=404)
     res = {}
     for f in os.listdir(pred_dir):
@@ -389,7 +389,7 @@ async def get_run_prediction_metrics(run_id: str, ext_id: Optional[str] = None):
 
 @app.get("/api/runs/{run_id}/pathway")
 async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
-    path_dir = os.path.join(SYNC_DATA_DIR if ext_id else BIOMARKERS_DIR, run_id if not ext_id else os.path.join(run_id, ext_id), "Pathway")
+    path_dir = os.path.join(BIOMARKERS_DIR, "Pathway", run_id)
     if not os.path.exists(path_dir): raise HTTPException(status_code=404)
     results = {}
     for f in os.listdir(path_dir):

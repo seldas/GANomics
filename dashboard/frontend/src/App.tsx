@@ -19,6 +19,12 @@ import { TaskDashboard } from './components/dashboard/TaskDashboard';
 import { NewSessionPanel } from './components/dashboard/NewSessionPanel';
 import { AblationCharts } from './components/analysis/AblationCharts';
 import { AblationAnalyticsModal } from './components/modals/AblationAnalyticsModal';
+import { LogViewer } from './components/analysis/LogViewer';
+import { SyncStatusDetails } from './components/analysis/SyncStatusDetails';
+import { ComparativeAnalysis } from './components/analysis/ComparativeAnalysis';
+import { DegAnalysis } from './components/analysis/DegAnalysis';
+import { PathwayAnalysis } from './components/analysis/PathwayAnalysis';
+import { PredictionAnalysis } from './components/analysis/PredictionAnalysis';
 
 import './App.css';
 
@@ -97,12 +103,13 @@ const App: React.FC = () => {
   }, []);
 
   // Fetch Results Status
-  const fetchStatus = async () => {
-    try {
-      const resStatus = await axios.get(`${API_BASE}/results`);
-      setResultsStatus(resStatus.data);
-    } catch (err) { console.error(err); }
-  };
+const fetchStatus = async () => {
+  try {
+    const resStatus = await axios.get(`${API_BASE}/results`);
+    console.log('Results Status:', resStatus.data); // Add this line for debugging
+    setResultsStatus(resStatus.data);
+  } catch (err) { console.error(err); }
+};
 
   useEffect(() => {
     fetchStatus();

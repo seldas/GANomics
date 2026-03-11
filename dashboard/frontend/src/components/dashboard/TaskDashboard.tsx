@@ -10,6 +10,7 @@ import { DegAnalysis } from '../analysis/DegAnalysis';
 import { PathwayAnalysis } from '../analysis/PathwayAnalysis';
 import { PredictionAnalysis } from '../analysis/PredictionAnalysis';
 import { TsneVisualization } from '../analysis/TsneVisualization';
+import { SyncStatusDetails } from '../analysis/SyncStatusDetails';
 
 interface TaskDashboardProps {
   selectedRunId: string;
@@ -18,9 +19,9 @@ interface TaskDashboardProps {
   status: any;
   isSizeTask: boolean;
   currentProj: Project | undefined;
-  taskView: string;
+  taskView: 'overview' | 'training' | 'sync' | 'comparative' | 'deg' | 'pathway' | 'prediction';
   onBack: () => void;
-  onSetTaskView: (view: any) => void;
+  onSetTaskView: (view: 'overview' | 'training' | 'sync' | 'comparative' | 'deg' | 'pathway' | 'prediction') => void;
   onSetSelectedExtId: (id: string | null) => void;
   onShowSyncModal: () => void;
   onRestartTask: (id: string) => void;
@@ -47,6 +48,12 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
   fetchLogs, fetchSyncStatus, fetchComparativeMetrics, fetchDegMetrics, fetchPathwayMetrics, fetchPredictionMetrics, fetchTsneCoords,
   logData, runSyncData, runComparativeData, runDegData, runPathwayData, runPredictionData, runTsneData
 }) => {
+  const renderLogViewer = () => <LogViewer logData={logData} runId={selectedRunId || ''} />;
+  const renderSyncStatus = () => <SyncStatusDetails data={runSyncData} />;
+  const renderComparativeAnalysis = () => <ComparativeAnalysis data={runComparativeData} />;
+  const renderDegAnalysis = () => <DegAnalysis data={runDegData} />;
+  const renderPathwayAnalysis = () => <PathwayAnalysis data={runPathwayData} />;
+  const renderPredictionAnalysis = () => <PredictionAnalysis data={runPredictionData} />;
 
   const handleDownloadResults = (filename: string) => {
     const url = `${API_BASE}/runs/${selectedRunId}/sync/download?filename=${filename}${selectedExtId ? `&ext_id=${selectedExtId}` : ''}`;
