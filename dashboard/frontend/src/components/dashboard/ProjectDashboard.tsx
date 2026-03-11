@@ -191,7 +191,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
                   {(isExpanded || runIds.length === 1) && (
                     <div style={{ marginTop: runIds.length > 1 ? '1rem' : '0.5rem', paddingLeft: runIds.length > 1 ? '1.5rem' : '0', display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: runIds.length > 1 ? '2px solid #f1f5f9' : 'none' }}>
-                      {runIds.map(runId => {
+                      {[...runIds].sort((a, b) => parseInt(a.split('_').pop() || '0', 10) - parseInt(b.split('_').pop() || '0', 10)).map(runId => {
                         const status = resultsStatus.run_statuses?.[runId];
                         const isSizeTask = runId.includes("Size") && !runId.includes("Architecture");
                         return (
@@ -203,7 +203,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
                               <div style={{ fontSize: '0.8rem', fontWeight: '500', color: '#475569' }}>
-                                {runIds.length > 1 ? runId.split('_').pop() : runId}
+                                Run {parseInt(runId.split('_').pop() || '0', 10)}
                               </div>
                               <div style={{ display: 'flex', gap: '4px' }}>
                                 <StatusButton label="TR" status={status?.training || 'idle'} />

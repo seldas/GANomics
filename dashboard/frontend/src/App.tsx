@@ -352,8 +352,6 @@ const fetchStatus = async () => {
             logData={logData} runSyncData={runSyncData} runComparativeData={runComparativeData} 
             runDegData={runDegData} runPathwayData={runPathwayData} runPredictionData={runPredictionData}
             runTsneData={runTsneData}
-            renderLogViewer={renderLogViewer} renderSyncStatus={renderSyncStatus} renderComparativeAnalysis={renderComparativeAnalysis}
-            renderDegAnalysis={renderDegAnalysis} renderPathwayAnalysis={renderPathwayAnalysis} renderPredictionAnalysis={renderPredictionAnalysis}
           />
         ) : (
           <ProjectDashboard 
