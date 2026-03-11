@@ -1042,7 +1042,8 @@ async def get_run_deg_metrics(run_id: str, ext_id: Optional[str] = None):
                 df = pd.read_csv(os.path.join(deg_dir, f))
                 # Ensure it has threshold and jaccard
                 if 'threshold' in df.columns and 'jaccard' in df.columns:
-                    results[algo] = df.to_dict(orient="records")
+                    # Convert NaN to None for JSON compatibility
+                    results[algo] = df.replace({np.nan: None}).to_dict(orient="records")
             except Exception as e:
                 print(f"Error reading {f}: {e}")
                 
@@ -1064,7 +1065,8 @@ async def get_run_prediction_metrics(run_id: str, ext_id: Optional[str] = None):
             algo = f.replace("Classifier_Performance_", "").replace(".csv", "")
             try:
                 df = pd.read_csv(os.path.join(pred_dir, f))
-                results[algo] = df.to_dict(orient="records")
+                # Convert NaN to None for JSON compatibility
+                results[algo] = df.replace({np.nan: None}).to_dict(orient="records")
             except Exception as e:
                 print(f"Error reading {f}: {e}")
                 
@@ -1094,7 +1096,9 @@ async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
             
             try:
                 df = pd.read_csv(os.path.join(pathway_dir, f))
-                results[library]["concordance"][algo] = df.to_dict(orient="records")[0]
+                # Convert NaN to None for JSON compatibility
+                record = df.replace({np.nan: None}).to_dict(orient="records")[0]
+                results[library]["concordance"][algo] = record
             except Exception as e:
                 print(f"Error reading {f}: {e}")
         
@@ -1109,7 +1113,9 @@ async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
             
             try:
                 df = pd.read_csv(os.path.join(pathway_dir, f), header=None)
-                results[library]["null_distributions"][algo] = df[0].tolist()
+                # Convert NaN to None for JSON compatibility
+                null_dist = [x if not (isinstance(x, float) and np.isnan(x)) else None for x in df[0].tolist()]
+                results[library]["null_distributions"][algo] = null_dist
             except Exception as e:
                 print(f"Error reading {f}: {e}")
                 

@@ -96,7 +96,31 @@ def main():
     print("Running DEG analysis for Real Data (Reference)...")
     deg_real = run_deg_analysis(real_ma, y)
 
-    # 5. Load Gene Sets (GMT and Enrichr)
+    # 5. Load Mapping Table for Pathway Analysis
+    mapping_path = os.path.join(DATASET_DIR, project_id, "gene_mapping.tsv")
+    gene_map = None
+    if os.path.exists(mapping_path):
+        print(f"Loading gene mapping from {mapping_path}...")
+        df_map = pd.read_csv(mapping_path, sep='\t')
+        # Create a dict: Probe -> Symbol
+        gene_map = dict(zip(df_map['Agilent_Probe_Name'], df_map['GeneSymbol']))
+    
+    def apply_mapping(deg_df, mapping):
+        if mapping is None: return deg_df
+        df = deg_df.copy()
+        # Rename index from Probe to Symbol
+        df.index = [mapping.get(x, x) for x in df.index]
+        # Remove entries that didn't map to a symbol (heuristic: symbols are usually not UKv4...)
+        df = df[~df.index.str.startswith('UKv4_')]
+        # If multiple probes map to same gene, they will now have same index name.
+        # pathway.py handles this via df.index = df.index.str.upper() and df.loc[set_genes]
+        # but it's better to ensure unique index here if possible, or let pathway.py handle it.
+        return df
+
+    # Map real DEGs
+    deg_real_mapped = apply_mapping(deg_real, gene_map)
+
+    # 6. Load Gene Sets (GMT and Enrichr)
     all_gene_sets = {}
     if args.gmt:
         all_gene_sets['MSigDB_Local'] = load_gmt(resolve_path(args.gmt))
@@ -107,7 +131,9 @@ def main():
         if gs:
             all_gene_sets[lib] = gs
 
-    # 6. Process each algorithm
+    # 7. Process each algorithm
+    from sklearn.model_selection import train_test_split
+    
     for algo_name, syn_path in profiles:
         if not os.path.exists(syn_path): continue
         print(f"\n>>> Processing Algorithm: {algo_name}")
@@ -116,8 +142,13 @@ def main():
         syn_ma = pd.read_csv(syn_path, index_col=0).loc[common_idx]
         
         # A. Prediction Model (Four Scenarios)
-        n = len(common_idx) // 2
-        train_idx, test_idx = common_idx[:n], common_idx[n:]
+        # Use stratified random split to ensure balanced classes in train/test
+        train_idx, test_idx = train_test_split(
+            common_idx, 
+            test_size=0.5, 
+            random_state=42, 
+            stratify=y
+        )
         
         print(f"[{algo_name}] Running Cross-Platform Prediction Modeling...")
         
@@ -158,9 +189,12 @@ def main():
         jac_curve.to_csv(os.path.join(deg_dir, f"Jaccard_Curve_{algo_name}.csv"), index=False)
 
         # C. Pathway Enrichment
+        # Map synthetic DEGs
+        deg_syn_mapped = apply_mapping(deg_syn, gene_map)
+
         for gs_name, gene_sets in all_gene_sets.items():
             print(f"[{algo_name}] Running Pathway Concordance ({gs_name})...")
-            obs_rho, null_dist, p_val = run_permutation_test(deg_real, deg_syn, gene_sets, B=100)
+            obs_rho, null_dist, p_val = run_permutation_test(deg_real_mapped, deg_syn_mapped, gene_sets, B=100)
             
             pathway_dir = os.path.join(out_root, "Pathway", args.run_id) if not args.ext_id else os.path.join(out_root, "Pathway")
             os.makedirs(pathway_dir, exist_ok=True)
