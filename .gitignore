@@ -12,3 +12,7 @@ app_logs/
 
 dashboard/backend/results/1_Training/checkpoints/
 dashboard/backend/results/2_SyncData/
+
+# ignore raw data files
+dashboard/backend/dataset/*/df_ag.tsv
+dashboard/backend/dataset/*/df_rs.tsv
