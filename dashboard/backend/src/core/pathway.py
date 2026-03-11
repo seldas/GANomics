@@ -43,12 +43,12 @@ def gene_set_enrichment(deg_df, gene_sets, how='abs_d'):
         df['stat'] = df['cohen_d']
     
     # Gene names in dataset (ensure uppercase for matching)
-    df.index = df.index.str.upper()
+    df.index = df.index.astype(str).str.upper()
     universe_genes = set(df.index)
     
     for name, genes in gene_sets.items():
         # Match uppercase genes
-        genes_upper = [g.upper() for g in genes]
+        genes_upper = [str(g).upper() for g in genes]
         set_genes = list(set(genes_upper) & universe_genes)
         
         if len(set_genes) < 3: # Lowered threshold from 5 to 3
@@ -98,7 +98,9 @@ def run_permutation_test(deg_real, deg_syn, gene_sets, B=1000):
         # Permute gene sets by picking random genes from universe
         perm_sets = {}
         for name, genes in gene_sets.items():
-            perm_sets[name] = random.sample(universe, len(genes))
+            # Ensure we don't sample more than available
+            sample_size = min(len(genes), len(universe))
+            perm_sets[name] = random.sample(universe, sample_size)
             
         rho = spearman_rank_concordance(
             gene_set_enrichment(deg_real, gene_sets),
@@ -114,10 +116,16 @@ def jaccard_threshold_curve(deg_real, deg_syn, thresholds=[1e-4, 1e-3, 1e-2, 0.0
     """
     Compute Jaccard overlap of DEGs across a range of FDR thresholds (Fig 9a).
     """
+    # Ensure indexes are strings for set operations
+    dr = deg_real.copy()
+    ds = deg_syn.copy()
+    dr.index = dr.index.astype(str)
+    ds.index = ds.index.astype(str)
+
     results = []
     for tau in thresholds:
-        set_real = set(deg_real[deg_real['fdr'] <= tau].index)
-        set_syn = set(deg_syn[deg_syn['fdr'] <= tau].index)
+        set_real = set(dr[dr['fdr'] <= tau].index)
+        set_syn = set(ds[ds['fdr'] <= tau].index)
         
         inter = len(set_real & set_syn)
         union = len(set_real | set_syn)
