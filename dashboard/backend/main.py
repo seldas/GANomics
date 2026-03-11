@@ -6,11 +6,12 @@ import time
 import sys
 import signal
 from typing import List, Optional, Dict
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Form
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import psutil
+import json
 
 app = FastAPI(title="GANomics API")
 
@@ -48,6 +49,8 @@ ROOT_DIR = os.path.abspath(os.path.join(BACKEND_DIR, "..", ".."))
 DATASET_DIR = os.path.join(BACKEND_DIR, "dataset")
 RESULTS_DIR = os.path.join(BACKEND_DIR, "results")
 SCRIPTS_DIR = os.path.join(BACKEND_DIR, "scripts")
+TEMP_DIR = os.path.join(BACKEND_DIR, "temp")
+os.makedirs(TEMP_DIR, exist_ok=True)
 
 # Redesigned Structure
 TRAINING_DIR = os.path.join(RESULTS_DIR, "1_Training")
@@ -348,11 +351,16 @@ async def create_project(
         with open(config_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
             
-        # 5. Generate samples.tsv
+        # 5. Generate samples.tsv and genelist.tsv
         df_ag_full = pd.read_csv(ag_path, sep='\t', index_col=0)
         samples = df_ag_full.index.tolist()
+        genes = df_ag_full.columns.tolist()
+        
         samples_path = os.path.join(proj_dir, "samples.tsv")
         pd.DataFrame({'sample_id': samples}).to_csv(samples_path, sep='\t', index=False)
+        
+        genes_path = os.path.join(proj_dir, "genelist.tsv")
+        pd.DataFrame({'gene_id': genes}).to_csv(genes_path, sep='\t', index=False)
         
         return {"message": f"Project {project_name} created successfully", "genes": genes_count, "samples": samples_count}
         
@@ -362,6 +370,171 @@ async def create_project(
             import shutil
             shutil.rmtree(proj_dir)
         raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
+
+@app.get("/api/runs/{run_id}/genes/template")
+async def get_gene_template(run_id: str):
+    checkpoint_dir = os.path.join(RESULTS_DIR, "1_Training", "checkpoints", run_id)
+    genes_path = os.path.join(checkpoint_dir, "genes.txt")
+    
+    # If genes.txt doesn't exist (older run), try to find it from the original project
+    if not os.path.exists(genes_path):
+        project_id = run_id.split('_')[0]
+        proj_dir = os.path.join(DATASET_DIR, project_id)
+        ag_file = os.path.join(proj_dir, "df_ag.tsv")
+        if os.path.exists(ag_file):
+            try:
+                df = pd.read_csv(ag_file, sep='\t', index_col=0, nrows=0)
+                genes = df.columns.tolist()
+                os.makedirs(checkpoint_dir, exist_ok=True)
+                with open(genes_path, 'w') as f:
+                    f.write("\n".join(genes))
+            except:
+                raise HTTPException(status_code=404, detail="Could not retrieve gene template for this run.")
+        else:
+            raise HTTPException(status_code=404, detail="Gene template not found.")
+
+    return FileResponse(
+        genes_path, 
+        media_type='text/plain', 
+        filename=f"{run_id}_genes_template.txt"
+    )
+
+def get_next_ext_id(project_id: str):
+    ext_test_dir = os.path.join(DATASET_DIR, project_id, "external_test")
+    os.makedirs(ext_test_dir, exist_ok=True)
+    existing = [d for d in os.listdir(ext_test_dir) if d.startswith("ext") and d[3:].isdigit()]
+    if not existing:
+        return "ext1"
+    ids = [int(d[3:]) for d in existing]
+    return f"ext{max(ids) + 1}"
+
+import json
+
+@app.post("/api/runs/{run_id}/inference")
+async def run_external_inference(
+    run_id: str,
+    direction: str = Form(...), # 'AtoB' (MA->RS) or 'BtoA' (RS->MA)
+    ext_id: str = Form(...),
+    description: str = Form("External Testing dataset"),
+    file: UploadFile = File(...)
+):
+    checkpoint_dir = os.path.join(RESULTS_DIR, "1_Training", "checkpoints", run_id)
+    if not os.path.exists(checkpoint_dir):
+        raise HTTPException(status_code=404, detail="Run checkpoint not found.")
+
+    if not ext_id.startswith("ext_"):
+        raise HTTPException(status_code=400, detail="External ID must start with 'ext_'")
+
+    project_id = run_id.split('_')[0]
+    
+    # 1. Save uploaded file to dataset folder
+    ext_dir = os.path.join(DATASET_DIR, project_id, ext_id)
+    os.makedirs(ext_dir, exist_ok=True)
+    
+    input_filename = "test_ag.tsv" if direction == 'AtoB' else "test_rs.tsv"
+    abs_input_path = os.path.join(ext_dir, input_filename)
+    
+    content = await file.read()
+    with open(abs_input_path, "wb") as f:
+        f.write(content)
+
+    # Get dimensions
+    try:
+        df_peek = pd.read_csv(abs_input_path, sep='\t', index_col=0)
+        samples_count = len(df_peek)
+        genes_count = len(df_peek.columns)
+        
+        # Save metadata
+        metadata = {
+            "id": ext_id,
+            "description": description,
+            "samples": samples_count,
+            "genes": genes_count,
+            "created_at": time.time()
+        }
+        with open(os.path.join(ext_dir, "metadata.json"), "w") as f:
+            json.dump(metadata, f)
+    except Exception as e: 
+        print(f"Metadata error: {e}")
+
+    # 2. Define output path in SyncData
+    output_dir = os.path.join(RESULTS_DIR, "2_SyncData", run_id, ext_id)
+    os.makedirs(output_dir, exist_ok=True)
+    output_filename = "translated_rs.tsv" if direction == 'AtoB' else "translated_ag.tsv"
+    output_path = os.path.join(output_dir, output_filename)
+
+    # 3. Run Inference Script
+    script_path = os.path.join(BACKEND_DIR, "scripts", "inference.py")
+    cmd = [
+        sys.executable, script_path,
+        "--run_id", run_id,
+        "--input", abs_input_path,
+        "--direction", direction,
+        "--output", output_path,
+        "--device", "cpu"
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return {
+            "message": "Inference completed successfully",
+            "ext_id": ext_id,
+            "output_file": output_filename,
+            "output_path": os.path.join(run_id, ext_id, output_filename)
+        }
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"Inference failed: {e.stderr}")
+
+@app.post("/api/runs/{run_id}/sync_external")
+async def sync_external(
+    run_id: str,
+    test_ag: Optional[UploadFile] = File(None),
+    test_rs: Optional[UploadFile] = File(None),
+    ext_id: str = Form(...),
+    description: str = Form("External Testing dataset")
+):
+    """ONLY UPLOAD FILES. Analysis happens via /run_step."""
+    try:
+        project_id = run_id.split('_')[0]
+        ext_dir = os.path.join(DATASET_DIR, project_id, ext_id)
+        os.makedirs(ext_dir, exist_ok=True)
+        
+        samples_count = 0
+        genes_count = 0
+
+        async def save_file(file: UploadFile, filename: str):
+            nonlocal samples_count, genes_count
+            abs_path = os.path.join(ext_dir, filename)
+            content = await file.read()
+            with open(abs_path, "wb") as f:
+                f.write(content)
+            
+            if samples_count == 0:
+                try:
+                    df = pd.read_csv(abs_path, sep='\t', index_col=0)
+                    samples_count = len(df)
+                    genes_count = len(df.columns)
+                except: pass
+
+        if test_ag: await save_file(test_ag, "test_ag.tsv")
+        if test_rs: await save_file(test_rs, "test_rs.tsv")
+
+        # Save metadata
+        metadata = {
+            "id": ext_id,
+            "description": description,
+            "samples": samples_count,
+            "genes": genes_count,
+            "created_at": time.time()
+        }
+        with open(os.path.join(ext_dir, "metadata.json"), "w") as f:
+            json.dump(metadata, f)
+
+        return {"message": "Files uploaded successfully", "ext_id": ext_id}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/results")
 async def get_results_status():
@@ -381,6 +554,7 @@ async def get_results_status():
     run_statuses = {}
     now = time.time()
     for run_id in logs:
+        project_id = run_id.split('_')[0]
         sync_folder = run_id
         sync_path = os.path.join(SYNC_DATA_DIR, sync_folder, "test", "microarray_fake.csv")
         log_path = os.path.join(LOGS_DIR, f"{run_id}_log.txt")
@@ -424,6 +598,51 @@ async def get_results_status():
 
         if total_epochs == 0: total_epochs = 500 # Default fallback
         
+        # External Branch Tracking (SYNCED BY PROJECT DATASET FOLDER)
+        ext_ids = []
+        ext_statuses = {}
+        project_dataset_root = os.path.join(DATASET_DIR, project_id)
+        if os.path.exists(project_dataset_root):
+            ext_ids = [d for d in os.listdir(project_dataset_root) if d.startswith("ext_") and os.path.isdir(os.path.join(project_dataset_root, d))]
+            
+            for eid in ext_ids:
+                eid_sync_dir = os.path.join(SYNC_DATA_DIR, run_id, eid)
+                # Check for translated files or standard names
+                sync_done = os.path.exists(os.path.join(eid_sync_dir, "translated_ag.tsv")) or \
+                            os.path.exists(os.path.join(eid_sync_dir, "translated_rs.tsv")) or \
+                            os.path.exists(os.path.join(eid_sync_dir, "microarray_fake.csv"))
+                
+                # Metadata from dataset folder
+                meta = {"description": "External Testing dataset", "samples": 0, "genes": 0}
+                meta_path = os.path.join(project_dataset_root, eid, "metadata.json")
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, 'r') as f: meta = json.load(f)
+                    except: pass
+
+                ext_statuses[eid] = {
+                    "metadata": meta,
+                    "sync": sync_done,
+                    "comparative": os.path.exists(os.path.join(eid_sync_dir, "Test_performance.csv")),
+                    "deg": os.path.exists(os.path.join(eid_sync_dir, "DEG", "Jaccard_Curve_GANomics.csv")),
+                    "pathway": os.path.exists(os.path.join(eid_sync_dir, "Pathway", "Pathway_Concordance_GANomics.csv")),
+                    "pred_model": os.path.exists(os.path.join(eid_sync_dir, "Prediction", "Classifier_Performance_GANomics.csv")),
+                }
+        
+        # Internal Test Meta (Heuristic)
+        internal_meta = {"description": "Standard Internal Test Set", "note": "Original Test Set from Unseen data points", "samples": 0, "genes": 0}
+        if os.path.exists(sync_path):
+            try:
+                # Use pandas to peek dimensions
+                df_peek = pd.read_csv(sync_path, index_col=0, nrows=0)
+                internal_meta["genes"] = len(df_peek.columns)
+                real_test_path = os.path.join(SYNC_DATA_DIR, run_id, "test", "microarray_real.csv")
+                if os.path.exists(real_test_path):
+                    # Count rows without loading full file
+                    with open(real_test_path, 'rb') as f:
+                        internal_meta["samples"] = sum(1 for _ in f) - 1
+            except: pass
+
         run_statuses[run_id] = {
             "training": "running" if is_running else ("completed" if os.path.exists(checkpoint_latest) else "idle"),
             "stopped": running_processes.get(run_id, {}).get('stopped', False) or (run_id == 'training_session' and running_processes.get('training_session', {}).get('stopped', False)),
@@ -434,6 +653,11 @@ async def get_results_status():
             "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Jaccard_Curve_GANomics.csv")),
             "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", run_id, "Pathway_Concordance_GANomics.csv")),
             "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", run_id, "Classifier_Performance_GANomics.csv")),
+            "metadata": internal_meta,
+            # External Branch Tracking
+            "ext_ids": ext_ids,
+            "ext_statuses": ext_statuses,
+            "sync_ext": len(ext_ids) > 0,
         }
 
     return {
@@ -616,7 +840,7 @@ async def restart_task(run_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to restart: {str(e)}")
 
 @app.post("/api/runs/{run_id}/run_step")
-async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] = None):
+async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] = None, ext_id: Optional[str] = None):
     # Map step numbers to scripts
     scripts = {
         2: "test_sync.py",
@@ -633,6 +857,9 @@ async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] =
         
     cmd = [sys.executable, script_path, "--run_id", run_id]
     
+    if ext_id:
+        cmd += ["--ext_id", ext_id]
+    
     # Step 2 needs config
     if step == 2:
         if not config_path:
@@ -642,10 +869,10 @@ async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] =
     # Step 4 might need labels (defaults to NB label.txt)
     if step == 4:
         # Check if project is NB or other to set labels
-        if "NB" in run_id:
-            cmd += ["--labels", os.path.join(DATASET_DIR, "NB", "label.txt")]
-        elif "METSIM" in run_id:
-            cmd += ["--labels", os.path.join(DATASET_DIR, "METSIM", "label.txt")]
+        project_id = run_id.split('_')[0]
+        label_path = os.path.join(DATASET_DIR, project_id, "label.txt")
+        if os.path.exists(label_path):
+            cmd += ["--labels", label_path]
             
     print(f"Running step {step} command: {' '.join(cmd)}")
     
@@ -727,14 +954,20 @@ async def get_project_metrics(project_id: str):
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/runs/{run_id}/comparative")
-async def get_run_comparative_metrics(run_id: str):
+async def get_run_comparative_metrics(run_id: str, ext_id: Optional[str] = None):
     run_id = run_id.strip()
     # Try multiple possible paths
-    possible_paths = [
-        os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv"),
-        os.path.join(COMPARATIVE_DIR, run_id, "Table_2_Comparison.csv"),
-        os.path.join(RESULTS_DIR, "tables", "biomarkers", "CycleGAN", "Table_2_Comparison.csv") # legacy fallback
-    ]
+    if ext_id:
+        possible_paths = [
+            os.path.join(SYNC_DATA_DIR, run_id, ext_id, "Test_performance.csv"),
+            os.path.join(SYNC_DATA_DIR, run_id, f"algorithms_{ext_id}", "Test_performance.csv")
+        ]
+    else:
+        possible_paths = [
+            os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv"),
+            os.path.join(COMPARATIVE_DIR, run_id, "Table_2_Comparison.csv"),
+            os.path.join(RESULTS_DIR, "tables", "biomarkers", "CycleGAN", "Table_2_Comparison.csv") # legacy fallback
+        ]
     
     table_path = None
     for p in possible_paths:
@@ -755,57 +988,49 @@ async def get_run_comparative_metrics(run_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/runs/{run_id}/sync")
-async def get_run_sync_status(run_id: str):
-    run_dir = os.path.join(SYNC_DATA_DIR, run_id)
-    if not os.path.exists(run_dir):
-        return {"exists": False, "details": {}}
-    
-    status = {
-        "exists": True,
-        "details": {
-            "train": {
-                "Microarray": {
-                    "Real": os.path.exists(os.path.join(run_dir, "train", "microarray_real.csv")),
-                    "Fake": os.path.exists(os.path.join(run_dir, "train", "microarray_fake.csv")),
-                },
-                "RNA-Seq": {
-                    "Real": os.path.exists(os.path.join(run_dir, "train", "rnaseq_real.csv")),
-                    "Fake": os.path.exists(os.path.join(run_dir, "train", "rnaseq_fake.csv")),
-                }
-            },
-            "test": {
-                "Microarray": {
-                    "Real": os.path.exists(os.path.join(run_dir, "test", "microarray_real.csv")),
-                    "Fake": os.path.exists(os.path.join(run_dir, "test", "microarray_fake.csv")),
-                },
-                "RNA-Seq": {
-                    "Real": os.path.exists(os.path.join(run_dir, "test", "rnaseq_real.csv")),
-                    "Fake": os.path.exists(os.path.join(run_dir, "test", "rnaseq_fake.csv")),
-                }
-            },
-            "algorithms": {
-                "Microarray": {
-                    "ComBat": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_combat.csv")),
-                    "CuBlock": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_cublock.csv")),
-                    "QN": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_qn.csv")),
-                    "TDM": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_tdm.csv")),
-                    "YuGene": os.path.exists(os.path.join(run_dir, "algorithms", "microarray_fake_yugene.csv")),
-                },
-                "RNA-Seq": {
-                    "ComBat": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_combat.csv")),
-                    "CuBlock": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_cublock.csv")),
-                    "QN": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_qn.csv")),
-                    "TDM": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_tdm.csv")),
-                    "YuGene": os.path.exists(os.path.join(run_dir, "algorithms", "rnaseq_fake_yugene.csv")),
-                }
-            }
-        }
-    }
-    return status
+async def get_run_sync_status(run_id: str, ext_id: Optional[str] = None):
+    if ext_id:
+        sync_dir = os.path.join(SYNC_DATA_DIR, run_id, ext_id)
+    else:
+        sync_dir = os.path.join(SYNC_DATA_DIR, run_id, "test")
 
+    exists = os.path.exists(sync_dir)
+    details = {"train": {}, "test": {}}
+
+    if exists:
+        # Standard filenames
+        files = {
+            "Microarray": {"Real": "microarray_real.csv", "Fake": "microarray_fake.csv"},
+            "RNA-Seq": {"Real": "rnaseq_real.csv", "Fake": "rnaseq_fake.csv"}
+        }
+
+        # Check standard folder
+        for platform, types in files.items():
+            details["test"][platform] = {}
+            for t, f in types.items():
+                details["test"][platform][t] = os.path.exists(os.path.join(sync_dir, f))
+
+        # Also check for translated_... filenames (common in external inference)
+        if ext_id:
+            if not details["test"]["Microarray"]["Fake"]:
+                details["test"]["Microarray"]["Fake"] = os.path.exists(os.path.join(sync_dir, "translated_ag.tsv"))
+            if not details["test"]["RNA-Seq"]["Fake"]:
+                details["test"]["RNA-Seq"]["Fake"] = os.path.exists(os.path.join(sync_dir, "translated_rs.tsv"))
+
+            project_id = run_id.split('_')[0]
+            if not details["test"]["Microarray"]["Real"]:
+                details["test"]["Microarray"]["Real"] = os.path.exists(os.path.join(DATASET_DIR, project_id, ext_id, "test_ag.tsv"))
+            if not details["test"]["RNA-Seq"]["Real"]:
+                details["test"]["RNA-Seq"]["Real"] = os.path.exists(os.path.join(DATASET_DIR, project_id, ext_id, "test_rs.tsv"))
+
+    return {"exists": exists, "details": details}
 @app.get("/api/runs/{run_id}/deg")
-async def get_run_deg_metrics(run_id: str):
-    deg_dir = os.path.join(BIOMARKERS_DIR, "DEG", run_id)
+async def get_run_deg_metrics(run_id: str, ext_id: Optional[str] = None):
+    if ext_id:
+        deg_dir = os.path.join(SYNC_DATA_DIR, run_id, ext_id, "DEG")
+    else:
+        deg_dir = os.path.join(BIOMARKERS_DIR, "DEG", run_id)
+    
     if not os.path.exists(deg_dir):
         raise HTTPException(status_code=404, detail="DEG results not found")
     
@@ -824,8 +1049,12 @@ async def get_run_deg_metrics(run_id: str):
     return results
 
 @app.get("/api/runs/{run_id}/prediction")
-async def get_run_prediction_metrics(run_id: str):
-    pred_dir = os.path.join(BIOMARKERS_DIR, "Prediction", run_id)
+async def get_run_prediction_metrics(run_id: str, ext_id: Optional[str] = None):
+    if ext_id:
+        pred_dir = os.path.join(SYNC_DATA_DIR, run_id, ext_id, "Prediction")
+    else:
+        pred_dir = os.path.join(BIOMARKERS_DIR, "Prediction", run_id)
+        
     if not os.path.exists(pred_dir):
         raise HTTPException(status_code=404, detail="Prediction results not found")
     
@@ -842,8 +1071,12 @@ async def get_run_prediction_metrics(run_id: str):
     return results
 
 @app.get("/api/runs/{run_id}/pathway")
-async def get_run_pathway_metrics(run_id: str):
-    pathway_dir = os.path.join(BIOMARKERS_DIR, "Pathway", run_id)
+async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
+    if ext_id:
+        pathway_dir = os.path.join(SYNC_DATA_DIR, run_id, ext_id, "Pathway")
+    else:
+        pathway_dir = os.path.join(BIOMARKERS_DIR, "Pathway", run_id)
+        
     if not os.path.exists(pathway_dir):
         raise HTTPException(status_code=404, detail="Pathway results not found")
     

@@ -57,6 +57,7 @@ def measure_perf_detailed(df_real, df_fake):
 def main():
     parser = argparse.ArgumentParser(description="Comparative Analysis with Baseline Methods")
     parser.add_argument("--run_id", type=str, required=True, help="Full run ID (e.g. NB_Ablation_Size_50_Run_0)")
+    parser.add_argument("--ext_id", type=str, help="External Dataset ID (e.g. ext1)")
     parser.add_argument("--no_adjust_path", action='store_true', help="Don't adjust PYTHONPATH")
     args = parser.parse_args()
     
@@ -70,20 +71,47 @@ def main():
 
     # 1. Load Sync Data
     sync_root = resolve_path(os.path.join("results", "2_SyncData", args.run_id))
-    train_dir = os.path.join(sync_root, "train")
-    test_dir = os.path.join(sync_root, "test")
     
-    if not os.path.exists(train_dir) or not os.path.exists(test_dir):
-        raise FileNotFoundError(f"Sync data for {args.run_id} not found in {sync_root}. Run test_sync.py first.")
+    if args.ext_id:
+        # For external datasets, we look in the ext_id folder
+        ext_dir = os.path.join(sync_root, args.ext_id)
+        # We need the real external data too, which is in dataset/<project>/external_test/<ext_id>
+        project_id = args.run_id.split('_')[0]
+        ext_data_dir = os.path.join(backend_dir, "dataset", project_id, "external_test", args.ext_id)
+        
+        # Determine what we have
+        path_ag_real = os.path.join(ext_data_dir, "test_ag.tsv")
+        path_rs_real = os.path.join(ext_data_dir, "test_rs.tsv")
+        path_ag_fake = os.path.join(ext_dir, "translated_ag.tsv")
+        path_rs_fake = os.path.join(ext_dir, "translated_rs.tsv")
+        
+        # Load whatever is available
+        test_ag = pd.read_csv(path_ag_real, index_col=0) if os.path.exists(path_ag_real) else None
+        test_ngs = pd.read_csv(path_rs_real, index_col=0) if os.path.exists(path_rs_real) else None
+        df_ma_fake = pd.read_csv(path_ag_fake, index_col=0) if os.path.exists(path_ag_fake) else None
+        df_rs_fake = pd.read_csv(path_rs_fake, index_col=0) if os.path.exists(path_rs_fake) else None
+        
+        # We still need training data for baselines (Combat, CuBlock, etc.)
+        # Use the original training data of the project
+        train_dir = os.path.join(sync_root, "train")
+        train_ag = pd.read_csv(os.path.join(train_dir, "microarray_real.csv"), index_col=0)
+        train_ngs = pd.read_csv(os.path.join(train_dir, "rnaseq_real.csv"), index_col=0)
+        
+    else:
+        train_dir = os.path.join(sync_root, "train")
+        test_dir = os.path.join(sync_root, "test")
+        
+        if not os.path.exists(train_dir) or not os.path.exists(test_dir):
+            raise FileNotFoundError(f"Sync data for {args.run_id} not found in {sync_root}. Run test_sync.py first.")
 
-    train_ag = pd.read_csv(os.path.join(train_dir, "microarray_real.csv"), index_col=0)
-    train_ngs = pd.read_csv(os.path.join(train_dir, "rnaseq_real.csv"), index_col=0)
-    test_ag = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
-    test_ngs = pd.read_csv(os.path.join(test_dir, "rnaseq_real.csv"), index_col=0)
-    
-    # GANomics Results (Fake)
-    df_ma_fake = pd.read_csv(os.path.join(test_dir, "microarray_fake.csv"), index_col=0)
-    df_rs_fake = pd.read_csv(os.path.join(test_dir, "rnaseq_fake.csv"), index_col=0)
+        train_ag = pd.read_csv(os.path.join(train_dir, "microarray_real.csv"), index_col=0)
+        train_ngs = pd.read_csv(os.path.join(train_dir, "rnaseq_real.csv"), index_col=0)
+        test_ag = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
+        test_ngs = pd.read_csv(os.path.join(test_dir, "rnaseq_real.csv"), index_col=0)
+        
+        # GANomics Results (Fake)
+        df_ma_fake = pd.read_csv(os.path.join(test_dir, "microarray_fake.csv"), index_col=0)
+        df_rs_fake = pd.read_csv(os.path.join(test_dir, "rnaseq_fake.csv"), index_col=0)
     
     # 2. Run Baselines
     print(f"[{args.run_id}] Running Baseline Comparisons...")
@@ -98,9 +126,9 @@ def main():
     
     # CuBlock
     trans_rs = fit_cublock_translator(train_ag, train_ngs)
-    df_rs_cublock = translate_cublock(test_ag, trans_rs)
+    df_rs_cublock = translate_cublock(test_ag, trans_rs) if test_ag is not None else None
     trans_ma = fit_cublock_translator(train_ngs, train_ag)
-    df_ma_cublock = translate_cublock(test_ngs, trans_ma)
+    df_ma_cublock = translate_cublock(test_ngs, trans_ma) if test_ngs is not None else None
     
     # TDM
     res_tdm = tdm_normalize(train_ag, test_ag, train_ngs, test_ngs)
@@ -111,7 +139,10 @@ def main():
     df_ma_qn, df_rs_qn = res_qn['rnaseq_to_microarray'], res_qn['microarray_to_rnaseq']
 
     # 3. Save Algorithm Profiles
-    algo_dir = os.path.join(sync_root, "algorithms")
+    if args.ext_id:
+        algo_dir = os.path.join(sync_root, f"algorithms_{args.ext_id}")
+    else:
+        algo_dir = os.path.join(sync_root, "algorithms")
     os.makedirs(algo_dir, exist_ok=True)
 
     algos = {
@@ -122,26 +153,32 @@ def main():
         'qn': (df_ma_qn, df_rs_qn)
     }
 
-    for name, (ma, rs) in algos.items():
-        ma.to_csv(os.path.join(algo_dir, f'microarray_fake_{name}.csv'))
-        rs.to_csv(os.path.join(algo_dir, f'rnaseq_fake_{name}.csv'))
+    for name, data in algos.items():
+        if data is None: continue
+        ma, rs = data
+        if ma is not None: ma.to_csv(os.path.join(algo_dir, f'microarray_fake_{name}.csv'))
+        if rs is not None: rs.to_csv(os.path.join(algo_dir, f'rnaseq_fake_{name}.csv'))
 
     # 4. Aggregate Metrics
-    comparisons = [
-        ("GANomics (MA)", test_ag, df_ma_fake),
-        ("ComBat (MA)",   test_ag, df_ma_combat),
-        ("YuGene (MA)",   test_ag, df_ma_yugene),
-        ("CuBlock (MA)",  test_ag, df_ma_cublock),
-        ("TDM (MA)",      test_ag, df_ma_tdm),
-        ("Quantile (MA)", test_ag, df_ma_qn),
-        ("GANomics (RS)", test_ngs, df_rs_fake),
-        ("ComBat (RS)",   test_ngs, df_rs_combat),
-        ("YuGene (RS)",   test_ngs, df_rs_yugene),
-        ("CuBlock (RS)",  test_ngs, df_rs_cublock),
-        ("TDM (RS)",      test_ngs, df_rs_tdm),
-        ("Quantile (RS)", test_ngs, df_rs_qn),
-        ("Baseline (paired)", test_ag, test_ngs)
-    ]
+    comparisons = []
+    if test_ag is not None:
+        if df_ma_fake is not None: comparisons.append(("GANomics (MA)", test_ag, df_ma_fake))
+        if df_ma_combat is not None: comparisons.append(("ComBat (MA)",   test_ag, df_ma_combat))
+        if df_ma_yugene is not None: comparisons.append(("YuGene (MA)",   test_ag, df_ma_yugene))
+        if df_ma_cublock is not None: comparisons.append(("CuBlock (MA)",  test_ag, df_ma_cublock))
+        if df_ma_tdm is not None: comparisons.append(("TDM (MA)",      test_ag, df_ma_tdm))
+        if df_ma_qn is not None: comparisons.append(("Quantile (MA)", test_ag, df_ma_qn))
+        
+    if test_ngs is not None:
+        if df_rs_fake is not None: comparisons.append(("GANomics (RS)", test_ngs, df_rs_fake))
+        if df_rs_combat is not None: comparisons.append(("ComBat (RS)",   test_ngs, df_rs_combat))
+        if df_rs_yugene is not None: comparisons.append(("YuGene (RS)",   test_ngs, df_rs_yugene))
+        if df_rs_cublock is not None: comparisons.append(("CuBlock (RS)",  test_ngs, df_rs_cublock))
+        if df_rs_tdm is not None: comparisons.append(("TDM (RS)",      test_ngs, df_rs_tdm))
+        if df_rs_qn is not None: comparisons.append(("Quantile (RS)", test_ngs, df_rs_qn))
+        
+    if test_ag is not None and test_ngs is not None:
+        comparisons.append(("Baseline (paired)", test_ag, test_ngs))
     
     final_results = []
     for name, real, fake in comparisons:
@@ -150,7 +187,12 @@ def main():
         final_results.append(perf)
         
     df_final = pd.DataFrame(final_results)
-    out_dir = resolve_path(os.path.join("results", "3_ComparativeAnalysis", args.run_id))
+    
+    if args.ext_id:
+        out_dir = os.path.join(sync_root, args.ext_id) # Save in ext_id folder as per "subfolder of ext1"
+    else:
+        out_dir = resolve_path(os.path.join("results", "3_ComparativeAnalysis", args.run_id))
+    
     os.makedirs(out_dir, exist_ok=True)
     df_final.to_csv(os.path.join(out_dir, "Test_performance.csv"), index=False)
     

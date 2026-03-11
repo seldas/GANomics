@@ -143,6 +143,18 @@ class GANomicsModel:
         self.backward_D()
         self.optimizer_D.step()
 
+    def eval(self):
+        if self.netG_A: self.netG_A.eval()
+        if self.netG_B: self.netG_B.eval()
+        if self.netD_A: self.netD_A.eval()
+        if self.netD_B: self.netD_B.eval()
+
+    def train(self):
+        if self.netG_A: self.netG_A.train()
+        if self.netG_B: self.netG_B.train()
+        if self.netD_A: self.netD_A.train()
+        if self.netD_B: self.netD_B.train()
+
     def set_requires_grad(self, nets, requires_grad=False):
         if not isinstance(nets, list):
             nets = [nets]

@@ -59,5 +59,19 @@ def migrate():
                     yaml.dump(config, f, default_flow_style=False)
                 print(f"  Done. Set genes={genes}, samples={samples}")
 
+                # Generate genelist.tsv if missing
+                genelist_path = os.path.join(root, "genelist.tsv")
+                if not os.path.exists(genelist_path):
+                    try:
+                        path_a = config['dataset']['path_A']
+                        full_path_a = os.path.abspath(os.path.join(BACKEND_DIR, path_a))
+                        if os.path.exists(full_path_a):
+                            df_headers = pd.read_csv(full_path_a, index_col=0, nrows=0, sep=None, engine='python')
+                            genes_list = df_headers.columns.tolist()
+                            pd.DataFrame({'gene_id': genes_list}).to_csv(genelist_path, sep='\t', index=False)
+                            print(f"  Generated genelist.tsv ({len(genes_list)} genes)")
+                    except Exception as e:
+                        print(f"  Error generating genelist: {e}")
+
 if __name__ == "__main__":
     migrate()

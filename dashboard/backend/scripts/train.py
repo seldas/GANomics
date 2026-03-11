@@ -82,11 +82,15 @@ def train():
     )
     dataloader = DataLoader(dataset, batch_size=config['train']['batch_size'], shuffle=True)
     
-    # Audit Trail: Save training sample IDs
+    # Audit Trail: Save training sample IDs and Gene list
     save_dir = os.path.join(config['output']['checkpoints_dir'], config['output']['name'])
     os.makedirs(save_dir, exist_ok=True)
     with open(os.path.join(save_dir, "train_samples.txt"), 'w') as f:
         f.write("\n".join(str(s) for s in dataset.samples_A))
+    
+    # Save Gene list (for feature alignment validation in external inference)
+    with open(os.path.join(save_dir, "genes.txt"), 'w') as f:
+        f.write("\n".join(str(g) for g in dataset.genes))
     
     if not args.quiet:
         print(f"Number of training samples: {len(dataset)}")
