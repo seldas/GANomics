@@ -33,15 +33,17 @@ def main():
     if args.ext_id:
         ext_dir = os.path.join(sync_root, args.ext_id)
         algo_dir = os.path.join(sync_root, f"algorithms_{args.ext_id}")
-        project_id = args.run_id.split('_')[0]
-        ext_data_dir = os.path.join(backend_dir, "dataset", project_id, "external_test", args.ext_id)
         
-        # Real data from external test
-        real_ma_path = os.path.join(ext_data_dir, "test_ag.tsv")
+        # Real data from synced results (Step 2)
+        real_ma_path = os.path.join(ext_dir, "microarray_real.csv")
         if not os.path.exists(real_ma_path):
-            real_ma_path = os.path.join(ext_data_dir, "test_rs.tsv") # Fallback to RS if AG not available
+            real_ma_path = os.path.join(ext_dir, "rnaseq_real.csv") # Fallback to RS if MA not available
             
         real_ma = pd.read_csv(real_ma_path, index_col=0)
+        
+        # Metadata from dataset folder
+        project_id = args.run_id.split('_')[0]
+        ext_data_dir = os.path.join(backend_dir, "dataset", project_id, args.ext_id)
         
         # Labels for external test
         label_path = args.labels if args.labels else os.path.join(ext_data_dir, "label.txt")
@@ -50,7 +52,7 @@ def main():
             return
             
         profiles = [
-            ('GANomics', os.path.join(ext_dir, "translated_ag.tsv" if "rs" in real_ma_path else "translated_rs.tsv"))
+            ('GANomics', os.path.join(ext_dir, "microarray_fake.csv" if "microarray" in real_ma_path else "rnaseq_fake.csv"))
         ]
         
         # Output root for ext results
