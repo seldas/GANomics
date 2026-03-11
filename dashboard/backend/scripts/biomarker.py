@@ -206,6 +206,13 @@ def main():
 
         for gs_name, gene_sets in all_gene_sets.items():
             print(f"[{algo_name}] Running Pathway Concordance ({gs_name})...")
+            
+            # 1. Run Enrichment for both
+            from src.core.pathway import gene_set_enrichment
+            enr_real = gene_set_enrichment(deg_real_mapped, gene_sets)
+            enr_syn = gene_set_enrichment(deg_syn_mapped, gene_sets)
+            
+            # 2. Run Permutation Test (internal logic preserved)
             obs_rho, null_dist, p_val = run_permutation_test(deg_real_mapped, deg_syn_mapped, gene_sets, B=100)
             
             pathway_dir = os.path.join(out_root, "Pathway", args.run_id) if not args.ext_id else os.path.join(out_root, "Pathway")
@@ -217,9 +224,20 @@ def main():
                 'Spearman_Rho': obs_rho,
                 'P_Value': p_val
             }
-            # Save with library name in filename
+            # Save metrics summary
             pd.DataFrame([pathway_results]).to_csv(os.path.join(pathway_dir, f"Pathway_Concordance_{algo_name}_{gs_name}.csv"), index=False)
             pd.Series(null_dist).to_csv(os.path.join(pathway_dir, f"Null_Dist_{algo_name}_{gs_name}.csv"), index=False)
+
+            # 3. Save Detailed Pathway Comparison
+            # Merge Real and Syn results on pathway name
+            if not enr_real.empty and not enr_syn.empty:
+                df_detail = pd.merge(
+                    enr_real[['set', 'score', 'rank']].rename(columns={'score': 'Real_Score', 'rank': 'Real_Rank'}),
+                    enr_syn[['set', 'score', 'rank']].rename(columns={'score': 'Syn_Score', 'rank': 'Syn_Rank'}),
+                    on='set', how='inner'
+                ).sort_values('Real_Rank')
+                
+                df_detail.to_csv(os.path.join(pathway_dir, f"Pathway_Details_{algo_name}_{gs_name}.csv"), index=False)
 
     print(f"\n✅ All biomarker analyses for {args.run_id} completed.")
 
