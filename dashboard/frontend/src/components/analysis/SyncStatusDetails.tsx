@@ -28,19 +28,23 @@ export const SyncStatusDetails: React.FC<SyncStatusDetailsProps> = ({ data }) =>
           </tr>
         </thead>
         <tbody>
-          <tr style={{ backgroundColor: '#f9fafb', fontWeight: 'bold' }}>
-            <td colSpan={3} style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>GANOMICS (TRAINING)</td>
-          </tr>
-          {["Real", "Fake"].map(type => (
-            <tr key={`train-${type}`} style={{ borderBottom: '1px solid var(--border-color)' }}>
-              <td style={{ padding: '0.75rem 1rem' }}>{type}</td>
-              {platforms.map(p => (
-                <td key={p} style={{ textAlign: 'center' }}>
-                  <CheckIcon checked={details.train[p]?.[type]} />
-                </td>
+          {Object.keys(details.train || {}).length > 0 && (
+            <>
+              <tr style={{ backgroundColor: '#f9fafb', fontWeight: 'bold' }}>
+                <td colSpan={3} style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>GANOMICS (TRAINING)</td>
+              </tr>
+              {["Real", "Fake"].map(type => (
+                <tr key={`train-${type}`} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <td style={{ padding: '0.75rem 1rem' }}>{type}</td>
+                  {platforms.map(p => (
+                    <td key={p} style={{ textAlign: 'center' }}>
+                      <CheckIcon checked={details.train[p]?.[type]} />
+                    </td>
+                  ))}
+                </tr>
               ))}
-            </tr>
-          ))}
+            </>
+          )}
           <tr style={{ backgroundColor: '#f9fafb', fontWeight: 'bold' }}>
             <td colSpan={3} style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>GANOMICS (TESTING)</td>
           </tr>

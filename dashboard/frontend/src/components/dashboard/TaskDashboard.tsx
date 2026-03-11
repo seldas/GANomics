@@ -88,17 +88,44 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
         <WorkflowArrow />
         <WorkflowStep title="Sync Data" num="2" statusLabel={status?.sync ? 'Generated' : 'Pending'} stepStatus={status?.sync}>
           <button className="chip" disabled={!status?.sync} onClick={() => fetchSyncStatus(selectedRunId)}>Details</button>
-          {!status?.sync && <button className="chip selected" style={{ opacity: status?.training !== 'completed' ? 0.5 : 1 }} onClick={() => status?.training === 'completed' && onRunStep(2)}>Sync</button>}
+          {!status?.sync && (
+            <button 
+              className={`chip selected ${status?.training !== 'completed' ? 'disabled' : ''}`} 
+              disabled={status?.training !== 'completed'}
+              style={{ opacity: status?.training !== 'completed' ? 0.5 : 1 }} 
+              onClick={() => status?.training === 'completed' && onRunStep(2)}
+            >
+              Sync
+            </button>
+          )}
         </WorkflowStep>
         <WorkflowArrow />
         <WorkflowStep title="Comparative" num="3" statusLabel={isSizeTask ? (status?.comparative ? 'Done' : 'Pending') : 'Unavailable'} stepStatus={isSizeTask ? status?.comparative : 'unavailable'} isActive={isSizeTask}>
           <button className="chip" disabled={!status?.comparative} onClick={() => fetchComparativeMetrics(selectedRunId)}>Results</button>
-          {isSizeTask && !status?.comparative && <button className="chip selected" style={{ opacity: !status?.sync ? 0.5 : 1 }} onClick={() => status?.sync && onRunStep(3)}>Start</button>}
+          {isSizeTask && !status?.comparative && (
+            <button 
+              className={`chip selected ${!status?.sync ? 'disabled' : ''}`} 
+              disabled={!status?.sync}
+              style={{ opacity: !status?.sync ? 0.5 : 1 }} 
+              onClick={() => status?.sync && onRunStep(3)}
+            >
+              Start
+            </button>
+          )}
         </WorkflowStep>
         <WorkflowArrow />
         <WorkflowStep title="Bio-markers" num="4" statusLabel={isSizeTask ? (status?.deg ? 'Done' : 'Pending') : 'Unavailable'} stepStatus={isSizeTask ? status?.deg : 'unavailable'} isActive={isSizeTask}>
           <button className="chip" disabled={!status?.deg} onClick={() => { fetchDegMetrics(selectedRunId); fetchPathwayMetrics(selectedRunId); fetchPredictionMetrics(selectedRunId); }}>Results</button>
-          {isSizeTask && !status?.deg && <button className="chip selected" style={{ opacity: !status?.comparative ? 0.5 : 1 }} onClick={() => status?.comparative && onRunStep(4)}>Start</button>}
+          {isSizeTask && !status?.deg && (
+            <button 
+              className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
+              disabled={!status?.comparative}
+              style={{ opacity: !status?.comparative ? 0.5 : 1 }} 
+              onClick={() => status?.comparative && onRunStep(4)}
+            >
+              Start
+            </button>
+          )}
         </WorkflowStep>
       </div>
 

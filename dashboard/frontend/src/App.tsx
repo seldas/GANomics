@@ -212,7 +212,7 @@ const App: React.FC = () => {
   const fetchSyncStatus = (runId: string) => {
     setTaskView('sync');
     setRunSyncData(null);
-    axios.get(`${API_BASE}/runs/${runId}/sync`).then(res => setRunSyncData(res.data));
+    axios.get(`${API_BASE}/runs/${runId}/sync`, { params: { ext_id: selectedExtId } }).then(res => setRunSyncData(res.data));
   };
 
   const fetchComparativeMetrics = (runId: string) => {
