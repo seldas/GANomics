@@ -78,7 +78,8 @@ def run_ablation():
     
     python_exe = sys.executable
     env = os.environ.copy()
-    env["PYTHONPATH"] = os.getcwd() + os.pathsep + env.get("PYTHONPATH", "")
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env["PYTHONPATH"] = backend_dir + os.pathsep + env.get("PYTHONPATH", "")
     
     # Device and Worker Setup
     import torch
