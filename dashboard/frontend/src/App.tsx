@@ -106,7 +106,6 @@ const App: React.FC = () => {
 const fetchStatus = async () => {
   try {
     const resStatus = await axios.get(`${API_BASE}/results`);
-    console.log('Results Status:', resStatus.data); // Add this line for debugging
     setResultsStatus(resStatus.data);
   } catch (err) { console.error(err); }
 };

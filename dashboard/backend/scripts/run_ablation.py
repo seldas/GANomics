@@ -186,6 +186,20 @@ def run_ablation():
         for k, v in progress_dict.items():
             if v in ("Failed", "Error"):
                 print(f"⚠️ {k} finished with status: {v}")
+    
+    # 5. Run Comparative Analysis for completed runs
+    completed_runs = [name for name, status in progress_dict.items() if status == "Completed"]
+    if completed_runs:
+        print("\n📊 Running Comparative Analysis for completed runs...")
+        comparative_script = os.path.join(script_dir, "comparative_analysis.py")
+        
+        for run_name in completed_runs:
+            try:
+                cmd = [python_exe, comparative_script, "--run_id", run_name]
+                print(f"🔹 Running comparative analysis for {run_name}")
+                subprocess.run(cmd, check=True, env=env)
+            except subprocess.CalledProcessError as e:
+                print(f"⚠️ Failed to run comparative analysis for {run_name}: {e}")
 
 if __name__ == "__main__":
     run_ablation()
