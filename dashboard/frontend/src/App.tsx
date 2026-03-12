@@ -297,7 +297,9 @@ const fetchStatus = async () => {
               <StepItem num="1" label="Training" active={taskView === 'training'} status={status?.training} onClick={() => setTaskView('training')} />
               <StepItem num="2" label="Sync Data" active={taskView === 'sync'} status={status?.sync} onClick={() => setTaskView('sync')} />
               <StepItem num="3" label="Comparative" active={taskView === 'comparative'} status={status?.comparative} onClick={() => setTaskView('comparative')} />
-              <StepItem num="4" label="Bio-markers" active={['deg','pathway','prediction'].includes(taskView)} status={status?.deg} onClick={() => setTaskView('deg')} />
+              <StepItem num="4" label="DEG Analysis" active={taskView === 'deg'} status={status?.deg} onClick={() => setTaskView('deg')} />
+              <StepItem num="5" label="Pathway" active={taskView === 'pathway'} status={status?.pathway} onClick={() => setTaskView('pathway')} />
+              <StepItem num="6" label="Prediction" active={taskView === 'prediction'} status={status?.pred_model} onClick={() => setTaskView('prediction')} />
             </>
           )}
           <div style={{ marginTop: 'auto', padding: '1rem' }}><div className="nav-item" onClick={() => setShowSettingsModal(true)}><Database size={18} /> Create Project</div></div>

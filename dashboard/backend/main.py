@@ -288,7 +288,7 @@ async def get_results_status():
         log_path = os.path.join(LOGS_DIR, f"{run_id}_log.txt")
         checkpoint_latest = os.path.join(CHECKPOINTS_DIR, run_id, "net_latest.pth")
         is_running = os.path.exists(log_path) and (now - os.path.getmtime(log_path) < 60)
-        
+
         ext_ids, ext_statuses = [], {}
         proj_ds_root = os.path.join(DATASET_DIR, project_id)
         if os.path.exists(proj_ds_root):
@@ -306,7 +306,7 @@ async def get_results_status():
                     "pathway": os.path.exists(os.path.join(e_sync_dir, "Pathway", "Pathway_Concordance_GANomics.csv")),
                     "pred_model": os.path.exists(os.path.join(e_sync_dir, "Prediction", "Classifier_Performance_GANomics.csv")),
                 }
-        
+
         internal_meta = {"description": "Standard Internal Test Set", "note": "Original Test Set from Unseen data points", "samples": 0, "genes": 0}
         if os.path.exists(sync_path):
             try:
@@ -316,7 +316,8 @@ async def get_results_status():
 
         run_statuses[run_id] = {
             "training": "running" if is_running else ("completed" if os.path.exists(checkpoint_latest) else "idle"),
-            "sync": os.path.exists(sync_path), "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")),
+            "sync": os.path.exists(sync_path), 
+            "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")),
             "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Jaccard_Curve_GANomics.csv")),
             "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", run_id, "Pathway_Concordance_GANomics.csv")),
             "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", run_id, "Classifier_Performance_GANomics.csv")),
@@ -353,21 +354,29 @@ async def run_analysis_step(
     filter_pathways: bool = True, libraries: Optional[List[str]] = None,
     algorithms: Optional[List[str]] = None
 ):
-    scripts = {2: "test_sync.py", 3: "comparative_analysis.py", 4: "biomarker.py"}
+    scripts = {
+        2: "test_sync.py", 
+        3: "comparative_analysis.py", 
+        4: "deg_analysis.py",
+        5: "pathway_analysis.py",
+        6: "prediction_analysis.py"
+    }
     script_path = os.path.join(SCRIPTS_DIR, scripts[step])
     cmd = [sys.executable, script_path, "--run_id", run_id]
     if ext_id: cmd += ["--ext_id", ext_id]
     if step == 2: cmd += ["--config", config_path]
-    if step == 3:
-        if algorithms: cmd += ["--algorithms"] + algorithms
-    if step == 4:
+    if step == 3 and algorithms: cmd += ["--algorithms"] + algorithms
+    if step in [4, 5, 6]:
         label_path = os.path.join(DATASET_DIR, run_id.split('_')[0], "label.txt")
         if os.path.exists(label_path): cmd += ["--labels", label_path]
+    if step == 5:
         if not filter_pathways: cmd += ["--no_filter"]
         if libraries: cmd += ["--libraries"] + libraries
+
     env = os.environ.copy(); env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
     process = subprocess.Popen(cmd, cwd=BACKEND_DIR, env=env, creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0)
     return {"message": "Started", "pid": process.pid}
+
 
 @app.get("/api/runs/{run_id}/logs")
 async def stream_run_logs(run_id: str):
