@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  Bar, ComposedChart, ReferenceLine
+  Bar, ComposedChart, ReferenceLine, Area
 } from 'recharts';
 import { Loader2, BarChart2 } from 'lucide-react';
 
@@ -10,14 +10,21 @@ interface PathwayAnalysisProps {
 }
 
 const HistogramPlot = ({ distributions, concordance, title, color }: any) => {
-  const histogramData = useMemo(() => {
-    if (!distributions || distributions.length === 0) return [];
+  const { histogramData, xDomain } = useMemo(() => {
+    if (!distributions || distributions.length === 0) return { histogramData: [], xDomain: [0, 1] };
     
     const nullDist = distributions.map((d: any) => d.Null_Rho).filter((v: any) => v !== null);
-    if (nullDist.length === 0) return [];
+    const bootDist = distributions.map((d: any) => d.Bootstrap_Rho).filter((v: any) => v !== null);
+    const obsRho = concordance?.Observed_Rho || concordance?.Spearman_Rho || 0;
+
+    if (nullDist.length === 0 && bootDist.length === 0) return { histogramData: [], xDomain: [0, 1] };
     
-    const min = Math.min(...nullDist, concordance?.Observed_Rho || 0);
-    const max = Math.max(...nullDist, concordance?.Observed_Rho || 0);
+    const allValues = [...nullDist, ...bootDist, obsRho];
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    const range = max - min;
+    const padding = range * 0.1 || 0.1;
+    
     const bins = 30;
     const step = (max - min) / bins || 0.01;
     
@@ -25,13 +32,18 @@ const HistogramPlot = ({ distributions, concordance, title, color }: any) => {
     for (let i = 0; i < bins; i++) {
       const binMin = min + i * step;
       const binMax = binMin + step;
-      const count = nullDist.filter((v: number) => v >= binMin && v < binMax).length;
+      const nullCount = nullDist.filter((v: number) => v >= binMin && v < binMax).length;
+      const bootCount = bootDist.filter((v: number) => v >= binMin && v < binMax).length;
       result.push({
-        x: Number(binMin.toFixed(3)),
-        'Permutation Null': count
+        x: Number((binMin + step / 2).toFixed(3)),
+        'Permutation Null': nullCount,
+        'Bootstrap ρ': bootCount
       });
     }
-    return result;
+    return { 
+      histogramData: result, 
+      xDomain: [min - padding, max + padding] 
+    };
   }, [distributions, concordance]);
 
   const rho = concordance?.Observed_Rho || concordance?.Spearman_Rho || 0;
@@ -51,22 +63,27 @@ const HistogramPlot = ({ distributions, concordance, title, color }: any) => {
             <ComposedChart data={histogramData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis 
+                type="number"
                 dataKey="x" 
+                domain={xDomain}
                 fontSize={10} 
+                tickFormatter={(val) => val.toFixed(2)}
                 label={{ value: 'Spearman ρ', position: 'bottom', offset: 0, fontSize: 10 }} 
               />
-              <YAxis fontSize={10} />
+              <YAxis fontSize={10} hide />
               <Tooltip />
               <Legend verticalAlign="top" height={36} iconSize={10} wrapperStyle={{ fontSize: '10px' }} />
-              <Bar dataKey="Permutation Null" fill={color} opacity={0.6} barSize={15} />
-              {rho !== undefined && (
-                <ReferenceLine 
-                  x={Number(rho.toFixed(3))} 
-                  stroke="red" 
-                  strokeDasharray="3 3"
-                  label={{ value: 'Observed', position: 'top', fontSize: 10, fill: 'red', fontWeight: 'bold' }} 
-                />
-              )}
+              
+              <Bar dataKey="Permutation Null" fill="#94a3b8" opacity={0.4} barSize={10} name="Null Dist (Permutation)" />
+              <Area type="monotone" dataKey="Bootstrap ρ" fill={color} stroke={color} fillOpacity={0.3} name="Bootstrap Dist (Stability)" />
+              
+              <ReferenceLine 
+                x={rho} 
+                stroke="red" 
+                strokeWidth={2}
+                strokeDasharray="5 5"
+                label={{ value: 'Observed', position: 'top', fontSize: 10, fill: 'red', fontWeight: 'bold' }} 
+              />
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
@@ -119,10 +136,10 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
 
       <div className="card" style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
         <p style={{ margin: 0 }}>
-          <b>Interpretation:</b> Histograms show the null distribution of Spearman rank correlations (ρ) 
-          between enrichment profiles obtained by random permutations. The red dashed line indicates the 
-          <b> Observed ρ</b> between real and synthetic data. A significant perm-p (p &lt; 0.05) suggests 
-          that the biological pathway hierarchy is preserved beyond random chance.
+          <b>Interpretation:</b> The gray bars represent the <b>Null Distribution</b> (permutation of pathway ranks). 
+          The colored area represents the <b>Bootstrap Distribution</b> (resampling stability). 
+          The <span style={{ color: 'red', fontWeight: 'bold' }}>Red Dashed Line</span> is the <b>Observed ρ</b>. 
+          If the red line is significantly to the right of the gray bars (high rho, low p), the pathway hierarchy is well-preserved.
         </p>
       </div>
     </div>
