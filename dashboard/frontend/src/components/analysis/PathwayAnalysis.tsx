@@ -13,27 +13,19 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
   const [selectedAlgo, setSelectedAlgo] = useState<string>('GANomics');
   const [showAll, setShowAll] = useState(false);
 
-  if (!data) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
-  
-  const libraries = Object.keys(data);
-  if (libraries.length === 0) return <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>No pathway results available.</div>;
+  // 1. Determine base variables safely
+  const libraries = useMemo(() => data ? Object.keys(data) : [], [data]);
+  const currentLib = selectedLibrary || libraries[0] || '';
+  const libData = data && currentLib ? data[currentLib] : null;
+  const availableAlgos = useMemo(() => libData?.details ? Object.keys(libData.details) : [], [libData]);
+  const currentDetails = useMemo(() => libData?.details?.[selectedAlgo] || [], [libData, selectedAlgo]);
 
-  const currentLib = selectedLibrary || libraries[0];
-  const libData = data[currentLib];
-  if (!libData?.details) return null;
-
-  const availableAlgos = Object.keys(libData.details || {});
-  const currentDetails = libData.details?.[selectedAlgo] || [];
-
-  // 1. Calculate Significance Ratio Curve
+  // 2. Calculate Significance Ratio Curve
   const chartData = useMemo(() => {
     if (!currentDetails.length) return [];
     
-    // Data is already sorted by Real_FDR from backend
     const results: any[] = [];
     let significantInSyn = 0;
-    
-    // We only look at top 100 or all if less
     const maxK = Math.min(currentDetails.length, 100);
     
     for (let k = 1; k <= maxK; k++) {
@@ -42,9 +34,8 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
         significantInSyn++;
       }
       
-      // Every 5 points or last point
       if (k % 5 === 0 || k === maxK) {
-        results.append({
+        results.push({
           k,
           ratio: significantInSyn / k,
           label: `Top ${k}`
@@ -54,11 +45,15 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
     return results;
   }, [currentDetails]);
 
-  // 2. Filter Table
+  // 3. Filter Table
   const filteredTableData = useMemo(() => {
     if (showAll) return currentDetails;
     return currentDetails.filter((p: any) => p.Real_P < 0.05);
   }, [currentDetails, showAll]);
+
+  if (!data) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
+  if (libraries.length === 0) return <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>No pathway results available.</div>;
+  if (!libData?.details) return <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>Loading pathway details...</div>;
 
   const colors = ['var(--primary-color)', '#16a34a', '#818cf8', '#ea580c', '#db2777', '#7c3aed'];
 
