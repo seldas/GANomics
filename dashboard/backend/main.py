@@ -417,6 +417,8 @@ async def run_analysis_step(
     if step == 5:
         if not filter_pathways: cmd += ["--no_filter"]
         if libraries: cmd += ["--libraries"] + libraries
+        # Add bootstrap_b parameter for speed optimization
+        cmd += ["--bootstrap_b", "50"]
 
     env = os.environ.copy(); env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
     process = subprocess.Popen(cmd, cwd=BACKEND_DIR, env=env, creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0)
