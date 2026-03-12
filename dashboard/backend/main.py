@@ -331,14 +331,18 @@ async def get_results_status():
         pathway_algo_status = get_algo_status("Pathway", "Pathway_Concordance_")
         pred_algo_status = get_algo_status("Prediction", "Classifier_Performance_")
         
-        # Comparative is special (one file contains all algos usually, but we check if file exists)
+        # Comparative: Check if file exists and parse algorithm names robustly (handle MA/RS suffixes)
         comp_path = os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")
         comp_exists = os.path.exists(comp_path)
         comp_algo_status = {a: False for a in algos}
         if comp_exists:
             try:
                 comp_df = pd.read_csv(comp_path)
-                for a in algos: comp_algo_status[a] = a.upper() in comp_df['Algorithm'].str.upper().values.tolist()
+                found_algos = comp_df['Algorithm'].astype(str).str.upper().values.tolist()
+                for a in algos:
+                    # Specific rule: QN maps to 'QUANTILE' in the result CSV
+                    search_term = 'QUANTILE' if a == 'QN' else a.upper()
+                    comp_algo_status[a] = any(search_term in val for val in found_algos)
             except: pass
 
         internal_meta = {"description": "Standard Internal Test Set", "note": "Original Test Set from Unseen data points", "samples": 0, "genes": 0}
