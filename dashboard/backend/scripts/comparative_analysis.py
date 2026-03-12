@@ -208,7 +208,7 @@ def main():
     df_final.to_csv(os.path.join(out_dir, "Test_performance.csv"), index=False)
     
     print(f"Results saved to {out_dir}/Test_performance.csv")
-    print(df_final[['Algorithm', 'Pearson', 'Spearman', 'L1']])
+    print("✅ Comparative analysis completed.")
 
 if __name__ == "__main__":
     main()

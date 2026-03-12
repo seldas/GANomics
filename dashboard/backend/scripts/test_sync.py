@@ -154,6 +154,7 @@ def main():
 
     save_subset(train_ids, "train")
     save_subset(test_ids, "test")
+    print("✅ Test data synchronization completed.")
 
 if __name__ == "__main__":
     main()
