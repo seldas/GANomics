@@ -22,6 +22,22 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
   const [windowStart, setWindowStart] = useState(0);
   const pageSize = 20;
 
+  const fullChartData = useMemo(() => {
+    if (!logData) return [];
+    return logData.structured.map((d, i) => ({
+      name: `E${d.epoch}`,
+      index: i,
+      G_A: d.G_A || 0, G_B: d.G_B || 0, D_A: d.D_A || 0, D_B: d.D_B || 0,
+      Cycle: (d.cycle_A || 0) + (d.cycle_B || 0),
+      Feedback: (d.feedback_A || 0) + (d.feedback_B || 0),
+      IDT: (d.idt_A || 0) + (d.idt_B || 0),
+    }));
+  }, [logData]);
+
+  const chartData = useMemo(() => {
+    return fullChartData.slice(windowStart, windowStart + windowSize);
+  }, [fullChartData, windowStart, windowSize]);
+
   if (!logData) return null;
 
   const first = logData.structured[0] || {};
@@ -35,19 +51,6 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
     if (key === 'IDT') return (row.idt_A || 0) + (row.idt_B || 0);
     return 0;
   };
-
-  const fullChartData = logData.structured.map((d, i) => ({
-    name: `E${d.epoch}`,
-    index: i,
-    G_A: d.G_A || 0, G_B: d.G_B || 0, D_A: d.D_A || 0, D_B: d.D_B || 0,
-    Cycle: (d.cycle_A || 0) + (d.cycle_B || 0),
-    Feedback: (d.feedback_A || 0) + (d.feedback_B || 0),
-    IDT: (d.idt_A || 0) + (d.idt_B || 0),
-  }));
-
-  const chartData = useMemo(() => {
-    return fullChartData.slice(windowStart, windowStart + windowSize);
-  }, [fullChartData, windowStart, windowSize]);
 
   const filteredData = logData.structured.filter(d => 
     !searchTerm || 
