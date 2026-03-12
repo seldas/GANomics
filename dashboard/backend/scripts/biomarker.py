@@ -17,6 +17,8 @@ def main():
     parser.add_argument("--labels", type=str, help="Path to clinical labels")
     parser.add_argument("--gmt", type=str, help="Path to MSigDB GMT file for pathway analysis")
     parser.add_argument("--libraries", type=str, nargs="+", default=['KEGG_2021_Human', 'GO_Biological_Process_2021'], help="Enrichr libraries to use")
+    parser.add_argument("--min_pathway_size", type=int, default=15, help="Minimum number of genes in a pathway")
+    parser.add_argument("--max_pathway_size", type=int, default=500, help="Maximum number of genes in a pathway")
     parser.add_argument("--no_adjust_path", action='store_true', help="Don't adjust PYTHONPATH")
     args = parser.parse_args()
     
@@ -209,15 +211,15 @@ def main():
             
             # 1. Run Enrichment for both
             from src.core.pathway import gene_set_enrichment, ora_enrichment
-            enr_real = gene_set_enrichment(deg_real_mapped, gene_sets)
-            enr_syn = gene_set_enrichment(deg_syn_mapped, gene_sets)
+            enr_real = gene_set_enrichment(deg_real_mapped, gene_sets, min_size=args.min_pathway_size, max_size=args.max_pathway_size)
+            enr_syn = gene_set_enrichment(deg_syn_mapped, gene_sets, min_size=args.min_pathway_size, max_size=args.max_pathway_size)
             
             # 1b. Run ORA (Fisher's Exact Test) to get p-values (mimic DAVID)
-            ora_real = ora_enrichment(deg_real_mapped, gene_sets)
-            ora_syn = ora_enrichment(deg_syn_mapped, gene_sets)
+            ora_real = ora_enrichment(deg_real_mapped, gene_sets, min_size=args.min_pathway_size, max_size=args.max_pathway_size)
+            ora_syn = ora_enrichment(deg_syn_mapped, gene_sets, min_size=args.min_pathway_size, max_size=args.max_pathway_size)
             
             # 2. Run Permutation Test (internal logic preserved)
-            obs_rho, null_dist, p_val = run_permutation_test(deg_real_mapped, deg_syn_mapped, gene_sets, B=100)
+            obs_rho, null_dist, p_val = run_permutation_test(deg_real_mapped, deg_syn_mapped, gene_sets, B=100, min_size=args.min_pathway_size, max_size=args.max_pathway_size)
             
             pathway_dir = os.path.join(out_root, "Pathway", args.run_id) if not args.ext_id else os.path.join(out_root, "Pathway")
             os.makedirs(pathway_dir, exist_ok=True)

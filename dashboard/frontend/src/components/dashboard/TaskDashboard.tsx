@@ -1,45 +1,13 @@
-import React from 'react';
-import { ArrowLeft, RotateCcw, ChevronRight, Info, RefreshCw, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowLeft, RotateCcw, ChevronRight, Info, RefreshCw, Download, Settings, Sliders, Check, HelpCircle } from 'lucide-react';
 import { StatusButton } from '../common/UIComponents';
 import type { RunStatus, Project, LogResponse } from '../../types';
 import { API_BASE } from '../../constants';
 
-import { LogViewer } from '../analysis/LogViewer';
-import { ComparativeAnalysis } from '../analysis/ComparativeAnalysis';
-import { DegAnalysis } from '../analysis/DegAnalysis';
-import { PathwayAnalysis } from '../analysis/PathwayAnalysis';
-import { PredictionAnalysis } from '../analysis/PredictionAnalysis';
-import { TsneVisualization } from '../analysis/TsneVisualization';
-import { SyncStatusDetails } from '../analysis/SyncStatusDetails';
+// ... (previous imports)
 
 interface TaskDashboardProps {
-  selectedRunId: string;
-  selectedExtId: string | null;
-  runStatus: RunStatus | undefined;
-  status: any;
-  isSizeTask: boolean;
-  currentProj: Project | undefined;
-  taskView: 'overview' | 'training' | 'sync' | 'comparative' | 'deg' | 'pathway' | 'prediction';
-  onBack: () => void;
-  onSetTaskView: (view: 'overview' | 'training' | 'sync' | 'comparative' | 'deg' | 'pathway' | 'prediction') => void;
-  onSetSelectedExtId: (id: string | null) => void;
-  onShowSyncModal: () => void;
-  onRestartTask: (id: string) => void;
-  onRunStep: (step: number) => void;
-  fetchLogs: (id: string) => void;
-  fetchSyncStatus: (id: string) => void;
-  fetchComparativeMetrics: (id: string) => void;
-  fetchDegMetrics: (id: string) => void;
-  fetchPathwayMetrics: (id: string) => void;
-  fetchPredictionMetrics: (id: string) => void;
-  fetchTsneCoords: (id: string) => void;
-  logData: LogResponse | null;
-  runSyncData: any | null;
-  runComparativeData: any[] | null;
-  runDegData: any | null;
-  runPathwayData: any | null;
-  runPredictionData: any | null;
-  runTsneData: any[] | null;
+// ... (props)
 }
 
 export const TaskDashboard: React.FC<TaskDashboardProps> = ({
@@ -48,7 +16,111 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
   fetchLogs, fetchSyncStatus, fetchComparativeMetrics, fetchDegMetrics, fetchPathwayMetrics, fetchPredictionMetrics, fetchTsneCoords,
   logData, runSyncData, runComparativeData, runDegData, runPathwayData, runPredictionData, runTsneData
 }) => {
+  const [showStepSettings, setShowStepSettings] = useState(false);
+  const [pathwayFilter, setPathwayFilter] = useState(true);
+  const [selectedLibraries, setSelectedLibraries] = useState<string[]>(['KEGG_2021_Human', 'GO_Biological_Process_2021']);
+  const [selectedAlgos, setSelectedAlgos] = useState<string[]>(['combat', 'yugene', 'cublock', 'tdm', 'qn']);
+  const [modelType, setModelType] = useState('rf');
+
+  const libraries = ['KEGG_2021_Human', 'GO_Biological_Process_2021', 'MSigDB_Hallmark_2020', 'Reactome_2022'];
+  const baselines = [
+    { id: 'combat', name: 'ComBat' },
+    { id: 'yugene', name: 'YuGene' },
+    { id: 'cublock', name: 'CuBlock' },
+    { id: 'tdm', name: 'TDM' },
+    { id: 'qn', name: 'Quantile' }
+  ];
+
+  const handleRunStepWithParams = (step: number) => {
+    const params: any = {};
+    if (step === 3) {
+      params.algorithms = selectedAlgos;
+    }
+    if (step === 4) {
+      params.filter_pathways = pathwayFilter;
+      params.libraries = selectedLibraries;
+      // modelType is passed but backend biomarker.py doesn't use it yet (fixed to RF)
+    }
+    onRunStep(step, params);
+  };
+
+  const StepSettingsModal = () => {
+    if (!showStepSettings) return null;
+    return (
+      <div className="modal-overlay" onClick={() => setShowStepSettings(false)}>
+        <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+          <div className="modal-header">
+            <h3><Sliders size={20} style={{ marginRight: '8px', verticalAlign: 'middle' }} /> Pipeline Parameters</h3>
+            <button className="icon-button" onClick={() => setShowStepSettings(false)}><ArrowLeft size={20} /></button>
+          </div>
+          <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            
+            <section>
+              <h4 style={{ fontSize: '0.9rem', marginBottom: '1rem', color: 'var(--text-muted)', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>STEP 3: COMPARATIVE ANALYSIS</h4>
+              <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Baseline Algorithms:</div>
+              <div className="chip-grid" style={{ gap: '0.5rem' }}>
+                {baselines.map(algo => (
+                  <div key={algo.id} className={`chip ${selectedAlgos.includes(algo.id) ? 'selected' : ''}`} onClick={() => {
+                    if (selectedAlgos.includes(algo.id)) setSelectedAlgos(selectedAlgos.filter(a => a !== algo.id));
+                    else setSelectedAlgos([...selectedAlgos, algo.id]);
+                  }} style={{ fontSize: '0.75rem' }}>
+                    {selectedAlgos.includes(algo.id) && <Check size={12} style={{ marginRight: '4px' }} />}
+                    {algo.name}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <h4 style={{ fontSize: '0.9rem', marginBottom: '1rem', color: 'var(--text-muted)', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.5rem' }}>STEP 4: BIOMARKER ANALYSIS</h4>
+              
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Prediction Model:</div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="chip selected" style={{ fontSize: '0.75rem', opacity: 0.9, cursor: 'default', pointerEvents: 'none' }}>
+                    <Check size={12} style={{ marginRight: '4px' }} /> Random Forest
+                  </div>
+                  <div className="chip disabled" style={{ fontSize: '0.75rem', title: 'Coming soon' }}>
+                    XGBoost (Soon)
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Pathway Settings:</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', marginBottom: '1rem' }}>
+                <input type="checkbox" checked={pathwayFilter} onChange={(e) => setPathwayFilter(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+                <span style={{ fontSize: '0.85rem' }}>Apply Size Filter (15-500 genes)</span>
+                <HelpCircle size={14} style={{ color: 'var(--text-muted)' }} title="Recommended to filter out overly generic pathways." />
+              </label>
+              
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Libraries:</div>
+              <div className="chip-grid" style={{ gap: '0.5rem' }}>
+                {libraries.map(lib => (
+                  <div key={lib} className={`chip ${selectedLibraries.includes(lib) ? 'selected' : ''}`} onClick={() => {
+                    if (selectedLibraries.includes(lib)) setSelectedLibraries(selectedLibraries.filter(l => l !== lib));
+                    else setSelectedLibraries([...selectedLibraries, lib]);
+                  }} style={{ fontSize: '0.75rem' }}>
+                    {selectedLibraries.includes(lib) && <Check size={12} style={{ marginRight: '4px' }} />}
+                    {lib.split('_')[0]}
+                  </div>
+                ))}
+              </div>
+            </section>
+            
+            <div style={{ padding: '1rem', backgroundColor: '#f1f5f9', borderRadius: '8px', fontSize: '0.8rem', color: '#475569' }}>
+              <Info size={14} style={{ marginRight: '6px' }} /> 
+              Settings are saved for your current session and applied when you trigger a workflow step.
+            </div>
+            
+            <button className="chip selected" style={{ width: '100%', padding: '0.75rem' }} onClick={() => setShowStepSettings(false)}>Save & Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderLogViewer = () => <LogViewer logData={logData} runId={selectedRunId || ''} />;
+// ...
   const renderSyncStatus = () => <SyncStatusDetails data={runSyncData} />;
   const renderComparativeAnalysis = () => <ComparativeAnalysis data={runComparativeData} />;
   const renderDegAnalysis = () => <DegAnalysis data={runDegData} />;
@@ -146,8 +218,24 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+      <StepSettingsModal />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><button className="chip" onClick={onBack}><ArrowLeft size={18} /></button><div><h2 style={{ margin: 0 }}>{selectedRunId}</h2><div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Workflow Pipeline</div></div></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button className="chip" onClick={onBack}><ArrowLeft size={18} /></button>
+          <div>
+            <h2 style={{ margin: 0 }}>{selectedRunId}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Workflow Pipeline</div>
+              <button 
+                className="chip" 
+                style={{ padding: '2px 8px', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#f8fafc' }}
+                onClick={() => setShowStepSettings(true)}
+              >
+                <Settings size={12} /> Parameters
+              </button>
+            </div>
+          </div>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#f1f5f9', padding: '0.5rem 1rem', borderRadius: '10px' }}>
           <div style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>DATASET BRANCH:</div>
           <select className="chip" style={{ border: 'none' }} value={selectedExtId || 'main'} onChange={(e) => { if (e.target.value === 'ADD_NEW') onShowSyncModal(); else onSetSelectedExtId(e.target.value === 'main' ? null : e.target.value); }}>
@@ -189,7 +277,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
               className={`chip selected ${!status?.sync ? 'disabled' : ''}`} 
               disabled={!status?.sync}
               style={{ opacity: !status?.sync ? 0.5 : 1 }} 
-              onClick={() => status?.sync && onRunStep(3)}
+              onClick={() => status?.sync && handleRunStepWithParams(3)}
             >
               Start
             </button>
@@ -203,7 +291,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
               className={`chip selected ${!status?.comparative ? 'disabled' : ''}`} 
               disabled={!status?.comparative}
               style={{ opacity: !status?.comparative ? 0.5 : 1 }} 
-              onClick={() => status?.comparative && onRunStep(4)}
+              onClick={() => status?.comparative && handleRunStepWithParams(4)}
             >
               Start
             </button>

@@ -135,7 +135,15 @@ body {
   border-color: var(--primary-color);
 }
 
-.chip:hover:not(.selected) {
+.chip.disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.chip:hover:not(.selected):not(.disabled) {
   border-color: var(--primary-color);
   color: var(--primary-color);
 }

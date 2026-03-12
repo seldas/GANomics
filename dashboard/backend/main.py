@@ -319,15 +319,23 @@ async def restart_task(run_id: str):
     raise HTTPException(status_code=501)
 
 @app.post("/api/runs/{run_id}/run_step")
-async def run_analysis_step(run_id: str, step: int, config_path: Optional[str] = None, ext_id: Optional[str] = None):
+async def run_analysis_step(
+    run_id: str, step: int, config_path: Optional[str] = None, ext_id: Optional[str] = None,
+    filter_pathways: bool = True, libraries: Optional[List[str]] = None,
+    algorithms: Optional[List[str]] = None
+):
     scripts = {2: "test_sync.py", 3: "comparative_analysis.py", 4: "biomarker.py"}
     script_path = os.path.join(SCRIPTS_DIR, scripts[step])
     cmd = [sys.executable, script_path, "--run_id", run_id]
     if ext_id: cmd += ["--ext_id", ext_id]
     if step == 2: cmd += ["--config", config_path]
+    if step == 3:
+        if algorithms: cmd += ["--algorithms"] + algorithms
     if step == 4:
         label_path = os.path.join(DATASET_DIR, run_id.split('_')[0], "label.txt")
         if os.path.exists(label_path): cmd += ["--labels", label_path]
+        if not filter_pathways: cmd += ["--no_filter"]
+        if libraries: cmd += ["--libraries"] + libraries
     env = os.environ.copy(); env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
     process = subprocess.Popen(cmd, cwd=BACKEND_DIR, env=env, creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0)
     return {"message": "Started", "pid": process.pid}

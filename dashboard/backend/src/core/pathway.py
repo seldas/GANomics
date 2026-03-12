@@ -29,7 +29,7 @@ def load_gmt(path):
                 gene_sets[name] = genes
     return gene_sets
 
-def gene_set_enrichment(deg_df, gene_sets, how='abs_d'):
+def gene_set_enrichment(deg_df, gene_sets, how='abs_d', min_size=15, max_size=500):
     """
     Simple enrichment scoring: mean of a statistic (e.g., abs Hedges' g)
     for genes in a set vs. a null distribution or ranking.
@@ -54,7 +54,8 @@ def gene_set_enrichment(deg_df, gene_sets, how='abs_d'):
         genes_upper = [str(g).upper() for g in genes]
         set_genes = list(set(genes_upper) & universe_genes)
         
-        if len(set_genes) < 3: 
+        # Standard filtering: exclude too small or too large/generic sets
+        if len(set_genes) < min_size or len(set_genes) > max_size:
             continue
             
         score = df.loc[set_genes, 'stat'].mean()
@@ -67,7 +68,7 @@ def gene_set_enrichment(deg_df, gene_sets, how='abs_d'):
         return pd.DataFrame(columns=['set', 'score', 'rank', 'count'])
     return res_df
 
-def ora_enrichment(deg_df, gene_sets, threshold=0.05):
+def ora_enrichment(deg_df, gene_sets, threshold=0.05, min_size=15, max_size=500):
     """
     Perform Over-Representation Analysis (ORA) using Fisher's Exact Test via gseapy.
     This mimics the DAVID functional annotation process.
@@ -81,8 +82,19 @@ def ora_enrichment(deg_df, gene_sets, threshold=0.05):
         return pd.DataFrame(columns=['set', 'p_value', 'fdr', 'overlap', 'rank', 'genes'])
         
     try:
+        # Pre-filter gene sets to remove generic/large ones and tiny ones
+        filtered_sets = {}
+        bg_set = set(background)
+        for name, genes in gene_sets.items():
+            intersect_size = len(set(genes) & bg_set)
+            if min_size <= intersect_size <= max_size:
+                filtered_sets[name] = genes
+
+        if not filtered_sets:
+            return pd.DataFrame(columns=['set', 'p_value', 'fdr', 'overlap', 'rank', 'genes'])
+
         enr = gseapy.enrich(gene_list=degs,
-                            gene_sets=gene_sets,
+                            gene_sets=filtered_sets,
                             background=background,
                             outdir=None,
                             no_plot=True)
@@ -125,14 +137,14 @@ def spearman_rank_concordance(df_real, df_syn):
     rho, _ = stats.spearmanr(-a, -b)
     return rho
 
-def run_permutation_test(deg_real, deg_syn, gene_sets, B=1000):
+def run_permutation_test(deg_real, deg_syn, gene_sets, B=1000, min_size=15, max_size=500):
     """
     Permutation test: randomize gene-set membership to build a null distribution
     for the Spearman rank concordance (rho).
     """
     obs_rho = spearman_rank_concordance(
-        gene_set_enrichment(deg_real, gene_sets),
-        gene_set_enrichment(deg_syn, gene_sets)
+        gene_set_enrichment(deg_real, gene_sets, min_size=min_size, max_size=max_size),
+        gene_set_enrichment(deg_syn, gene_sets, min_size=min_size, max_size=max_size)
     )
     
     universe = list(deg_syn.index)
@@ -147,8 +159,8 @@ def run_permutation_test(deg_real, deg_syn, gene_sets, B=1000):
             perm_sets[name] = random.sample(universe, sample_size)
             
         rho = spearman_rank_concordance(
-            gene_set_enrichment(deg_real, gene_sets),
-            gene_set_enrichment(deg_syn, perm_sets)
+            gene_set_enrichment(deg_real, gene_sets, min_size=min_size, max_size=max_size),
+            gene_set_enrichment(deg_syn, perm_sets, min_size=min_size, max_size=max_size)
         )
         if np.isfinite(rho):
             null.append(rho)

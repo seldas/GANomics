@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   LayoutDashboard, Activity, X, Loader2, ChevronsLeft, ChevronsRight, ArrowLeft, RotateCcw, 
   ChevronRight, Info, Plus, Download, Upload, LineChart as LineChartIcon, Table as TableIcon,
-  Settings
+  Settings, Database, FlaskConical, Beaker
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -145,12 +145,12 @@ const fetchStatus = async () => {
     } catch (err) { alert("Failed to start session"); }
   };
 
-  const handleRunStep = async (step: number) => {
+  const handleRunStep = async (step: number, params?: any) => {
     if (!selectedRunId) return;
     const project = projects.find(p => selectedRunId.startsWith(p.id));
     try {
       await axios.post(`${API_BASE}/runs/${selectedRunId}/run_step`, null, {
-        params: { step, config_path: project?.config_path, ext_id: selectedExtId }
+        params: { step, config_path: project?.config_path, ext_id: selectedExtId, ...params }
       });
       alert(`Step ${step} started.`);
     } catch (err) { alert("Failed to start step"); }
@@ -289,7 +289,7 @@ const fetchStatus = async () => {
       <aside className="sidebar">
         <div className="sidebar-header"><Activity size={24} /><span>GANomics Dashboard</span></div>
         <nav className="nav-menu">
-          <div style={{ padding: '1rem' }}><button className="chip selected" style={{ width: '100%', padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 'bold' }} onClick={() => setActiveTab('new-session')}><Plus size={18} /> New Experiment</button></div>
+          <div style={{ padding: '1rem' }}><button className="chip selected" style={{ width: '100%', padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 'bold' }} onClick={() => setActiveTab('new-session')}><FlaskConical size={18} /> New Experiment</button></div>
           <div style={{ padding: '0.5rem 1rem', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Menu</div>
           <a className={`nav-item ${activeTab === 'train' && !selectedRunId ? 'active' : ''}`} onClick={() => { setActiveTab('train'); setSelectedRunId(null); }}><LayoutDashboard size={18} /> Project Dashboard</a>
           {selectedRunId && (
@@ -300,7 +300,7 @@ const fetchStatus = async () => {
               <StepItem num="4" label="Bio-markers" active={['deg','pathway','prediction'].includes(taskView)} status={status?.deg} onClick={() => setTaskView('deg')} />
             </>
           )}
-          <div style={{ marginTop: 'auto', padding: '1rem' }}><div className="nav-item" onClick={() => setShowSettingsModal(true)}><Settings size={18} /> Create Project</div></div>
+          <div style={{ marginTop: 'auto', padding: '1rem' }}><div className="nav-item" onClick={() => setShowSettingsModal(true)}><Database size={18} /> Create Project</div></div>
         </nav>
       </aside>
 

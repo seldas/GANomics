@@ -58,6 +58,7 @@ def main():
     parser = argparse.ArgumentParser(description="Comparative Analysis with Baseline Methods")
     parser.add_argument("--run_id", type=str, required=True, help="Full run ID (e.g. NB_Ablation_Size_50_Run_0)")
     parser.add_argument("--ext_id", type=str, help="External Dataset ID (e.g. ext1)")
+    parser.add_argument("--algorithms", type=str, nargs="+", default=['combat', 'yugene', 'cublock', 'tdm', 'qn'], help="Baseline algorithms to run")
     parser.add_argument("--no_adjust_path", action='store_true', help="Don't adjust PYTHONPATH")
     args = parser.parse_args()
     
@@ -114,29 +115,39 @@ def main():
         df_rs_fake = pd.read_csv(os.path.join(test_dir, "rnaseq_fake.csv"), index_col=0)
     
     # 2. Run Baselines
-    print(f"[{args.run_id}] Running Baseline Comparisons...")
+    print(f"[{args.run_id}] Running Baseline Comparisons: {args.algorithms}")
     
     # ComBat
-    res_combat = combat_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
-    df_ma_combat, df_rs_combat = res_combat['rnaseq_to_microarray'], res_combat['microarray_to_rnaseq']
+    df_ma_combat, df_rs_combat = None, None
+    if 'combat' in args.algorithms:
+        res_combat = combat_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
+        df_ma_combat, df_rs_combat = res_combat['rnaseq_to_microarray'], res_combat['microarray_to_rnaseq']
     
     # YuGene
-    res_yugene = yugene_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
-    df_ma_yugene, df_rs_yugene = res_yugene['rnaseq_to_microarray'], res_yugene['microarray_to_rnaseq']
+    df_ma_yugene, df_rs_yugene = None, None
+    if 'yugene' in args.algorithms:
+        res_yugene = yugene_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
+        df_ma_yugene, df_rs_yugene = res_yugene['rnaseq_to_microarray'], res_yugene['microarray_to_rnaseq']
     
     # CuBlock
-    trans_rs = fit_cublock_translator(train_ag, train_ngs)
-    df_rs_cublock = translate_cublock(test_ag, trans_rs) if test_ag is not None else None
-    trans_ma = fit_cublock_translator(train_ngs, train_ag)
-    df_ma_cublock = translate_cublock(test_ngs, trans_ma) if test_ngs is not None else None
+    df_ma_cublock, df_rs_cublock = None, None
+    if 'cublock' in args.algorithms:
+        trans_rs = fit_cublock_translator(train_ag, train_ngs)
+        df_rs_cublock = translate_cublock(test_ag, trans_rs) if test_ag is not None else None
+        trans_ma = fit_cublock_translator(train_ngs, train_ag)
+        df_ma_cublock = translate_cublock(test_ngs, trans_ma) if test_ngs is not None else None
     
     # TDM
-    res_tdm = tdm_normalize(train_ag, test_ag, train_ngs, test_ngs)
-    df_ma_tdm, df_rs_tdm = res_tdm['rnaseq_to_microarray'], res_tdm['microarray_to_rnaseq']
+    df_ma_tdm, df_rs_tdm = None, None
+    if 'tdm' in args.algorithms:
+        res_tdm = tdm_normalize(train_ag, test_ag, train_ngs, test_ngs)
+        df_ma_tdm, df_rs_tdm = res_tdm['rnaseq_to_microarray'], res_tdm['microarray_to_rnaseq']
     
     # Quantile
-    res_qn = quantile_normalize(train_ag, test_ag, train_ngs, test_ngs)
-    df_ma_qn, df_rs_qn = res_qn['rnaseq_to_microarray'], res_qn['microarray_to_rnaseq']
+    df_ma_qn, df_rs_qn = None, None
+    if 'qn' in args.algorithms:
+        res_qn = quantile_normalize(train_ag, test_ag, train_ngs, test_ngs)
+        df_ma_qn, df_rs_qn = res_qn['rnaseq_to_microarray'], res_qn['microarray_to_rnaseq']
 
     # 3. Save Algorithm Profiles
     if args.ext_id:
