@@ -359,6 +359,10 @@ async def get_results_status():
             "deg": any(deg_algo_status.values()),
             "pathway": any(pathway_algo_status.values()),
             "pred_model": any(pred_algo_status.values()),
+            "algo_details": {
+                "comparative": comp_algo_status,
+                "pred_model": pred_algo_status
+            },
             "metadata": internal_meta,
             "ext_ids": ext_ids,
             "ext_statuses": ext_statuses
@@ -465,6 +469,18 @@ async def get_run_deg_metrics(run_id: str, ext_id: Optional[str] = None):
         if f.startswith("Jaccard_Curve_"): res[f[14:-4]] = pd.read_csv(os.path.join(deg_dir, f)).replace({np.nan: None}).to_dict(orient="records")
     return res
 
+@app.get("/api/runs/{run_id}/deg/download")
+async def download_deg_file(run_id: str, filename: str, ext_id: Optional[str] = None):
+    # Determine the directory based on ext_id
+    if ext_id:
+        deg_dir = os.path.join(SYNC_DATA_DIR, run_id, ext_id, "DEG")
+    else:
+        deg_dir = os.path.join(BIOMARKERS_DIR, "DEG", run_id)
+        
+    path = os.path.join(deg_dir, filename)
+    if not os.path.exists(path): raise HTTPException(status_code=404)
+    return FileResponse(path, filename=filename)
+
 @app.get("/api/runs/{run_id}/prediction")
 async def get_run_prediction_metrics(run_id: str, ext_id: Optional[str] = None):
     pred_dir = os.path.join(BIOMARKERS_DIR, "Prediction", run_id)
@@ -483,16 +499,20 @@ async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
         parts = f[:-4].split("_")
         if f.startswith("Pathway_Concordance_"):
             lib = "_".join(parts[3:])
-            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}}
+            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
             results[lib]["concordance"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")[0]
         elif f.startswith("Pathway_Details_"):
             lib = "_".join(parts[3:])
-            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}}
+            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
             results[lib]["details"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
         elif f.startswith("Pathway_Stats_"):
             lib = "_".join(parts[3:])
-            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}}
+            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
             results[lib]["stats"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
+        elif f.startswith("Pathway_Distributions_"):
+            lib = "_".join(parts[3:])
+            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
+            results[lib]["distributions"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
     return results
 
 @app.get("/api/projects/{project_id}/ablation")

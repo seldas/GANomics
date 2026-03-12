@@ -8,9 +8,16 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.core.analysis import run_deg_analysis
 from src.core.pathway import (
-    get_enrichr_gene_sets, ora_enrichment, 
-    spearman_rank_concordance, jaccard_topk_mc, 
-    expected_jaccard_random, perm_pvalue
+    get_enrichr_gene_sets, 
+    gene_set_enrichment,
+    spearman_rank_concordance, 
+    gene_set_preservation_permutation,
+    bootstrap_pathway_rank_stability,
+    ci95,
+    glass_delta,
+    perm_pvalue,
+    jaccard_topk_mc,
+    expected_jaccard_random
 )
 
 def main():
@@ -20,13 +27,13 @@ def main():
     parser.add_argument("--labels", type=str)
     parser.add_argument("--libraries", type=str, nargs="+", default=['KEGG_2021_Human', 'GO_Biological_Process_2021'])
     parser.add_argument("--no_filter", action='store_true')
+    parser.add_argument("--bootstrap_b", type=int, default=100)
     args = parser.parse_args()
 
     # Paths Setup
     backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     sync_root = os.path.join(backend_dir, "results", "2_SyncData", args.run_id)
     project_id = args.run_id.split('_')[0]
-    apply_filter = not args.no_filter
     
     if args.ext_id:
         test_dir = os.path.join(sync_root, args.ext_id)
@@ -41,32 +48,42 @@ def main():
         rs_real = pd.read_csv(os.path.join(test_dir, "rnaseq_real.csv"), index_col=0)
         ma_fake = pd.read_csv(os.path.join(test_dir, "microarray_fake.csv"), index_col=0)
         rs_fake = pd.read_csv(os.path.join(test_dir, "rnaseq_fake.csv"), index_col=0)
-    except: return
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        return
 
     label_path = args.labels if args.labels else os.path.join(backend_dir, "dataset", project_id, "label.txt")
     df_labels = pd.read_csv(label_path, index_col=0, sep=None, engine='python')
     common_idx = ma_real.index.intersection(rs_real.index).intersection(df_labels.index)
+    
+    # Ensure samples are aligned
+    ma_real = ma_real.loc[common_idx]
+    rs_real = rs_real.loc[common_idx]
+    ma_fake = ma_fake.loc[common_idx]
+    rs_fake = rs_fake.loc[common_idx]
     y = df_labels.loc[common_idx, 'label']
 
-    # Mapping
+    # Mapping for symbols
     mapping_path = os.path.join(backend_dir, "dataset", project_id, "gene_mapping.tsv")
     gene_map = None
     if os.path.exists(mapping_path):
         df_map = pd.read_csv(mapping_path, sep='\t').dropna(subset=['Agilent_Probe_Name', 'GeneSymbol'])
         gene_map = dict(zip(df_map['Agilent_Probe_Name'].astype(str), df_map['GeneSymbol'].astype(str)))
     
-    def apply_mapping(deg_df, mapping):
-        if mapping is None: return deg_df
-        df = deg_df.copy(); df.index = df.index.astype(str)
-        df.index = [mapping.get(x, x) for x in df.index]
-        return df[~df.index.astype(str).str.startswith(('UKv4_', 'A_'))]
+    def apply_mapping(df, mapping):
+        if mapping is None: return df
+        new_df = df.copy()
+        new_df.columns = [mapping.get(str(c), str(c)).upper() for c in new_df.columns]
+        # Drop columns that didn't map to a real symbol (optional, but notebook does it)
+        keep_cols = [c for c in new_df.columns if not c.startswith(('UKV4_', 'A_'))]
+        return new_df[keep_cols]
 
-    # Run DEGs for all 4 profiles
-    print("Computing DEGs for all profiles...")
-    d_ma_real = apply_mapping(run_deg_analysis(ma_real.loc[common_idx], y), gene_map)
-    d_rs_real = apply_mapping(run_deg_analysis(rs_real.loc[common_idx], y), gene_map)
-    d_ma_fake = apply_mapping(run_deg_analysis(ma_fake.loc[common_idx], y), gene_map)
-    d_rs_fake = apply_mapping(run_deg_analysis(rs_fake.loc[common_idx], y), gene_map)
+    # Map raw data columns to uppercase symbols
+    print("Mapping gene symbols...")
+    ma_real = apply_mapping(ma_real, gene_map)
+    rs_real = apply_mapping(rs_real, gene_map)
+    ma_fake = apply_mapping(ma_fake, gene_map)
+    rs_fake = apply_mapping(rs_fake, gene_map)
 
     # Libraries
     all_gene_sets = {lib: get_enrichr_gene_sets(lib) for lib in args.libraries}
@@ -74,59 +91,102 @@ def main():
     pathway_dir = os.path.join(out_root, "Pathway", args.run_id) if not args.ext_id else os.path.join(out_root, "Pathway")
     os.makedirs(pathway_dir, exist_ok=True)
 
-    # Comparison Definition
+    # Comparison Definition (using raw data to allow bootstrap DEG re-computation)
     comparisons = [
-        ('Baseline', d_ma_real, d_rs_real, "Native Cross-Platform"),
-        ('GANomics_MA_to_RS', d_rs_fake, d_rs_real, "Microarray -> RNA-Seq"),
-        ('GANomics_RS_to_MA', d_ma_fake, d_ma_real, "RNA-Seq -> Microarray")
+        ('Baseline', ma_real, rs_real, "Native Cross-Platform"),
+        ('GANomics_MA_to_RS', ma_fake, rs_real, "Microarray -> RNA-Seq"),
+        ('GANomics_RS_to_MA', rs_fake, ma_real, "RNA-Seq -> Microarray")
     ]
 
-    for algo_name, deg_test, deg_ref, desc in comparisons:
+    for algo_name, data_test, data_ref, desc in comparisons:
         print(f"\n>>> Processing Pathways: {desc}")
+        
+        # Initial DEG for preservation permutation
+        deg_ref = run_deg_analysis(data_ref, y)
+        deg_test = run_deg_analysis(data_test, y)
+        
         for gs_name, gene_sets in all_gene_sets.items():
             if not gene_sets: continue
             
-            ora_ref = ora_enrichment(deg_ref, gene_sets, min_size=15 if apply_filter else 0, max_size=500 if apply_filter else 10000)
-            ora_test = ora_enrichment(deg_test, gene_sets, min_size=15 if apply_filter else 0, max_size=500 if apply_filter else 10000)
+            # 1) Preservation Permutation (Null distribution)
+            print(f"  [{gs_name}] Running permutation test...")
+            obs_rho, null_dist, p_perm_obs, enr_real, enr_syn = gene_set_preservation_permutation(
+                deg_ref, deg_test, gene_sets, B=args.bootstrap_b, how='abs_d'
+            )
             
-            if ora_ref.empty: continue
+            if not np.isfinite(obs_rho) or enr_real.empty:
+                continue
 
-            # Merge and Save Details
+            # 2) Bootstrap Rank Stability (Bootstrap rhos)
+            print(f"  [{gs_name}] Running bootstrap stability...")
+            boot_rhos, topk_boot = bootstrap_pathway_rank_stability(
+                data_ref, data_test, y, gene_sets, B=args.bootstrap_b, frac=0.8, how='abs_d'
+            )
+            
+            # 3) Compute Statistics
+            mu, sd, lo, hi = ci95(boot_rhos)
+            p_perm_final = perm_pvalue(null_dist, mu, side="greater")
+            g_delta = glass_delta(mu, null_dist)
+            
+            # Save Details (Enrichment results)
             df_detail = pd.merge(
-                ora_ref[['set', 'p_value', 'overlap', 'genes']].rename(columns={'p_value': 'Real_P', 'overlap': 'Real_Overlap', 'genes': 'Real_Genes'}),
-                ora_test[['set', 'p_value', 'overlap', 'genes']].rename(columns={'p_value': 'Syn_P', 'overlap': 'Syn_Overlap', 'genes': 'Syn_Genes'}),
+                enr_real[['set', 'k', 't', 'p', 'q', 'mean_in', 'mean_out']].rename(columns=lambda x: 'Real_'+x.upper() if x!='set' else x),
+                enr_syn[['set', 'k', 't', 'p', 'q', 'mean_in', 'mean_out']].rename(columns=lambda x: 'Syn_'+x.upper() if x!='set' else x),
                 on='set', how='left'
             )
-            def get_total_genes(ov):
-                try: return int(str(ov).split('/')[-1])
-                except: return 0
-            df_detail['Genes'] = df_detail['Real_Overlap'].apply(get_total_genes)
             df_detail = df_detail.sort_values('Real_P', ascending=True)
             df_detail.to_csv(os.path.join(pathway_dir, f"Pathway_Details_{algo_name}_{gs_name}.csv"), index=False)
             
-            # Save Concordance
-            pd.DataFrame([{'Algorithm': algo_name, 'Library': gs_name, 'Significant_Real': len(ora_ref[ora_ref['p_value'] < 0.05])}]).to_csv(
+            # Save Summary Stats (compatible with old Pathway_Concordance if needed)
+            summary_res = {
+                'Algorithm': algo_name,
+                'Library': gs_name,
+                'Observed_Rho': obs_rho,
+                'Spearman_Rho': obs_rho, # Alias for frontend compatibility
+                'Bootstrap_Mean_Rho': mu,
+                'Bootstrap_SD': sd,
+                'CI_95_Low': lo,
+                'CI_95_High': hi,
+                'Permutation_P': p_perm_final,
+                'Glass_Delta': g_delta
+            }
+            pd.DataFrame([summary_res]).to_csv(
+                os.path.join(pathway_dir, f"Pathway_Summary_{algo_name}_{gs_name}.csv"), index=False
+            )
+            # Maintain old name for frontend compatibility
+            pd.DataFrame([summary_res]).to_csv(
                 os.path.join(pathway_dir, f"Pathway_Concordance_{algo_name}_{gs_name}.csv"), index=False
             )
-
-            # Statistical Validation
-            common_sets = set(ora_ref['set']) & set(ora_test['set'])
+            
+            # Save Top-K Jaccard Stats
+            common_sets = set(enr_real['set']) & set(enr_syn['set'])
             M = len(common_sets)
-            if M > 0:
-                stats_res = []
-                rho = spearman_rank_concordance(ora_ref, ora_test)
-                for K in [10, 20, 50]:
-                    if K > M: continue
-                    top_ref = set(ora_ref.nsmallest(K, 'p_value')['set'])
-                    top_test = set(ora_test.nsmallest(K, 'p_value')['set'])
-                    obs_jac = len(top_ref & top_test) / len(top_ref | top_test) if len(top_ref | top_test) > 0 else 0.0
-                    null_dist = jaccard_topk_mc(M, K, B=2000)
-                    p_val = perm_pvalue(null_dist, obs_jac)
-                    exp_jac = expected_jaccard_random(M, K)
-                    stats_res.append({'K': K, 'Observed_Jaccard': obs_jac, 'Expected_Jaccard': exp_jac, 'P_Value': p_val, 'Spearman_Rho': rho})
-                
-                if stats_res:
-                    pd.DataFrame(stats_res).to_csv(os.path.join(pathway_dir, f"Pathway_Stats_{algo_name}_{gs_name}.csv"), index=False)
+            topk_stats = []
+            for K in [10, 20, 50]:
+                if K > M: continue
+                emp_jac = np.nanmean(topk_boot[K]) if K in topk_boot else topK_overlap(enr_real, enr_syn, K=K)
+                null_jac_dist = jaccard_topk_mc(M, K, B=20000)
+                p_jac = perm_pvalue(null_jac_dist, emp_jac, side="greater")
+                exp_jac = expected_jaccard_random(M, K)
+                topk_stats.append({
+                    'K': K, 
+                    'Observed_Jaccard': emp_jac, 
+                    'Expected_Jaccard': exp_jac, 
+                    'P_Value': p_jac,
+                    'Spearman_Rho': obs_rho # For frontend compatibility
+                })
+            
+            if topk_stats:
+                pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_TopK_{algo_name}_{gs_name}.csv"), index=False)
+                # Maintain old name for frontend compatibility
+                pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_Stats_{algo_name}_{gs_name}.csv"), index=False)
+
+            # Save distributions for plotting (optional, but good for frontend)
+            dist_df = pd.DataFrame({
+                'Null_Rho': pd.Series(null_dist),
+                'Bootstrap_Rho': pd.Series(boot_rhos)
+            })
+            dist_df.to_csv(os.path.join(pathway_dir, f"Pathway_Distributions_{algo_name}_{gs_name}.csv"), index=False)
 
     print("✅ Redesigned Pathway analysis completed.")
 

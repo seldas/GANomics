@@ -72,6 +72,19 @@ def main():
         jac_curve = jaccard_threshold_curve(deg_ref, deg_test)
         jac_curve.to_csv(os.path.join(deg_dir, f"Jaccard_Curve_{algo_name}.csv"), index=False)
 
+    # Save Significant DEG lists (p < 0.05) for download
+    def save_deg_list(df, filename):
+        if not df.empty and 'p_value' in df.columns:
+            # Sort by p-value (lowest first)
+            sigs = df[df['p_value'] < 0.05].sort_values('p_value')
+            with open(os.path.join(deg_dir, filename), 'w') as f:
+                f.write("\n".join(sigs.index.astype(str).tolist()))
+
+    save_deg_list(deg_ma_real, "DEGs_Microarray_Real.txt")
+    save_deg_list(deg_rs_real, "DEGs_RNAseq_Real.txt")
+    save_deg_list(deg_ma_fake, "DEGs_Microarray_Fake.txt")
+    save_deg_list(deg_rs_fake, "DEGs_RNAseq_Fake.txt")
+
     print("✅ Redesigned DEG analysis completed.")
 
 if __name__ == "__main__":
