@@ -107,11 +107,11 @@ def main():
             if not ora_real.empty:
                 # Merge Real and Syn results on pathway name
                 df_detail = pd.merge(
-                    ora_real[['set', 'p_value', 'fdr', 'overlap', 'genes']].rename(
-                        columns={'p_value': 'Real_P', 'fdr': 'Real_FDR', 'overlap': 'Real_Overlap', 'genes': 'Real_Genes'}
+                    ora_real[['set', 'p_value', 'overlap', 'genes']].rename(
+                        columns={'p_value': 'Real_P', 'overlap': 'Real_Overlap', 'genes': 'Real_Genes'}
                     ),
-                    ora_syn[['set', 'p_value', 'fdr', 'overlap', 'genes']].rename(
-                        columns={'p_value': 'Syn_P', 'fdr': 'Syn_FDR', 'overlap': 'Syn_Overlap', 'genes': 'Syn_Genes'}
+                    ora_syn[['set', 'p_value', 'overlap', 'genes']].rename(
+                        columns={'p_value': 'Syn_P', 'overlap': 'Syn_Overlap', 'genes': 'Syn_Genes'}
                     ),
                     on='set', how='left'
                 )
@@ -123,8 +123,8 @@ def main():
                 
                 df_detail['Genes'] = df_detail['Real_Overlap'].apply(get_total_genes)
                 
-                # Rank by Real FDR
-                df_detail = df_detail.sort_values('Real_FDR', ascending=True)
+                # Rank by Real P-value
+                df_detail = df_detail.sort_values('Real_P', ascending=True)
                 
                 # Save detailed CSV
                 df_detail.to_csv(os.path.join(pathway_dir, f"Pathway_Details_{algo_name}_{gs_name}.csv"), index=False)

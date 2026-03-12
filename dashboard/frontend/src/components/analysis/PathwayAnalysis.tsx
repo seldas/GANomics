@@ -65,7 +65,7 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
           <div>
             <h3>Significance Preservation Ratio</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Fraction of Top X pathways (ranked by Real FDR) that are also significant (p &lt; 0.05) in Synthetic data.
+              Fraction of Top X pathways (ranked by Real P-value) that are also significant (p &lt; 0.05) in Synthetic data.
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -97,7 +97,7 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
             <div>
               <h3 style={{ margin: 0 }}>Functional Annotation (ORA)</h3>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-                Ranked by Real FDR (Most significant first).
+                Ranked by Real P-value (Most significant first).
               </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -130,25 +130,21 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
                   <th style={{ padding: '0.75rem 1rem' }}>Pathway Name</th>
                   <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Genes</th>
                   <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>p-val (Real)</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>FDR (Real)</th>
                   <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>p-val (Syn)</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>FDR (Syn)</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTableData.map((p: any, i: number) => (
                   <tr key={i} style={{ 
                     borderBottom: '1px solid #f3f4f6',
-                    backgroundColor: p.Real_P < 0.05 && p.Syn_P < 0.05 ? '#f0fdf4' : 'transparent'
+                    backgroundColor: p.Real_P &lt; 0.05 && p.Syn_P &lt; 0.05 ? '#f0fdf4' : 'transparent'
                   }}>
                     <td style={{ padding: '0.6rem 1rem', fontWeight: '500' }}>{p.set}</td>
                     <td style={{ padding: '0.6rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{p.Genes || '-'}</td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>{p.Real_P?.toExponential(2)}</td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right', fontWeight: p.Real_FDR < 0.05 ? '600' : 'normal' }}>{p.Real_FDR?.toFixed(4)}</td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: p.Syn_P < 0.05 ? '#16a34a' : 'inherit' }}>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right', fontWeight: p.Real_P &lt; 0.05 ? '600' : 'normal' }}>{p.Real_P?.toExponential(2)}</td>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: p.Syn_P &lt; 0.05 ? '#16a34a' : 'inherit' }}>
                       {p.Syn_P ? p.Syn_P.toExponential(2) : 'N/A'}
                     </td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>{p.Syn_FDR ? p.Syn_FDR.toFixed(4) : 'N/A'}</td>
                   </tr>
                 ))}
               </tbody>
