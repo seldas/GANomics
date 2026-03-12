@@ -26,6 +26,12 @@ export type RunStatus = {
   deg: boolean;
   pathway: boolean;
   pred_model: boolean;
+  algo_details?: {
+    comparative: Record<string, boolean>;
+    deg: Record<string, boolean>;
+    pathway: Record<string, boolean>;
+    pred_model: Record<string, boolean>;
+  };
   metadata?: any;
   ext_ids?: string[];
   ext_statuses?: Record<string, any>;
