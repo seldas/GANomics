@@ -67,6 +67,7 @@ class GenomicsDataset(Dataset):
             
         self.samples_A = self.df_A.index.tolist()
         self.samples_B = self.df_B.index.tolist()
+        self.genes = self.df_A.columns.tolist()
         
         self.A_size = len(self.samples_A)
         self.B_size = len(self.samples_B)
