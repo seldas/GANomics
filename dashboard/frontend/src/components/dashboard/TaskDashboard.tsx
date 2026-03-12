@@ -44,10 +44,10 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
 }) => {
   const [showStepSettings, setShowStepSettings] = useState(false);
   const [pathwayFilter, setPathwayFilter] = useState(true);
-  const [selectedLibraries, setSelectedLibraries] = useState<string[]>(['MSigDB_Hallmark', 'KEGG_2021_Human', 'GO_Biological_Process_2021']);
+  const [selectedLibraries, setSelectedLibraries] = useState<string[]>(['MSigDB_Hallmark']);
   const [selectedAlgos, setSelectedAlgos] = useState<string[]>(['combat', 'yugene', 'cublock', 'tdm', 'qn']);
 
-  const libraries = ['MSigDB_Hallmark', 'KEGG_2021_Human', 'GO_Biological_Process_2021', 'MSigDB_Hallmark_2020', 'Reactome_2022'];
+  const libraries = ['MSigDB_Hallmark'];
   const baselines = [
     { id: 'combat', name: 'ComBat' },
     { id: 'yugene', name: 'YuGene' },
