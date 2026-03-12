@@ -76,6 +76,7 @@ def run_ablation():
     parser.add_argument("--direction", type=str, choices=['AtoB', 'BtoA'], help="One-directional mode")
     parser.add_argument("--repeats", type=int, default=1, help="Number of independent trials per setting")
     parser.add_argument("--gpu_ids", type=str, help="Comma-separated GPU IDs (e.g. 0,1,2,3). If omitted, uses CPU.")
+    parser.add_argument("--epochs", type=int, help="Override total epochs (half used for decay)")
     args = parser.parse_args()
     
     # Extract Project Name from Config File (e.g., 'nb' from 'configs/nb_config.yaml')
@@ -117,8 +118,12 @@ def run_ablation():
         for size in args.sizes:
             base_name = f"{project_name}_Ablation_Size_{size}"
             cmd = [train_script, "--config", args.config, "--max_samples", str(size)]
-            if size <= 50: cmd += ["--n_epochs", "250", "--n_epochs_decay", "250"]
-            else: cmd += ["--n_epochs", "50", "--n_epochs_decay", "50"]
+            if args.epochs:
+                cmd += ["--n_epochs", str(args.epochs // 2), "--n_epochs_decay", str(args.epochs // 2)]
+            elif size <= 50:
+                cmd += ["--n_epochs", "250", "--n_epochs_decay", "250"]
+            else:
+                cmd += ["--n_epochs", "50", "--n_epochs_decay", "50"]
             queue_repeats(cmd, base_name, f"Size: {size}")
 
     # 2. Beta Sensitivity
@@ -129,7 +134,11 @@ def run_ablation():
                 print(f"ℹ️ Skipping Beta={beta} sensitivity (covered by Size=50 ablation)")
                 continue
             base_name = f"{project_name}_Sensitivity_Beta_{beta}"
-            cmd = [train_script, "--config", args.config, "--max_samples", "50", "--n_epochs", "250", "--n_epochs_decay", "250", "--lambda_feedback", str(beta)]
+            cmd = [train_script, "--config", args.config, "--max_samples", "50", "--lambda_feedback", str(beta)]
+            if args.epochs:
+                cmd += ["--n_epochs", str(args.epochs // 2), "--n_epochs_decay", str(args.epochs // 2)]
+            else:
+                cmd += ["--n_epochs", "250", "--n_epochs_decay", "250"]
             queue_repeats(cmd, base_name, f"Size: 50 | Beta: {beta}")
 
     # 3. Lambda Sensitivity
@@ -140,7 +149,11 @@ def run_ablation():
                 print(f"ℹ️ Skipping Lambda={lam} sensitivity (covered by Size=50 ablation)")
                 continue
             base_name = f"{project_name}_Sensitivity_Lambda_{lam}"
-            cmd = [train_script, "--config", args.config, "--max_samples", "50", "--n_epochs", "250", "--n_epochs_decay", "250", "--lambda_cycle", str(lam)]
+            cmd = [train_script, "--config", args.config, "--max_samples", "50", "--lambda_cycle", str(lam)]
+            if args.epochs:
+                cmd += ["--n_epochs", str(args.epochs // 2), "--n_epochs_decay", str(args.epochs // 2)]
+            else:
+                cmd += ["--n_epochs", "250", "--n_epochs_decay", "250"]
             queue_repeats(cmd, base_name, f"Size: 50 | Lambda: {lam}")
 
     # 4. Architecture Ablation
@@ -148,6 +161,8 @@ def run_ablation():
         for direction in ['AtoB', 'BtoA']:
             base_name = f"{project_name}_Ablation_Architecture_{direction}"
             cmd = [train_script, "--config", args.config, "--max_samples", "50", "--direction", direction]
+            if args.epochs:
+                cmd += ["--n_epochs", str(args.epochs // 2), "--n_epochs_decay", str(args.epochs // 2)]
             queue_repeats(cmd, base_name, f"Size: 50 | Direction: {direction}")
 
     # Execute Tasks in Parallel

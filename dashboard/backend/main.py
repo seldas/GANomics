@@ -375,6 +375,7 @@ async def start_training(req: TrainRequest):
     if req.sizes: cmd += ["--sizes"] + [str(s) for s in req.sizes]
     if req.betas: cmd += ["--betas"] + [str(b) for b in req.betas]
     if req.lambdas: cmd += ["--lambdas"] + [str(l) for l in req.lambdas]
+    if req.epochs: cmd += ["--epochs", str(req.epochs)]
     gpu_ids = get_available_gpus()
     if req.use_gpu and gpu_ids: cmd += ["--gpu_ids", gpu_ids]
     env = os.environ.copy(); env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
