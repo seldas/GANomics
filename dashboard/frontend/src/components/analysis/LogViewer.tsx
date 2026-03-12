@@ -18,7 +18,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
   const [logMode, setLogMode] = useState<'structured' | 'chart'>('chart');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [windowSize, setWindowSize] = useState(20);
+  const [windowSize, setWindowSize] = useState(500);
   const [windowStart, setWindowStart] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartX, setDragStartX] = useState(0);
