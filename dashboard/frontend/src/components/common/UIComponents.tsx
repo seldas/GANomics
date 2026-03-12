@@ -104,7 +104,7 @@ export const FileUploadBox = ({ label, file, setFile, accept, required }: any) =
   </div>
 );
 
-export const MetaPanel = ({ title, description, samples, genes, note }: any) => (
+export const MetaPanel = ({ description, samples, genes, note }: any) => (
   <section className="card" style={{ marginTop: '2rem', padding: '1.5rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: '#475569' }}>
       <Info size={18} />
