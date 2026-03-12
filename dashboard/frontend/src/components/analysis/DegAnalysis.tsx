@@ -51,8 +51,9 @@ export const DegAnalysis: React.FC<DegAnalysisProps> = ({ data }) => {
                 key={algo} 
                 type="monotone" 
                 dataKey={algo} 
-                stroke={colors[i % colors.length]} 
-                strokeWidth={algo === 'GANomics' ? 3 : 1.5}
+                stroke={algo === 'Baseline' ? '#64748b' : colors[i % colors.length]} 
+                strokeWidth={algo === 'GANomics' ? 3 : (algo === 'Baseline' ? 2 : 1.5)}
+                strokeDasharray={algo === 'Baseline' ? "5 5" : "0"}
                 dot={{ r: algo === 'GANomics' ? 5 : 3 }}
                 activeDot={{ r: 8 }}
               />

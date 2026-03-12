@@ -51,11 +51,20 @@ def main():
     y = df_labels.loc[common_idx, 'label']
 
     # Profiles
-    profiles = [('GANomics', os.path.join(test_dir, "microarray_fake.csv" if "microarray" in real_ma_path else "rnaseq_fake.csv"))]
+    is_ma = "microarray" in real_ma_path
+    target_prefix = "microarray_fake_" if is_ma else "rnaseq_fake_"
+    
+    profiles = [('GANomics', os.path.join(test_dir, "microarray_fake.csv" if is_ma else "rnaseq_fake.csv"))]
+    
+    # Add Baseline: Microarray Real vs RNA-Seq Real
+    other_real_path = os.path.join(test_dir, "rnaseq_real.csv" if is_ma else "microarray_real.csv")
+    if os.path.exists(other_real_path):
+        profiles.append(('Baseline', other_real_path))
+
     if os.path.exists(algo_dir):
         for f in os.listdir(algo_dir):
-            if (f.startswith("microarray_fake_") or f.startswith("rnaseq_fake_")) and f.endswith(".csv"):
-                algo_name = f.replace("microarray_fake_", "").replace("rnaseq_fake_", "").replace(".csv", "").upper()
+            if f.startswith(target_prefix) and f.endswith(".csv"):
+                algo_name = f.replace(target_prefix, "").replace(".csv", "").upper()
                 profiles.append((algo_name, os.path.join(algo_dir, f)))
 
     print("Running Reference DEG Analysis...")
