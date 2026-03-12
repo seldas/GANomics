@@ -73,8 +73,8 @@ def ora_enrichment(deg_df, gene_sets, threshold=0.05, min_size=15, max_size=500)
     Perform Over-Representation Analysis (ORA) using Fisher's Exact Test via gseapy.
     This mimics the DAVID functional annotation process.
     """
-    # Identify DEGs (e.g., FDR < 0.05)
-    degs = deg_df[deg_df['fdr'] < threshold].index.astype(str).unique().tolist()
+    # Identify DEGs using raw p-value instead of FDR for more sensitivity in functional mapping
+    degs = deg_df[deg_df['p_value'] < threshold].index.astype(str).unique().tolist()
     background = deg_df.index.astype(str).unique().tolist()
     
     if len(degs) < 5:
