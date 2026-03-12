@@ -238,7 +238,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="DEG" num="4" statusLabel={status?.deg ? 'Done' : 'Pending'} stepStatus={status?.deg} algoStatus={status?.algo_details?.deg}>
+        <WorkflowStep title="DEG" num="4" statusLabel={status?.deg ? 'Done' : 'Pending'} stepStatus={status?.deg}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.deg} onClick={() => fetchDegMetrics(selectedRunId)}>Results</button>
           {!status?.deg ? (
             <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(4)}>Run</button>
@@ -247,7 +247,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="Path" num="5" statusLabel={status?.pathway ? 'Done' : 'Pending'} stepStatus={status?.pathway} algoStatus={status?.algo_details?.pathway}>
+        <WorkflowStep title="Path" num="5" statusLabel={status?.pathway ? 'Done' : 'Pending'} stepStatus={status?.pathway}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.pathway} onClick={() => fetchPathwayMetrics(selectedRunId)}>Results</button>
           {!status?.pathway ? (
             <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => handleRunStepWithParams(5)}>Run</button>
@@ -256,7 +256,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="Pred" num="6" statusLabel={status?.pred_model ? 'Done' : 'Pending'} stepStatus={status?.pred_model} algoStatus={status?.algo_details?.pred_model}>
+        <WorkflowStep title="Pred" num="6" statusLabel={status?.pred_model ? 'Done' : 'Pending'} stepStatus={status?.pred_model}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.pred_model} onClick={() => fetchPredictionMetrics(selectedRunId)}>Results</button>
           {!status?.pred_model ? (
             <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(6)}>Run</button>
