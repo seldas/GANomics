@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  Bar, ReferenceLine, ComposedChart
+  Bar, ReferenceLine, ComposedChart, ReferenceArea
 } from 'recharts';
 import { Loader2, Filter, List, TrendingUp, BarChart2, Info } from 'lucide-react';
 
@@ -147,16 +147,38 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
           <div style={{ height: '300px' }}>
             {histogramData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={histogramData}>
+                <ComposedChart data={histogramData} margin={{ top: 20, right: 30, left: 20, bottom: 25 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="x" fontSize={10} />
-                  <YAxis fontSize={10} />
+                  <XAxis 
+                    dataKey="x" 
+                    fontSize={10} 
+                    label={{ value: 'Spearman ρ (pathway rank concordance)', position: 'bottom', offset: 0, fontSize: 12 }} 
+                  />
+                  <YAxis 
+                    fontSize={10} 
+                    label={{ value: 'Count', angle: -90, position: 'insideLeft', fontSize: 12 }} 
+                  />
                   <Tooltip />
-                  <Legend />
-                  <Bar dataKey="Permutation Null" fill="#94a3b8" opacity={0.6} barSize={10} />
-                  <Bar dataKey="Bootstrap ρ" fill="var(--primary-color)" opacity={0.7} barSize={10} />
+                  <Legend verticalAlign="top" height={36}/>
+                  <Bar dataKey="Permutation Null" fill="#94a3b8" opacity={0.5} barSize={12} />
+                  <Bar dataKey="Bootstrap ρ" fill="var(--primary-color)" opacity={0.6} barSize={12} />
+                  
+                  {currentConcordance.CI_95_Low !== undefined && currentConcordance.CI_95_High !== undefined && (
+                    <ReferenceArea 
+                      x1={Number(currentConcordance.CI_95_Low.toFixed(3))} 
+                      x2={Number(currentConcordance.CI_95_High.toFixed(3))} 
+                      fill="var(--primary-color)" 
+                      fillOpacity={0.1} 
+                    />
+                  )}
+                  
                   {currentConcordance.Bootstrap_Mean_Rho && (
-                    <ReferenceLine x={Number(currentConcordance.Bootstrap_Mean_Rho.toFixed(3))} stroke="red" label={{ value: 'Mean', position: 'top', fontSize: 10, fill: 'red' }} />
+                    <ReferenceLine 
+                      x={Number(currentConcordance.Bootstrap_Mean_Rho.toFixed(3))} 
+                      stroke="red" 
+                      strokeDasharray="3 3"
+                      label={{ value: 'Mean', position: 'top', fontSize: 10, fill: 'red', fontWeight: 'bold' }} 
+                    />
                   )}
                 </ComposedChart>
               </ResponsiveContainer>

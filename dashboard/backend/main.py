@@ -496,6 +496,29 @@ async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
     if not os.path.exists(path_dir): raise HTTPException(status_code=404)
     results = {}
     for f in os.listdir(path_dir):
+        if not f.endswith(".csv"): continue
+        
+        # New robust naming: Prefix___ALGO___LIB.csv
+        if "___" in f:
+            parts = f[:-4].split("___")
+            if len(parts) >= 3:
+                prefix = parts[0]
+                algo = parts[1]
+                lib = parts[2]
+                
+                if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
+                
+                if prefix in ["Pathway_Concordance", "Pathway_Summary"]:
+                    results[lib]["concordance"][algo] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")[0]
+                elif prefix == "Pathway_Details":
+                    results[lib]["details"][algo] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
+                elif prefix in ["Pathway_Stats", "Pathway_TopK"]:
+                    results[lib]["stats"][algo] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
+                elif prefix == "Pathway_Distributions":
+                    results[lib]["distributions"][algo] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
+                continue
+
+        # Legacy fallback
         parts = f[:-4].split("_")
         if f.startswith("Pathway_Concordance_"):
             lib = "_".join(parts[3:])

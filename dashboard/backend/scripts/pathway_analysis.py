@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from src.core.analysis import run_deg_analysis
 from src.core.pathway import (
     get_enrichr_gene_sets, 
+    load_gmt,
     gene_set_enrichment,
     spearman_rank_concordance, 
     gene_set_preservation_permutation,
@@ -17,7 +18,8 @@ from src.core.pathway import (
     glass_delta,
     perm_pvalue,
     jaccard_topk_mc,
-    expected_jaccard_random
+    expected_jaccard_random,
+    topK_overlap
 )
 
 def main():
@@ -26,6 +28,7 @@ def main():
     parser.add_argument("--ext_id", type=str)
     parser.add_argument("--labels", type=str)
     parser.add_argument("--libraries", type=str, nargs="+", default=['KEGG_2021_Human', 'GO_Biological_Process_2021'])
+    parser.add_argument("--gmt_path", type=str, default=None)
     parser.add_argument("--no_filter", action='store_true')
     parser.add_argument("--bootstrap_b", type=int, default=100)
     args = parser.parse_args()
@@ -34,6 +37,9 @@ def main():
     backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     sync_root = os.path.join(backend_dir, "results", "2_SyncData", args.run_id)
     project_id = args.run_id.split('_')[0]
+    
+    # Default MSigDB path if none provided
+    gmt_file = args.gmt_path if args.gmt_path else os.path.join(backend_dir, "src", "db", "h.all.v2026.1.Hs.symbols.gmt")
     
     if args.ext_id:
         test_dir = os.path.join(sync_root, args.ext_id)
@@ -88,6 +94,15 @@ def main():
     # Libraries
     all_gene_sets = {lib: get_enrichr_gene_sets(lib) for lib in args.libraries}
     
+    # Load MSigDB GMT if it exists
+    if os.path.exists(gmt_file):
+        print(f"Loading MSigDB GMT: {gmt_file}")
+        msigdb_sets = load_gmt(gmt_file)
+        if msigdb_sets:
+            all_gene_sets['MSigDB_Hallmark'] = msigdb_sets
+    else:
+        print(f"Warning: MSigDB GMT not found at {gmt_file}")
+    
     pathway_dir = os.path.join(out_root, "Pathway", args.run_id) if not args.ext_id else os.path.join(out_root, "Pathway")
     os.makedirs(pathway_dir, exist_ok=True)
 
@@ -135,7 +150,7 @@ def main():
                 on='set', how='left'
             )
             df_detail = df_detail.sort_values('Real_P', ascending=True)
-            df_detail.to_csv(os.path.join(pathway_dir, f"Pathway_Details_{algo_name}_{gs_name}.csv"), index=False)
+            df_detail.to_csv(os.path.join(pathway_dir, f"Pathway_Details___{algo_name}___{gs_name}.csv"), index=False)
             
             # Save Summary Stats (compatible with old Pathway_Concordance if needed)
             summary_res = {
@@ -151,11 +166,11 @@ def main():
                 'Glass_Delta': g_delta
             }
             pd.DataFrame([summary_res]).to_csv(
-                os.path.join(pathway_dir, f"Pathway_Summary_{algo_name}_{gs_name}.csv"), index=False
+                os.path.join(pathway_dir, f"Pathway_Summary___{algo_name}___{gs_name}.csv"), index=False
             )
             # Maintain old name for frontend compatibility
             pd.DataFrame([summary_res]).to_csv(
-                os.path.join(pathway_dir, f"Pathway_Concordance_{algo_name}_{gs_name}.csv"), index=False
+                os.path.join(pathway_dir, f"Pathway_Concordance___{algo_name}___{gs_name}.csv"), index=False
             )
             
             # Save Top-K Jaccard Stats
@@ -177,18 +192,22 @@ def main():
                 })
             
             if topk_stats:
-                pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_TopK_{algo_name}_{gs_name}.csv"), index=False)
+                pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_TopK___{algo_name}___{gs_name}.csv"), index=False)
                 # Maintain old name for frontend compatibility
-                pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_Stats_{algo_name}_{gs_name}.csv"), index=False)
+                pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_Stats___{algo_name}___{gs_name}.csv"), index=False)
 
             # Save distributions for plotting (optional, but good for frontend)
             dist_df = pd.DataFrame({
                 'Null_Rho': pd.Series(null_dist),
                 'Bootstrap_Rho': pd.Series(boot_rhos)
             })
-            dist_df.to_csv(os.path.join(pathway_dir, f"Pathway_Distributions_{algo_name}_{gs_name}.csv"), index=False)
+            dist_df.to_csv(os.path.join(pathway_dir, f"Pathway_Distributions___{algo_name}___{gs_name}.csv"), index=False)
 
-    print("✅ Redesigned Pathway analysis completed.")
+    except Exception as e:
+        print(f"CRITICAL ERROR: Pathway analysis failed: {e}")
+        sys.exit(1)
+
+    print("✅ COMPLETED: Redesigned Pathway analysis finished successfully.")
 
 if __name__ == "__main__":
     main()
