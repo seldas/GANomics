@@ -114,6 +114,9 @@ def main():
             ('GANomics_RS_to_MA', rs_fake, ma_real, "RNA-Seq -> Microarray")
         ]
 
+        # To store results for summary printing
+        summary_data = {}
+
         for algo_name, data_test, data_ref, desc in comparisons:
             print(f"\n💎 Processing Comparison: {algo_name} ({desc})")
             
@@ -124,6 +127,11 @@ def main():
             
             for gs_name, gene_sets in all_gene_sets.items():
                 if not gene_sets: continue
+                
+                # User requested to remove baseline preservation for KEGG specifically
+                if algo_name == 'Baseline' and 'KEGG' in gs_name.upper():
+                    print(f"  ⏭️ Skipping Baseline preservation for {gs_name} as requested.")
+                    continue
                 
                 print(f"  📂 Library: {gs_name} ({len(gene_sets)} sets)")
                 
@@ -150,7 +158,12 @@ def main():
                 
                 print(f"    📊 Results: obs_rho={obs_rho:.3f}, boot_mean={mu:.3f}, perm_p={p_perm_final:.4f}")
 
-                # Save Details
+                # Store for summary
+                summary_data[(algo_name, gs_name)] = {
+                    'rho': obs_rho, 'p': p_perm_final, 'null': null_dist
+                }
+
+                # Save Details (Optional, keeping for now but could be removed if frontend doesn't need)
                 df_detail = pd.merge(
                     enr_real[['set', 'k', 't', 'p', 'q', 'mean_in', 'mean_out']].rename(columns=lambda x: 'Real_'+x.upper() if x!='set' else x),
                     enr_syn[['set', 'k', 't', 'p', 'q', 'mean_in', 'mean_out']].rename(columns=lambda x: 'Syn_'+x.upper() if x!='set' else x),
@@ -169,29 +182,25 @@ def main():
                 summary_df.to_csv(os.path.join(pathway_dir, f"Pathway_Summary___{algo_name}___{gs_name}.csv"), index=False)
                 summary_df.to_csv(os.path.join(pathway_dir, f"Pathway_Concordance___{algo_name}___{gs_name}.csv"), index=False)
                 
-                # Save Top-K
-                common_sets = set(enr_real['set']) & set(enr_syn['set'])
-                M = len(common_sets)
-                topk_stats = []
-                for K in [10, 20, 50]:
-                    if K > M: continue
-                    emp_jac = np.nanmean(topk_boot[K]) if K in topk_boot else topK_overlap(enr_real, enr_syn, K=K)
-                    null_jac_dist = jaccard_topk_mc(M, K, B=10000)
-                    p_jac = perm_pvalue(null_jac_dist, emp_jac, side="greater")
-                    exp_jac = expected_jaccard_random(M, K)
-                    topk_stats.append({
-                        'K': K, 'Observed_Jaccard': emp_jac, 'Expected_Jaccard': exp_jac, 
-                        'P_Value': p_jac, 'Spearman_Rho': obs_rho
-                    })
-                
-                if topk_stats:
-                    tk_df = pd.DataFrame(topk_stats)
-                    tk_df.to_csv(os.path.join(pathway_dir, f"Pathway_TopK___{algo_name}___{gs_name}.csv"), index=False)
-                    tk_df.to_csv(os.path.join(pathway_dir, f"Pathway_Stats___{algo_name}___{gs_name}.csv"), index=False)
-
                 # Save Distributions
                 dist_df = pd.DataFrame({'Null_Rho': pd.Series(null_dist), 'Bootstrap_Rho': pd.Series(boot_rhos)})
                 dist_df.to_csv(os.path.join(pathway_dir, f"Pathway_Distributions___{algo_name}___{gs_name}.csv"), index=False)
+
+        # Print Requested Summaries
+        print("\n" + "="*60)
+        print("Final Pathway Rank Concordance Summary")
+        print("="*60)
+        for gs_name in all_gene_sets.keys():
+            # RS is MA -> RS (GANomics_MA_to_RS)
+            res_rs = summary_data.get(('GANomics_MA_to_RS', gs_name))
+            if res_rs:
+                print(f"[{gs_name}] [RS] Rank concordance (Spearman) real vs synthetic: rho={np.nan_to_num(res_rs['rho']):.3f}, perm-p={res_rs['p']:.4g} (Nnull={len(res_rs['null'])})")
+            
+            # MA is RS -> MA (GANomics_RS_to_MA)
+            res_ma = summary_data.get(('GANomics_RS_to_MA', gs_name))
+            if res_ma:
+                print(f"[{gs_name}] [MA] Rank concordance (Spearman) real vs synthetic: rho={np.nan_to_num(res_ma['rho']):.3f}, perm-p={res_ma['p']:.4g} (Nnull={len(res_ma['null'])})")
+        print("="*60)
 
     except Exception as e:
         print(f"❌ CRITICAL ERROR: Pathway analysis failed: {e}")
