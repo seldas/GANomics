@@ -350,23 +350,17 @@ async def get_results_status():
             try:
                 df = pd.read_csv(sync_path, index_col=0, nrows=0); internal_meta["genes"] = len(df.columns)
                 with open(os.path.join(SYNC_DATA_DIR, run_id, "test", "microarray_real.csv"), 'rb') as f: internal_meta["samples"] = sum(1 for _ in f) - 1
-            except: pass
-
-        run_statuses[run_id] = {
-            "training": "running" if is_running else ("completed" if os.path.exists(checkpoint_latest) else "idle"),
-            "sync": os.path.exists(sync_path), 
-            "comparative": comp_exists,
-            "deg": any(deg_algo_status.values()),
-            "pathway": any(pathway_algo_status.values()),
-            "pred_model": any(pred_algo_status.values()),
-            "algo_details": {
-                "comparative": comp_algo_status,
-                "deg": deg_algo_status,
-                "pathway": pathway_algo_status,
-                "pred_model": pred_algo_status
-            },
-            "metadata": internal_meta, "ext_ids": ext_ids, "ext_statuses": ext_statuses, "sync_ext": len(ext_ids) > 0,
-        }
+            run_statuses[run_id] = {
+                "training": "running" if is_running else ("completed" if os.path.exists(checkpoint_latest) else "idle"),
+                "sync": os.path.exists(sync_path), 
+                "comparative": comp_exists,
+                "deg": any(deg_algo_status.values()),
+                "pathway": any(pathway_algo_status.values()),
+                "pred_model": any(pred_algo_status.values()),
+                "metadata": internal_meta,
+                "ext_ids": ext_ids,
+                "ext_statuses": ext_statuses
+            }
     return {"checkpoints": os.listdir(CHECKPOINTS_DIR) if os.path.exists(CHECKPOINTS_DIR) else [], "logs": logs, "run_statuses": run_statuses}
 
 @app.post("/api/train")

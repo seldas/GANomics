@@ -208,7 +208,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
                                 <StatusButton label="TR" status={status?.training || 'idle'} />
                                 <StatusButton label="SYNC" status={status?.sync || false} />
                                 <StatusButton label="COMP" status={status?.comparative || false} />
-                                <StatusButton label="BIO" status={status?.deg || false} />
+                                <StatusButton label="DEG" status={status?.deg || false} />
+                                <StatusButton label="PATH" status={status?.pathway || false} />
+                                <StatusButton label="PRED" status={status?.pred_model || false} />
                               </div>
                             </div>
                           </div>
