@@ -1,4 +1,0 @@
-NB_Ablation_Size_50_Run_4
-NB_Ablation_Size_50_Run_1
-NB_Ablation_Size_50_Run_0
-NB_Ablation_Size_50_Run_3
