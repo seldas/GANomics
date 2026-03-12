@@ -18,14 +18,15 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
   const [logMode, setLogMode] = useState<'structured' | 'chart'>('chart');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [windowSize, setWindowSize] = useState(20);
+  const [windowStart, setWindowStart] = useState(0);
   const pageSize = 20;
 
   if (!logData) return null;
 
   const first = logData.structured[0] || {};
   const last = logData.structured[logData.structured.length - 1] || {};
-  const sampleSizeMatch = runId?.match(/Size_(\d+)/);
-  const sampleSize = sampleSizeMatch ? sampleSizeMatch[1] : "N/A";
+  const totalEpochs = logData.structured.length;
 
   const getLossValue = (row: any, key: string) => {
     if (['G_A', 'G_B', 'D_A', 'D_B'].includes(key)) return row[key];
@@ -35,7 +36,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
     return 0;
   };
 
-  const chartData = logData.structured.map((d, i) => ({
+  const fullChartData = logData.structured.map((d, i) => ({
     name: `E${d.epoch}`,
     index: i,
     G_A: d.G_A || 0, G_B: d.G_B || 0, D_A: d.D_A || 0, D_B: d.D_B || 0,
@@ -43,6 +44,10 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
     Feedback: (d.feedback_A || 0) + (d.feedback_B || 0),
     IDT: (d.idt_A || 0) + (d.idt_B || 0),
   }));
+
+  const chartData = useMemo(() => {
+    return fullChartData.slice(windowStart, windowStart + windowSize);
+  }, [fullChartData, windowStart, windowSize]);
 
   const filteredData = logData.structured.filter(d => 
     !searchTerm || 
@@ -64,7 +69,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
           <div className="card" style={{ margin: 0, padding: '0.75rem', backgroundColor: '#f8f9fa' }}>
             <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>SAMPLES (N)</div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{sampleSize}</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>{runId?.match(/Size_(\d+)/)?.[1] || "N/A"}</div>
           </div>
           <div className="card" style={{ margin: 0, padding: '0.75rem', backgroundColor: '#f8f9fa' }}>
             <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>TOTAL EPOCHS</div>
@@ -118,6 +123,38 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
               <TableIcon size={14} style={{ marginRight: '6px' }} /> Table
             </button>
           </div>
+
+          {logMode === 'chart' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>RANGE:</span>
+                <input 
+                  type="number" 
+                  value={windowSize} 
+                  onChange={(e) => {
+                    const val = Math.max(5, Math.min(parseInt(e.target.value) || 20, totalEpochs));
+                    setWindowSize(val);
+                    if (windowStart + val > totalEpochs) setWindowStart(Math.max(0, totalEpochs - val));
+                  }}
+                  style={{ width: '60px', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '200px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>PAN:</span>
+                <input 
+                  type="range" 
+                  min={0} 
+                  max={Math.max(0, totalEpochs - windowSize)} 
+                  value={windowStart} 
+                  onChange={(e) => setWindowStart(parseInt(e.target.value))}
+                  style={{ flex: 1, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', minWidth: '60px', textAlign: 'right' }}>
+                  E{fullChartData[windowStart]?.name?.substring(1) || 0} - E{fullChartData[Math.min(windowStart + windowSize - 1, totalEpochs - 1)]?.name?.substring(1) || 0}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: '#fff', overflow: 'hidden' }}>
@@ -126,12 +163,12 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" interval="preserveStartEnd" minTickGap={50} fontSize={10} />
+                  <XAxis dataKey="name" interval={0} fontSize={10} />
                   <YAxis domain={['auto', 'auto']} fontSize={10} />
                   <Tooltip />
                   <Legend iconSize={10} wrapperStyle={{fontSize: '10px'}} />
                   {LOSS_METRICS.map(m => visibleMetrics.includes(m.key) && (
-                    <Line key={m.key} type="monotone" dataKey={m.key} stroke={m.color} dot={false} strokeWidth={1.5} animationDuration={300} />
+                    <Line key={m.key} type="monotone" dataKey={m.key} stroke={m.color} dot={{ r: 2 }} strokeWidth={1.5} animationDuration={300} />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
