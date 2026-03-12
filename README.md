@@ -10,7 +10,7 @@ By integrating paired and unpaired samples through a novel **pair-aware feedback
 - **Interactive Dashboard:** Manage projects, datasets, and experiments through a modern web interface.
 - **Bidirectional GAN Engine:** Seamlessly convert Microarray to RNA-seq and vice versa.
 - **Automated Training:** Easily configure and launch ablation and sensitivity studies with multi-GPU support.
-- **Biomarker Analytics:** Integrated DEG analysis, Pathway Enrichment, and Cross-Platform Classifier validation (Scenario Q1-Q4).
+- **Biomarker Analytics:** Integrated DEG analysis, Cross-Platform Classifier validation (Scenario Q1-Q4), and DAVID-like Pathway Enrichment (ORA) using Fisher's Exact Test to provide p-values and FDR.
 - **Inference Hub:** Run inference on external datasets with ease.
 - **Visual Performance Tracking:** Real-time logging, t-SNE visualizations, and performance metrics.
 - **Reproducible Pipeline:** Pure Python core with systematic audit trails and result storage.

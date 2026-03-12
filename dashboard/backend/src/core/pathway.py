@@ -37,7 +37,10 @@ def gene_set_enrichment(deg_df, gene_sets, how='abs_d'):
     results = []
     # Make a copy and work with uppercase index for matching
     df = deg_df.copy()
-    if how == 'abs_d':
+    if 'cohen_d' not in df.columns:
+        # Fallback if cohen_d is missing
+        df['stat'] = 0
+    elif how == 'abs_d':
         df['stat'] = df['cohen_d'].abs()
     else:
         df['stat'] = df['cohen_d']
@@ -51,16 +54,57 @@ def gene_set_enrichment(deg_df, gene_sets, how='abs_d'):
         genes_upper = [str(g).upper() for g in genes]
         set_genes = list(set(genes_upper) & universe_genes)
         
-        if len(set_genes) < 3: # Lowered threshold from 5 to 3
+        if len(set_genes) < 3: 
             continue
             
         score = df.loc[set_genes, 'stat'].mean()
-        results.append({'set': name, 'score': score})
+        results.append({'set': name, 'score': score, 'count': len(set_genes)})
         
     res_df = pd.DataFrame(results)
     if not res_df.empty:
         res_df['rank'] = res_df['score'].rank(ascending=False)
+    else:
+        return pd.DataFrame(columns=['set', 'score', 'rank', 'count'])
     return res_df
+
+def ora_enrichment(deg_df, gene_sets, threshold=0.05):
+    """
+    Perform Over-Representation Analysis (ORA) using Fisher's Exact Test via gseapy.
+    This mimics the DAVID functional annotation process.
+    """
+    # Identify DEGs (e.g., FDR < 0.05)
+    degs = deg_df[deg_df['fdr'] < threshold].index.astype(str).unique().tolist()
+    background = deg_df.index.astype(str).unique().tolist()
+    
+    if len(degs) < 5:
+        # Not enough DEGs to run meaningful ORA
+        return pd.DataFrame(columns=['set', 'p_value', 'fdr', 'overlap', 'rank', 'genes'])
+        
+    try:
+        enr = gseapy.enrich(gene_list=degs,
+                            gene_sets=gene_sets,
+                            background=background,
+                            outdir=None,
+                            no_plot=True)
+        
+        res = enr.results
+        if res.empty:
+            return pd.DataFrame(columns=['set', 'p_value', 'fdr', 'overlap', 'rank', 'genes'])
+
+        # Map gseapy columns to our expected format
+        res_df = res[['Term', 'P-value', 'Adjusted P-value', 'Overlap', 'Genes']].rename(columns={
+            'Term': 'set',
+            'P-value': 'p_value',
+            'Adjusted P-value': 'fdr',
+            'Overlap': 'overlap',
+            'Genes': 'genes'
+        })
+        # Rank by p-value (lowest p-value = rank 1)
+        res_df['rank'] = res_df['p_value'].rank(ascending=True)
+        return res_df
+    except Exception as e:
+        print(f"Error in ORA enrichment: {e}")
+        return pd.DataFrame(columns=['set', 'p_value', 'fdr', 'overlap', 'rank', 'genes'])
 
 def spearman_rank_concordance(df_real, df_syn):
     """

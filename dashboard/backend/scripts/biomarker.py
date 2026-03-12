@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 # Add the parent directory to sys.path to make 'src' importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.core.analysis import run_deg_analysis, train_eval_rf
-from src.core.pathway import load_gmt, run_permutation_test, jaccard_threshold_curve, get_enrichr_gene_sets
+from src.core.pathway import load_gmt, run_permutation_test, jaccard_threshold_curve, get_enrichr_gene_sets, ora_enrichment
 
 def main():
     parser = argparse.ArgumentParser(description="Biomarker and Cross-Platform Modeling for all algorithms")
@@ -208,9 +208,13 @@ def main():
             print(f"[{algo_name}] Running Pathway Concordance ({gs_name})...")
             
             # 1. Run Enrichment for both
-            from src.core.pathway import gene_set_enrichment
+            from src.core.pathway import gene_set_enrichment, ora_enrichment
             enr_real = gene_set_enrichment(deg_real_mapped, gene_sets)
             enr_syn = gene_set_enrichment(deg_syn_mapped, gene_sets)
+            
+            # 1b. Run ORA (Fisher's Exact Test) to get p-values (mimic DAVID)
+            ora_real = ora_enrichment(deg_real_mapped, gene_sets)
+            ora_syn = ora_enrichment(deg_syn_mapped, gene_sets)
             
             # 2. Run Permutation Test (internal logic preserved)
             obs_rho, null_dist, p_val = run_permutation_test(deg_real_mapped, deg_syn_mapped, gene_sets, B=100)
@@ -232,11 +236,22 @@ def main():
             # Merge Real and Syn results on pathway name
             if not enr_real.empty and not enr_syn.empty:
                 df_detail = pd.merge(
-                    enr_real[['set', 'score', 'rank']].rename(columns={'score': 'Real_Score', 'rank': 'Real_Rank'}),
-                    enr_syn[['set', 'score', 'rank']].rename(columns={'score': 'Syn_Score', 'rank': 'Syn_Rank'}),
+                    enr_real[['set', 'score', 'rank', 'count']].rename(columns={'score': 'Real_Score', 'rank': 'Real_Rank', 'count': 'Real_Count'}),
+                    enr_syn[['set', 'score', 'rank', 'count']].rename(columns={'score': 'Syn_Score', 'rank': 'Syn_Rank', 'count': 'Syn_Count'}),
                     on='set', how='inner'
-                ).sort_values('Real_Rank')
+                )
                 
+                # Add ORA results (p-values, FDR, overlap info, and genes) if available
+                if not ora_real.empty:
+                    df_detail = pd.merge(df_detail, ora_real[['set', 'p_value', 'fdr', 'overlap', 'genes']].rename(
+                        columns={'p_value': 'Real_P', 'fdr': 'Real_FDR', 'overlap': 'Real_Overlap', 'genes': 'Real_Genes'}
+                    ), on='set', how='left')
+                if not ora_syn.empty:
+                    df_detail = pd.merge(df_detail, ora_syn[['set', 'p_value', 'fdr', 'overlap', 'genes']].rename(
+                        columns={'p_value': 'Syn_P', 'fdr': 'Syn_FDR', 'overlap': 'Syn_Overlap', 'genes': 'Syn_Genes'}
+                    ), on='set', how='left')
+                
+                df_detail = df_detail.sort_values('Real_Rank')
                 df_detail.to_csv(os.path.join(pathway_dir, f"Pathway_Details_{algo_name}_{gs_name}.csv"), index=False)
 
     print(f"\n✅ All biomarker analyses for {args.run_id} completed.")
