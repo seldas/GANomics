@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { 
-  LayoutDashboard, Plus, Search, ChevronRight, ChevronDown, 
-  Clock, Timer, Square, RotateCcw, Loader2 
+  LayoutDashboard, ChevronRight, ChevronDown,
+  Clock, Timer
 } from 'lucide-react';
-import type { Project, ResultsStatus } from '../../types';
 import { StatusButton } from '../common/UIComponents';
-import { AblationCharts } from '../analysis/AblationCharts';
+import type { Project, ResultsStatus } from '../../types';
 
 interface ProjectDashboardProps {
   projects: Project[];
@@ -17,15 +16,11 @@ interface ProjectDashboardProps {
   onStopTask: (id: string) => void;
   onRestartTask: (id: string) => void;
   onFetchLogs: (id: string) => void;
-  ablationData: any[];
-  sensitivityType: 'beta' | 'lambda';
-  onSetSensitivityType: (type: 'beta' | 'lambda') => void;
 }
 
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
-  projects, selectedProject, onSelectProject, resultsStatus, onSelectRun, 
-  onFetchAblationLogs, onStopTask, onRestartTask, onFetchLogs,
-  ablationData, sensitivityType, onSetSensitivityType
+  projects, selectedProject, onSelectProject, resultsStatus, onSelectRun,
+  onFetchAblationLogs, onStopTask, onRestartTask, onFetchLogs
 }) => {
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
   const [statusFilters, setStatusFilters] = useState<Record<string, string>>({

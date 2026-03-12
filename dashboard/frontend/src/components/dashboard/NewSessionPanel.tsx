@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, ArrowLeft, Timer, Loader2 } from 'lucide-react';
+import { Plus, ArrowLeft } from 'lucide-react';
 import type { Project } from '../../types';
 import { SIZES, BETAS, LAMBDAS } from '../../constants';
 

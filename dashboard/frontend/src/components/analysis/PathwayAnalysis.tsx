@@ -1,31 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, ReferenceLine, ComposedChart, Area
+  Bar, ReferenceLine, ComposedChart
 } from 'recharts';
 import { Loader2, Filter, List, TrendingUp, BarChart2, Info } from 'lucide-react';
 
 interface PathwayAnalysisProps {
   data: any | null;
 }
-
-const computeHistogram = (data: number[], bins: number = 30) => {
-  if (!data || data.length === 0) return [];
-  const finite = data.filter(x => isFinite(x));
-  if (finite.length === 0) return [];
-  const min = Math.min(...finite);
-  const max = Math.max(...finite);
-  const step = (max - min) / bins;
-  const hist = new Array(bins).fill(0);
-  finite.forEach(x => {
-    const binIdx = Math.min(Math.floor((x - min) / step), bins - 1);
-    hist[binIdx]++;
-  });
-  return hist.map((count, i) => ({
-    x: min + i * step + step / 2,
-    count
-  }));
-};
 
 export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
   const [selectedLibrary, setSelectedLibrary] = useState<string | null>(null);
@@ -195,7 +177,7 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" fontSize={10} />
                 <YAxis domain={[0, 1]} fontSize={10} />
-                <Tooltip formatter={(val: number, name: string) => [val.toFixed(2), labels[name] || name]} />
+                <Tooltip formatter={(val: any, name: any) => [typeof val === 'number' ? val.toFixed(2) : val, labels[name] || name]} />
                 {availableAlgos.map((algo) => (
                   <Line 
                     key={algo} 
@@ -220,7 +202,7 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Algorithm:</span>
               <select className="chip" value={selectedAlgo} onChange={(e) => setSelectedAlgo(e.target.value)} style={{ border: '1px solid var(--primary-color)', fontSize: '0.75rem', fontWeight: '600' }}>
-                {availableAlgos.map(a => <option key(a) value(a)>{labels[a] || a}</option>)}
+                {availableAlgos.map(a => <option key={a} value={a}>{labels[a] || a}</option>)}
               </select>
             </div>
           </div>

@@ -1,30 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-  LayoutDashboard, Activity, X, Loader2, ChevronsLeft, ChevronsRight, ArrowLeft, RotateCcw, 
-  ChevronRight, Info, Plus, Download, Upload, LineChart as LineChartIcon, Table as TableIcon,
-  Settings, Database, FlaskConical, Beaker
+  LayoutDashboard, Activity, FlaskConical, Database
 } from 'lucide-react';
-import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from 'recharts';
 
-import type { Project, RunStatus, ResultsStatus, LogResponse } from './types';
-import { API_BASE, SIZES, BETAS, LAMBDAS } from './constants';
-import { StatusButton, StepItem, FileUploadBox, MetaPanel } from './components/common/UIComponents';
+import type { Project, ResultsStatus, LogResponse } from './types';
+import { API_BASE } from './constants';
+import { StepItem } from './components/common/UIComponents';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { SyncExternalModal } from './components/modals/SyncExternalModal';
 import { ProjectDashboard } from './components/dashboard/ProjectDashboard';
 import { TaskDashboard } from './components/dashboard/TaskDashboard';
 import { NewSessionPanel } from './components/dashboard/NewSessionPanel';
-import { AblationCharts } from './components/analysis/AblationCharts';
 import { AblationAnalyticsModal } from './components/modals/AblationAnalyticsModal';
-import { LogViewer } from './components/analysis/LogViewer';
-import { SyncStatusDetails } from './components/analysis/SyncStatusDetails';
-import { ComparativeAnalysis } from './components/analysis/ComparativeAnalysis';
-import { DegAnalysis } from './components/analysis/DegAnalysis';
-import { PathwayAnalysis } from './components/analysis/PathwayAnalysis';
-import { PredictionAnalysis } from './components/analysis/PredictionAnalysis';
 
 import './App.css';
 
@@ -46,12 +34,12 @@ const App: React.FC = () => {
   
   const [resultsStatus, setResultsStatus] = useState<ResultsStatus>({ checkpoints: [], logs: [] });
   const [runComparativeData, setRunComparativeData] = useState<any[] | null>(null);
-  const [runSyncData, setRunSyncData] = useState<any | null>(null);
+  const [, setRunSyncData] = useState<any | null>(null);
   const [runDegData, setRunDegData] = useState<any | null>(null);
   const [runPredictionData, setRunPredictionData] = useState<any | null>(null);
   const [runPathwayData, setRunPathwayData] = useState<any | null>(null);
   const [runTsneData, setRunTsneData] = useState<any[] | null>(null);
-  const [ablationData, setAblationData] = useState<any[]>([]);
+  const [, setAblationData] = useState<any[]>([]);
   const [sensitivityType, setSensitivityType] = useState<'beta' | 'lambda'>('beta');
 
   // Modals
@@ -77,14 +65,7 @@ const App: React.FC = () => {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
 
   // Log viewer state
-  const [viewingLog, setViewingLog] = useState<string | null>(null);
   const [logData, setLogData] = useState<LogResponse | null>(null);
-  const [logMode, setLogMode] = useState<'structured' | 'chart'>('chart');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 20;
-
-  const [loading, setLoading] = useState(true);
 
   // Helper: extCustomId derived from suffix
   const extCustomId = `ext_${extCustomSuffix}`;
@@ -97,7 +78,6 @@ const App: React.FC = () => {
         setProjects(projRes.data);
         if (projRes.data.length > 0) setSelectedProject(projRes.data[0].id);
       } catch (err) { console.error(err); }
-      finally { setLoading(false); }
     };
     fetchProjects();
   }, []);
@@ -212,7 +192,6 @@ const fetchStatus = async () => {
 
   const fetchLogs = (runId: string) => {
     setTaskView('training');
-    setViewingLog(runId);
     setLogData(null);
     axios.get(`${API_BASE}/runs/${runId}/logs`).then(res => setLogData(res.data));
   };
@@ -263,14 +242,6 @@ const fetchStatus = async () => {
       .catch(err => console.error(err));
   };
 
-  // Renderers for analysis
-  const renderLogViewer = () => <LogViewer logData={logData} runId={selectedRunId || ''} />;
-  const renderSyncStatus = () => <SyncStatusDetails data={runSyncData} />;
-  const renderComparativeAnalysis = () => <ComparativeAnalysis data={runComparativeData} />;
-  const renderDegAnalysis = () => <DegAnalysis data={runDegData} />;
-  const renderPathwayAnalysis = () => <PathwayAnalysis data={runPathwayData} />;
-  const renderPredictionAnalysis = () => <PredictionAnalysis data={runPredictionData} />;
-
   const toggleSelection = (val: any, list: any[], setter: (val: any[]) => void) => {
     if (list.includes(val)) setter(list.filter(item => item !== val));
     else setter([...list, val]);
@@ -281,7 +252,7 @@ const fetchStatus = async () => {
   const status = (selectedExtId && runStatus?.ext_statuses?.[selectedExtId]) 
     ? { ...runStatus, ...runStatus.ext_statuses[selectedExtId] }
     : runStatus;
-  const isSizeTask = selectedRunId ? (selectedRunId.includes("Size") && !selectedRunId.includes("Architecture")) : false;
+  // const isSizeTask = selectedRunId ? (selectedRunId.includes("Size") && !selectedRunId.includes("Architecture")) : false;
   const currentProj = projects.find(p => p.id === selectedProject);
 
   return (
@@ -344,13 +315,12 @@ const fetchStatus = async () => {
         ) : selectedRunId ? (
           <TaskDashboard 
             selectedRunId={selectedRunId} selectedExtId={selectedExtId} runStatus={runStatus} status={status}
-            isSizeTask={isSizeTask} currentProj={currentProj} taskView={taskView}
+            taskView={taskView}
             onBack={() => setSelectedRunId(null)} onSetTaskView={setTaskView} onSetSelectedExtId={setSelectedExtId}
-            onShowSyncModal={() => setShowSyncExternalModal(true)} onRestartTask={handleRestartTask} onRunStep={handleRunStep}
+            onShowSyncModal={() => setShowSyncExternalModal(true)} onRunStep={handleRunStep}
             fetchLogs={fetchLogs} fetchSyncStatus={fetchSyncStatus} fetchComparativeMetrics={fetchComparativeMetrics} 
             fetchDegMetrics={fetchDegMetrics} fetchPathwayMetrics={fetchPathwayMetrics} fetchPredictionMetrics={fetchPredictionMetrics}
-            fetchTsneCoords={fetchTsneCoords}
-            logData={logData} runSyncData={runSyncData} runComparativeData={runComparativeData} 
+            logData={logData} runComparativeData={runComparativeData} 
             runDegData={runDegData} runPathwayData={runPathwayData} runPredictionData={runPredictionData}
             runTsneData={runTsneData}
           />
@@ -360,7 +330,6 @@ const fetchStatus = async () => {
             resultsStatus={resultsStatus} onSelectRun={(id) => setSelectedRunId(id)}
             onFetchAblationLogs={fetchAblationLogs}
             onStopTask={handleStopTask} onRestartTask={handleRestartTask} onFetchLogs={fetchLogs}
-            ablationData={ablationData} sensitivityType={sensitivityType} onSetSensitivityType={setSensitivityType}
           />
         )}
       </main>

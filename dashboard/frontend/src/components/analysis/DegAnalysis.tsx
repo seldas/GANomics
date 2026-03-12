@@ -88,7 +88,7 @@ export const DegAnalysis: React.FC<DegAnalysisProps> = ({ data, runId }) => {
                 }}
               />
               <Legend verticalAlign="top" formatter={(value) => labels[value] || value} />
-              {algos.map((algo, i) => (
+              {algos.map((algo) => (
                 <Line 
                   key={algo} 
                   type="monotone" 

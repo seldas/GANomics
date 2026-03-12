@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowLeft, RotateCcw, ChevronRight, Info, RefreshCw, Download, Settings, Sliders, Check, HelpCircle } from 'lucide-react';
+import { ArrowLeft, RotateCcw, ChevronRight, Download, Settings, Sliders, Check } from 'lucide-react';
 import { StatusButton, MetaPanel } from '../common/UIComponents';
-import type { RunStatus, Project, LogResponse } from '../../types';
+import type { RunStatus, LogResponse } from '../../types';
 import { API_BASE } from '../../constants';
 
 import { LogViewer } from '../analysis/LogViewer';
@@ -10,21 +10,17 @@ import { DegAnalysis } from '../analysis/DegAnalysis';
 import { PathwayAnalysis } from '../analysis/PathwayAnalysis';
 import { PredictionAnalysis } from '../analysis/PredictionAnalysis';
 import { TsneVisualization } from '../analysis/TsneVisualization';
-import { SyncStatusDetails } from '../analysis/SyncStatusDetails';
 
 interface TaskDashboardProps {
   selectedRunId: string;
   selectedExtId: string | null;
   runStatus: RunStatus | undefined;
   status: any;
-  isSizeTask: boolean;
-  currentProj: Project | undefined;
   taskView: 'overview' | 'training' | 'sync' | 'comparative' | 'deg' | 'pathway' | 'prediction';
   onBack: () => void;
   onSetTaskView: (view: 'overview' | 'training' | 'sync' | 'comparative' | 'deg' | 'pathway' | 'prediction') => void;
   onSetSelectedExtId: (id: string | null) => void;
   onShowSyncModal: () => void;
-  onRestartTask: (id: string) => void;
   onRunStep: (step: number, params?: any) => void;
   fetchLogs: (id: string) => void;
   fetchSyncStatus: (id: string) => void;
@@ -32,9 +28,7 @@ interface TaskDashboardProps {
   fetchDegMetrics: (id: string) => void;
   fetchPathwayMetrics: (id: string) => void;
   fetchPredictionMetrics: (id: string) => void;
-  fetchTsneCoords: (id: string) => void;
   logData: LogResponse | null;
-  runSyncData: any | null;
   runComparativeData: any[] | null;
   runDegData: any | null;
   runPathwayData: any | null;
@@ -43,10 +37,10 @@ interface TaskDashboardProps {
 }
 
 export const TaskDashboard: React.FC<TaskDashboardProps> = ({
-  selectedRunId, selectedExtId, runStatus, status, isSizeTask, currentProj, taskView,
-  onBack, onSetTaskView, onSetSelectedExtId, onShowSyncModal, onRestartTask, onRunStep,
-  fetchLogs, fetchSyncStatus, fetchComparativeMetrics, fetchDegMetrics, fetchPathwayMetrics, fetchPredictionMetrics, fetchTsneCoords,
-  logData, runSyncData, runComparativeData, runDegData, runPathwayData, runPredictionData, runTsneData
+  selectedRunId, selectedExtId, runStatus, status, taskView,
+  onBack, onSetTaskView, onSetSelectedExtId, onShowSyncModal, onRunStep,
+  fetchLogs, fetchSyncStatus, fetchComparativeMetrics, fetchDegMetrics, fetchPathwayMetrics, fetchPredictionMetrics,
+  logData, runComparativeData, runDegData, runPathwayData, runPredictionData, runTsneData
 }) => {
   const [showStepSettings, setShowStepSettings] = useState(false);
   const [pathwayFilter, setPathwayFilter] = useState(true);
