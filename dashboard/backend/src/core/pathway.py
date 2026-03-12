@@ -204,7 +204,7 @@ def run_permutation_test(deg_real, deg_syn, gene_sets, B=100, min_size=15, max_s
 
 def jaccard_threshold_curve(deg_real, deg_syn, thresholds=[1e-4, 1e-3, 1e-2, 0.05, 0.1, 0.2, 0.5]):
     """
-    Compute Jaccard overlap of DEGs across a range of FDR thresholds (Fig 9a).
+    Compute Jaccard overlap of DEGs across a range of p-value thresholds.
     """
     # Ensure indexes are strings for set operations
     dr = deg_real.copy()
@@ -214,12 +214,18 @@ def jaccard_threshold_curve(deg_real, deg_syn, thresholds=[1e-4, 1e-3, 1e-2, 0.0
 
     results = []
     for tau in thresholds:
-        set_real = set(dr[dr['fdr'] <= tau].index)
-        set_syn = set(ds[ds['fdr'] <= tau].index)
+        set_real = set(dr[dr['p_value'] <= tau].index)
+        set_syn = set(ds[ds['p_value'] <= tau].index)
         
         inter = len(set_real & set_syn)
         union = len(set_real | set_syn)
         jac = inter / union if union > 0 else 0.0
-        results.append({'threshold': tau, 'jaccard': jac, 'n_real': len(set_real)})
+        results.append({
+            'threshold': tau, 
+            'jaccard': jac, 
+            'n_real': len(set_real),
+            'n_fake': len(set_syn),
+            'n_overlap': inter
+        })
         
     return pd.DataFrame(results)

@@ -51,8 +51,8 @@ def run_deg_analysis(df, labels, group1=1, group2=0):
         'cohen_d': cohen_ds
     })
 
-    # Benjamini-Hochberg correction
-    results = results.sort_values('p_value')
+    # Benjamini-Hochberg correction (but keep p_value as primary ranking)
+    results = results.sort_values('p_value', ascending=True)
     results['fdr'] = results['p_value'] * len(results) / np.arange(1, len(results) + 1)
     results['fdr'] = np.minimum.accumulate(results['fdr'][::-1])[::-1]
     results['fdr'] = np.minimum(results['fdr'], 1.0)

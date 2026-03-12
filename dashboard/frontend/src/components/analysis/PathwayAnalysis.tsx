@@ -228,55 +228,6 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
           </div>
         </div>
       )}
-
-      {/* 5. Slopegraph (GANomics Only) */}
-      {slopeData.length > 0 && (
-        <div className="card" style={{ padding: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary-color)', marginBottom: '4px' }}>
-                <TrendingUp size={18} />
-                <span style={{ fontSize: '0.7rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Preservation Analysis</span>
-              </div>
-              <h3 style={{ margin: 0 }}>Pathway Significance Comparison (GANomics)</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Preservation of -log10(FDR) between Real and Synthetic data.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '4px' }}>
-              {[10, 20, 30].map(k => (
-                <button key={k} className={`chip ${topKPlot === k ? 'selected' : ''}`} onClick={() => setTopKPlot(k)} style={{ fontSize: '0.7rem' }}>
-                  Top {k}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ height: `${slopeData.length * 45 + 100}px`, minHeight: '400px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={slopeData} layout="vertical" margin={{ top: 20, right: 50, left: 200, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} />
-                <XAxis type="number" label={{ value: '-log10(FDR q)', position: 'insideBottom', offset: -10 }} />
-                <YAxis dataKey="pathway" type="category" width={180} fontSize={10} tick={{ fill: 'var(--text-main)' }} />
-                <Tooltip formatter={(value: any, name: string) => [Number(value).toFixed(2), name]} />
-                
-                <Scatter name="Real" dataKey="real_mlog" fill="#64748b" shape="circle" />
-                <Scatter name="GANomics" dataKey="GANomics" fill="var(--primary-color)" shape="circle" />
-
-                <Line 
-                  data={[{ pathway: slopeData[0]?.pathway, threshold: -Math.log10(0.05) }, { pathway: slopeData[slopeData.length-1]?.pathway, threshold: -Math.log10(0.05) }]}
-                  dataKey="threshold" stroke="#ef4444" strokeDasharray="5 5" dot={false} activeDot={false}
-                  label={{ position: 'top', value: 'q < 0.05', fill: '#ef4444', fontSize: 10 }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '1rem', fontSize: '0.8rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#64748b' }} /> Real Data</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary-color)' }} /> GANomics</div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
