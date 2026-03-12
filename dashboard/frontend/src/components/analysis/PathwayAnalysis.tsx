@@ -20,30 +20,26 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
   const availableAlgos = useMemo(() => libData?.details ? Object.keys(libData.details) : [], [libData]);
   const currentDetails = useMemo(() => libData?.details?.[selectedAlgo] || [], [libData, selectedAlgo]);
 
-  // 2. Calculate Significance Ratio Curve
+  // 2. Calculate Significance Ratio Curve for ALL algorithms
   const chartData = useMemo(() => {
-    if (!currentDetails.length) return [];
+    if (!libData?.details) return [];
     
+    // Thresholds: Top 5, 10, 15... 100
     const results: any[] = [];
-    let significantInSyn = 0;
-    const maxK = Math.min(currentDetails.length, 100);
+    const maxK = 100;
     
-    for (let k = 1; k <= maxK; k++) {
-      const pathway = currentDetails[k-1];
-      if (pathway.Syn_P < 0.05) {
-        significantInSyn++;
-      }
-      
-      if (k % 5 === 0 || k === maxK) {
-        results.push({
-          k,
-          ratio: significantInSyn / k,
-          label: `Top ${k}`
-        });
-      }
+    for (let k = 5; k <= maxK; k += 5) {
+      const entry: any = { k, label: `Top ${k}` };
+      availableAlgos.forEach(algo => {
+        const details = libData.details[algo] || [];
+        const topK = details.slice(0, k);
+        const significantInSyn = topK.filter((p: any) => p.Syn_P < 0.05).length;
+        entry[algo] = significantInSyn / k;
+      });
+      results.push(entry);
     }
     return results;
-  }, [currentDetails]);
+  }, [libData, availableAlgos]);
 
   // 3. Filter Table
   const filteredTableData = useMemo(() => {
@@ -84,7 +80,19 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
               <XAxis dataKey="k" label={{ value: 'Top X Pathways (Real)', position: 'insideBottom', offset: -10 }} />
               <YAxis domain={[0, 1]} label={{ value: 'Sig. Ratio (Syn p < 0.05)', angle: -90, position: 'insideLeft' }} />
               <Tooltip formatter={(val: number) => [val.toFixed(2), 'Preservation Ratio']} />
-              <Line type="monotone" dataKey="ratio" stroke="var(--primary-color)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+              <Legend verticalAlign="top" />
+              {availableAlgos.map((algo, i) => (
+                <Line 
+                  key={algo} 
+                  type="monotone" 
+                  dataKey={algo} 
+                  stroke={algo === 'Baseline' ? '#64748b' : colors[i % colors.length]} 
+                  strokeWidth={algo === 'GANomics' ? 3 : (algo === 'Baseline' ? 2 : 1.5)} 
+                  strokeDasharray={algo === 'Baseline' ? "5 5" : "0"}
+                  dot={{ r: algo === 'GANomics' ? 4 : 2 }} 
+                  activeDot={{ r: 8 }} 
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
