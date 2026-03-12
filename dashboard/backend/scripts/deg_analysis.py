@@ -10,7 +10,7 @@ from src.core.analysis import run_deg_analysis
 from src.core.pathway import jaccard_threshold_curve
 
 def main():
-    parser = argparse.ArgumentParser(description="DEG Overlap Analysis")
+    parser = argparse.ArgumentParser(description="Focused DEG Concordance Analysis")
     parser.add_argument("--run_id", type=str, required=True)
     parser.add_argument("--ext_id", type=str)
     parser.add_argument("--labels", type=str)
@@ -23,65 +23,56 @@ def main():
     
     if args.ext_id:
         test_dir = os.path.join(sync_root, args.ext_id)
-        algo_dir = os.path.join(sync_root, f"algorithms_{args.ext_id}")
         out_root = test_dir
     else:
         test_dir = os.path.join(sync_root, "test")
-        algo_dir = os.path.join(sync_root, "algorithms")
         out_root = os.path.join(backend_dir, "results", "4_Biomarkers")
 
-    real_ma_path = os.path.join(test_dir, "microarray_real.csv")
-    if not os.path.exists(real_ma_path):
-        real_ma_path = os.path.join(test_dir, "rnaseq_real.csv")
-    
-    if not os.path.exists(real_ma_path):
-        print("Error: Synced real data not found.")
+    # Load All 4 Profiles
+    try:
+        ma_real = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
+        rs_real = pd.read_csv(os.path.join(test_dir, "rnaseq_real.csv"), index_col=0)
+        ma_fake = pd.read_csv(os.path.join(test_dir, "microarray_fake.csv"), index_col=0)
+        rs_fake = pd.read_csv(os.path.join(test_dir, "rnaseq_fake.csv"), index_col=0)
+    except FileNotFoundError as e:
+        print(f"Error: Required data files not found in {test_dir}. Ensure Step 2 (Sync) completed. {e}")
         return
 
     # Labels
     label_path = args.labels if args.labels else os.path.join(backend_dir, "dataset", project_id, "label.txt")
-    if not os.path.exists(label_path):
-        print(f"Error: label.txt not found at {label_path}")
-        return
-
-    real_ma = pd.read_csv(real_ma_path, index_col=0)
     df_labels = pd.read_csv(label_path, index_col=0, sep=None, engine='python')
-    common_idx = real_ma.index.intersection(df_labels.index)
-    real_ma = real_ma.loc[common_idx]
+    
+    # Alignment (Must be perfectly paired)
+    common_idx = ma_real.index.intersection(rs_real.index).intersection(df_labels.index)
     y = df_labels.loc[common_idx, 'label']
-
-    # Profiles
-    is_ma = "microarray" in real_ma_path
-    target_prefix = "microarray_fake_" if is_ma else "rnaseq_fake_"
     
-    profiles = [('GANomics', os.path.join(test_dir, "microarray_fake.csv" if is_ma else "rnaseq_fake.csv"))]
+    print(f"Analyzing {len(common_idx)} samples across both directions.")
+
+    # 1. Compute DEGs for all profiles
+    print("Computing DEGs: Real Platforms...")
+    deg_ma_real = run_deg_analysis(ma_real.loc[common_idx], y)
+    deg_rs_real = run_deg_analysis(rs_real.loc[common_idx], y)
     
-    # Add Baseline: Microarray Real vs RNA-Seq Real
-    other_real_path = os.path.join(test_dir, "rnaseq_real.csv" if is_ma else "microarray_real.csv")
-    if os.path.exists(other_real_path):
-        profiles.append(('Baseline', other_real_path))
-
-    if os.path.exists(algo_dir):
-        for f in os.listdir(algo_dir):
-            if f.startswith(target_prefix) and f.endswith(".csv"):
-                algo_name = f.replace(target_prefix, "").replace(".csv", "").upper()
-                profiles.append((algo_name, os.path.join(algo_dir, f)))
-
-    print("Running Reference DEG Analysis...")
-    deg_real = run_deg_analysis(real_ma, y)
+    print("Computing DEGs: GANomics Synthetic...")
+    deg_ma_fake = run_deg_analysis(ma_fake.loc[common_idx], y)
+    deg_rs_fake = run_deg_analysis(rs_fake.loc[common_idx], y)
 
     deg_dir = os.path.join(out_root, "DEG", args.run_id) if not args.ext_id else os.path.join(out_root, "DEG")
     os.makedirs(deg_dir, exist_ok=True)
 
-    for algo_name, syn_path in profiles:
-        if not os.path.exists(syn_path): continue
-        print(f"Processing DEG for {algo_name}...")
-        syn_ma = pd.read_csv(syn_path, index_col=0).loc[common_idx]
-        deg_syn = run_deg_analysis(syn_ma, y)
-        jac_curve = jaccard_threshold_curve(deg_real, deg_syn)
+    # 2. Calculate Jaccard Curves for the 3 Key Comparisons
+    comparisons = [
+        ('Baseline', deg_ma_real, deg_rs_real, "Native Cross-Platform"),
+        ('GANomics_MA_to_RS', deg_rs_fake, deg_rs_real, "Microarray -> RNA-Seq"),
+        ('GANomics_RS_to_MA', deg_ma_fake, deg_ma_real, "RNA-Seq -> Microarray")
+    ]
+
+    for algo_name, deg_test, deg_ref, desc in comparisons:
+        print(f">>> Calculating overlap: {desc}")
+        jac_curve = jaccard_threshold_curve(deg_ref, deg_test)
         jac_curve.to_csv(os.path.join(deg_dir, f"Jaccard_Curve_{algo_name}.csv"), index=False)
 
-    print("✅ DEG analysis completed.")
+    print("✅ Redesigned DEG analysis completed.")
 
 if __name__ == "__main__":
     main()

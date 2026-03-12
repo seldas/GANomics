@@ -27,7 +27,17 @@ export const DegAnalysis: React.FC<DegAnalysisProps> = ({ data }) => {
     return entry;
   });
 
-  const colors = ['var(--primary-color)', '#16a34a', '#818cf8', '#ea580c', '#db2777', '#7c3aed'];
+  const colors: any = {
+    'Baseline': '#64748b',
+    'GANomics_MA_to_RS': 'var(--primary-color)',
+    'GANomics_RS_to_MA': '#16a34a'
+  };
+
+  const labels: any = {
+    'Baseline': 'Native Platforms (MA vs RS)',
+    'GANomics_MA_to_RS': 'GANomics (MA -> RS)',
+    'GANomics_RS_to_MA': 'GANomics (RS -> MA)'
+  };
 
   return (
     <div className="card" style={{ padding: '2rem' }}>
@@ -44,17 +54,41 @@ export const DegAnalysis: React.FC<DegAnalysisProps> = ({ data }) => {
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="label" fontSize={11} />
             <YAxis domain={[0, 1]} label={{ value: 'Jaccard Similarity Index', angle: -90, position: 'insideLeft' }} />
-            <Tooltip />
-            <Legend verticalAlign="top" />
+            <Tooltip 
+              content={({ active, payload, label }: any) => {
+                if (active && payload && payload.length) {
+                  return (
+                    <div className="card" style={{ padding: '10px', fontSize: '0.75rem', border: '1px solid #ddd' }}>
+                      <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>Threshold: {label}</p>
+                      {payload.map((p: any, i: number) => {
+                        const algo = p.dataKey;
+                        const pt = data[algo].find((pt: any) => `p < ${pt.threshold}` === label);
+                        return (
+                          <div key={i} style={{ color: p.color, marginBottom: '4px' }}>
+                            <span style={{ fontWeight: 'bold' }}>{labels[algo] || algo}:</span> {p.value.toFixed(3)}
+                            <br />
+                            <span style={{ color: '#666', fontSize: '0.7rem' }}>
+                              (Overlap: {pt?.n_overlap} | Real: {pt?.n_real} | Fake: {pt?.n_fake})
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+            <Legend verticalAlign="top" formatter={(value) => labels[value] || value} />
             {algos.map((algo, i) => (
               <Line 
                 key={algo} 
                 type="monotone" 
                 dataKey={algo} 
-                stroke={algo === 'Baseline' ? '#64748b' : colors[i % colors.length]} 
-                strokeWidth={algo === 'GANomics' ? 3 : (algo === 'Baseline' ? 2 : 1.5)}
+                stroke={colors[algo] || '#999'} 
+                strokeWidth={algo.includes('GANomics') ? 3 : 2}
                 strokeDasharray={algo === 'Baseline' ? "5 5" : "0"}
-                dot={{ r: algo === 'GANomics' ? 5 : 3 }}
+                dot={{ r: algo.includes('GANomics') ? 5 : 3 }}
                 activeDot={{ r: 8 }}
               />
             ))}
