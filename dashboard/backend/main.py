@@ -486,7 +486,7 @@ async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
         parts = f[:-4].split("_")
         if f.startswith("Pathway_Concordance_"):
             lib = "_".join(parts[3:])
-            if lib not in results: results[lib] = {"concordance": {}, "details": {}}
+            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}}
             results[lib]["concordance"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")[0]
         elif f.startswith("Pathway_Details_"):
             lib = "_".join(parts[3:])
