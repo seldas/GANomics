@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Filter, List } from 'lucide-react';
 
 interface PathwayAnalysisProps {
   data: any | null;
@@ -11,6 +11,7 @@ interface PathwayAnalysisProps {
 export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
   const [selectedLibrary, setSelectedLibrary] = useState<string | null>(null);
   const [selectedAlgo, setSelectedAlgo] = useState<string>('GANomics');
+  const [showAll, setShowAll] = useState(false);
 
   if (!data) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
   
@@ -19,33 +20,62 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
 
   const currentLib = selectedLibrary || libraries[0];
   const libData = data[currentLib];
-  if (!libData?.concordance) return null;
-
-  const chartData = Object.keys(libData.concordance).map(algo => ({
-    name: algo,
-    rho: libData.concordance[algo].Spearman_Rho,
-    p: libData.concordance[algo].P_Value
-  })).sort((a, b) => b.rho - a.rho);
+  if (!libData?.details) return null;
 
   const availableAlgos = Object.keys(libData.details || {});
   const currentDetails = libData.details?.[selectedAlgo] || [];
 
+  // 1. Calculate Significance Ratio Curve
+  const chartData = useMemo(() => {
+    if (!currentDetails.length) return [];
+    
+    // Data is already sorted by Real_FDR from backend
+    const results: any[] = [];
+    let significantInSyn = 0;
+    
+    // We only look at top 100 or all if less
+    const maxK = Math.min(currentDetails.length, 100);
+    
+    for (let k = 1; k <= maxK; k++) {
+      const pathway = currentDetails[k-1];
+      if (pathway.Syn_P < 0.05) {
+        significantInSyn++;
+      }
+      
+      // Every 5 points or last point
+      if (k % 5 === 0 || k === maxK) {
+        results.append({
+          k,
+          ratio: significantInSyn / k,
+          label: `Top ${k}`
+        });
+      }
+    }
+    return results;
+  }, [currentDetails]);
+
+  // 2. Filter Table
+  const filteredTableData = useMemo(() => {
+    if (showAll) return currentDetails;
+    return currentDetails.filter((p: any) => p.Real_P < 0.05);
+  }, [currentDetails, showAll]);
+
+  const colors = ['var(--primary-color)', '#16a34a', '#818cf8', '#ea580c', '#db2777', '#7c3aed'];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Figure Panel: Significance Ratio */}
       <div className="card" style={{ padding: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
           <div>
-            <h3>Pathway Concordance (ρ)</h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Spearman correlation of enrichment scores between real and synthetic data.</p>
+            <h3>Significance Preservation Ratio</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              Fraction of Top X pathways (ranked by Real FDR) that are also significant (p &lt; 0.05) in Synthetic data.
+            </p>
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '50%' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {libraries.map(lib => (
-              <button 
-                key={lib} 
-                className={`chip ${currentLib === lib ? 'selected' : ''}`} 
-                style={{ fontSize: '0.7rem' }}
-                onClick={() => setSelectedLibrary(lib)}
-              >
+              <button key={lib} className={`chip ${currentLib === lib ? 'selected' : ''}`} style={{ fontSize: '0.7rem' }} onClick={() => setSelectedLibrary(lib)}>
                 {lib.replace(/_/g, ' ')}
               </button>
             ))}
@@ -54,72 +84,85 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
 
         <div style={{ height: '400px' }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ bottom: 40 }}>
+            <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} fontSize={11} />
-              <YAxis domain={[0, 1]} label={{ value: 'Spearman Rho (ρ)', angle: -90, position: 'insideLeft' }} />
-              <Tooltip 
-                formatter={(value: any) => [typeof value === 'number' ? value.toFixed(4) : 'N/A', 'Concordance (ρ)']}
-              />
-              <Bar dataKey="rho" fill="var(--primary-color)" barSize={40} radius={[4, 4, 0, 0]} />
-            </BarChart>
+              <XAxis dataKey="k" label={{ value: 'Top X Pathways (Real)', position: 'insideBottom', offset: -10 }} />
+              <YAxis domain={[0, 1]} label={{ value: 'Sig. Ratio (Syn p < 0.05)', angle: -90, position: 'insideLeft' }} />
+              <Tooltip formatter={(val: number) => [val.toFixed(2), 'Preservation Ratio']} />
+              <Line type="monotone" dataKey="ratio" stroke="var(--primary-color)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
+      {/* Table Panel: ORA Details */}
       {availableAlgos.length > 0 && (
         <section className="card" style={{ padding: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <div>
-              <h3 style={{ margin: 0 }}>Top Ranked Pathways Comparison</h3>
+              <h3 style={{ margin: 0 }}>Functional Annotation (ORA)</h3>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-                Sorted by Real Dataset ranking (Top to Bottom).
+                Ranked by Real FDR (Most significant first).
               </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>ALGORITHM:</div>
-              <select 
-                className="chip" 
-                value={selectedAlgo} 
-                onChange={(e) => setSelectedAlgo(e.target.value)}
-                style={{ border: 'none', fontWeight: '600' }}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <button 
+                className={`chip ${!showAll ? 'selected' : ''}`} 
+                onClick={() => setShowAll(false)}
+                style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
+                <Filter size={12} /> Significant (Real p &lt; 0.05)
+              </button>
+              <button 
+                className={`chip ${showAll ? 'selected' : ''}`} 
+                onClick={() => setShowAll(true)}
+                style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <List size={12} /> Show All
+              </button>
+              <div style={{ height: '24px', width: '1px', background: '#e2e8f0', margin: '0 0.5rem' }} />
+              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>ALGO:</div>
+              <select className="chip" value={selectedAlgo} onChange={(e) => setSelectedAlgo(e.target.value)} style={{ border: 'none', fontWeight: '600' }}>
                 {availableAlgos.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto', maxHeight: '500px' }}>
+          <div style={{ overflowX: 'auto', maxHeight: '600px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead style={{ position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
                 <tr style={{ textAlign: 'left', borderBottom: '2px solid #eee' }}>
                   <th style={{ padding: '0.75rem 1rem' }}>Pathway Name</th>
                   <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Genes</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Real Rank</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Syn Rank</th>
                   <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>p-val (Real)</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>FDR (Real)</th>
                   <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>p-val (Syn)</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>FDR (Syn)</th>
                 </tr>
               </thead>
               <tbody>
-                {currentDetails.map((p: any, i: number) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                {filteredTableData.map((p: any, i: number) => (
+                  <tr key={i} style={{ 
+                    borderBottom: '1px solid #f3f4f6',
+                    backgroundColor: p.Real_P < 0.05 && p.Syn_P < 0.05 ? '#f0fdf4' : 'transparent'
+                  }}>
                     <td style={{ padding: '0.6rem 1rem', fontWeight: '500' }}>{p.set}</td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{p.Real_Count || '-'}</td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'center' }}>{Math.round(p.Real_Rank)}</td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'center', color: Math.abs(p.Real_Rank - p.Syn_Rank) < 10 ? 'var(--success-color)' : 'inherit' }}>
-                      {Math.round(p.Syn_Rank)}
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{p.Genes || '-'}</td>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>{p.Real_P?.toExponential(2)}</td>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right', fontWeight: p.Real_FDR < 0.05 ? '600' : 'normal' }}>{p.Real_FDR?.toFixed(4)}</td>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: p.Syn_P < 0.05 ? '#16a34a' : 'inherit' }}>
+                      {p.Syn_P ? p.Syn_P.toExponential(2) : 'N/A'}
                     </td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>
-                      {p.Real_P !== undefined && p.Real_P !== null ? p.Real_P.toExponential(2) : '-'}
-                    </td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>
-                      {p.Syn_P !== undefined && p.Syn_P !== null ? p.Syn_P.toExponential(2) : '-'}
-                    </td>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>{p.Syn_FDR ? p.Syn_FDR.toFixed(4) : 'N/A'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {filteredTableData.length === 0 && (
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                No significant pathways found (Real p &lt; 0.05).
+              </div>
+            )}
           </div>
         </section>
       )}

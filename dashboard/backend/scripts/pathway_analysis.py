@@ -99,27 +99,40 @@ def main():
         deg_syn = apply_mapping(run_deg_analysis(syn_ma, y), gene_map)
 
         for gs_name, gene_sets in all_gene_sets.items():
-            enr_real = gene_set_enrichment(deg_real, gene_sets, min_size=15 if apply_filter else 0, max_size=500 if apply_filter else 10000)
-            enr_syn = gene_set_enrichment(deg_syn, gene_sets, min_size=15 if apply_filter else 0, max_size=500 if apply_filter else 10000)
+            # Run ORA (Fisher's Exact Test) - Mimic DAVID
             ora_real = ora_enrichment(deg_real, gene_sets, min_size=15 if apply_filter else 0, max_size=500 if apply_filter else 10000)
             ora_syn = ora_enrichment(deg_syn, gene_sets, min_size=15 if apply_filter else 0, max_size=500 if apply_filter else 10000)
             
-            obs_rho, null_dist, p_val = run_permutation_test(deg_real, deg_syn, gene_sets, B=100, min_size=15 if apply_filter else 0, max_size=500 if apply_filter else 10000)
-            
-            pd.DataFrame([{'Algorithm': algo_name, 'Library': gs_name, 'Spearman_Rho': obs_rho, 'P_Value': p_val}]).to_csv(os.path.join(pathway_dir, f"Pathway_Concordance_{algo_name}_{gs_name}.csv"), index=False)
-
-            if not enr_real.empty and not enr_syn.empty:
+            # Save Results
+            if not ora_real.empty:
+                # Merge Real and Syn results on pathway name
                 df_detail = pd.merge(
-                    enr_real[['set', 'score', 'rank', 'count']].rename(columns={'score': 'Real_Score', 'rank': 'Real_Rank', 'count': 'Real_Count'}),
-                    enr_syn[['set', 'score', 'rank', 'count']].rename(columns={'score': 'Syn_Score', 'rank': 'Syn_Rank', 'count': 'Syn_Count'}),
-                    on='set', how='inner'
+                    ora_real[['set', 'p_value', 'fdr', 'overlap', 'genes']].rename(
+                        columns={'p_value': 'Real_P', 'fdr': 'Real_FDR', 'overlap': 'Real_Overlap', 'genes': 'Real_Genes'}
+                    ),
+                    ora_syn[['set', 'p_value', 'fdr', 'overlap', 'genes']].rename(
+                        columns={'p_value': 'Syn_P', 'fdr': 'Syn_FDR', 'overlap': 'Syn_Overlap', 'genes': 'Syn_Genes'}
+                    ),
+                    on='set', how='left'
                 )
-                if not ora_real.empty:
-                    df_detail = pd.merge(df_detail, ora_real[['set', 'p_value', 'fdr', 'overlap', 'genes']].rename(columns={'p_value': 'Real_P', 'fdr': 'Real_FDR', 'overlap': 'Real_Overlap', 'genes': 'Real_Genes'}), on='set', how='left')
-                if not ora_syn.empty:
-                    df_detail = pd.merge(df_detail, ora_syn[['set', 'p_value', 'fdr', 'overlap', 'genes']].rename(columns={'p_value': 'Syn_P', 'fdr': 'Syn_FDR', 'overlap': 'Syn_Overlap', 'genes': 'Syn_Genes'}), on='set', how='left')
                 
-                df_detail.sort_values('Real_Rank').to_csv(os.path.join(pathway_dir, f"Pathway_Details_{algo_name}_{gs_name}.csv"), index=False)
+                # Extract gene count from overlap string (e.g., "5/20" -> 20)
+                def get_total_genes(ov):
+                    try: return int(str(ov).split('/')[-1])
+                    except: return 0
+                
+                df_detail['Genes'] = df_detail['Real_Overlap'].apply(get_total_genes)
+                
+                # Rank by Real FDR
+                df_detail = df_detail.sort_values('Real_FDR', ascending=True)
+                
+                # Save detailed CSV
+                df_detail.to_csv(os.path.join(pathway_dir, f"Pathway_Details_{algo_name}_{gs_name}.csv"), index=False)
+                
+                # Save a small concordance summary for the dashboard badge logic
+                pd.DataFrame([{'Algorithm': algo_name, 'Library': gs_name, 'Significant_Real': len(ora_real[ora_real['p_value'] < 0.05])}]).to_csv(
+                    os.path.join(pathway_dir, f"Pathway_Concordance_{algo_name}_{gs_name}.csv"), index=False
+                )
 
     print("✅ Pathway analysis completed.")
 
