@@ -106,102 +106,103 @@ def main():
     pathway_dir = os.path.join(out_root, "Pathway", args.run_id) if not args.ext_id else os.path.join(out_root, "Pathway")
     os.makedirs(pathway_dir, exist_ok=True)
 
-    # Comparison Definition (using raw data to allow bootstrap DEG re-computation)
-    comparisons = [
-        ('Baseline', ma_real, rs_real, "Native Cross-Platform"),
-        ('GANomics_MA_to_RS', ma_fake, rs_real, "Microarray -> RNA-Seq"),
-        ('GANomics_RS_to_MA', rs_fake, ma_real, "RNA-Seq -> Microarray")
-    ]
+    try:
+        # Comparison Definition (using raw data to allow bootstrap DEG re-computation)
+        comparisons = [
+            ('Baseline', ma_real, rs_real, "Native Cross-Platform"),
+            ('GANomics_MA_to_RS', ma_fake, rs_real, "Microarray -> RNA-Seq"),
+            ('GANomics_RS_to_MA', rs_fake, ma_real, "RNA-Seq -> Microarray")
+        ]
 
-    for algo_name, data_test, data_ref, desc in comparisons:
-        print(f"\n>>> Processing Pathways: {desc}")
-        
-        # Initial DEG for preservation permutation
-        deg_ref = run_deg_analysis(data_ref, y)
-        deg_test = run_deg_analysis(data_test, y)
-        
-        for gs_name, gene_sets in all_gene_sets.items():
-            if not gene_sets: continue
+        for algo_name, data_test, data_ref, desc in comparisons:
+            print(f"\n>>> Processing Pathways: {desc}")
             
-            # 1) Preservation Permutation (Null distribution)
-            print(f"  [{gs_name}] Running permutation test...")
-            obs_rho, null_dist, p_perm_obs, enr_real, enr_syn = gene_set_preservation_permutation(
-                deg_ref, deg_test, gene_sets, B=args.bootstrap_b, how='abs_d'
-            )
+            # Initial DEG for preservation permutation
+            deg_ref = run_deg_analysis(data_ref, y)
+            deg_test = run_deg_analysis(data_test, y)
             
-            if not np.isfinite(obs_rho) or enr_real.empty:
-                continue
+            for gs_name, gene_sets in all_gene_sets.items():
+                if not gene_sets: continue
+                
+                # 1) Preservation Permutation (Null distribution)
+                print(f"  [{gs_name}] Running permutation test...")
+                obs_rho, null_dist, p_perm_obs, enr_real, enr_syn = gene_set_preservation_permutation(
+                    deg_ref, deg_test, gene_sets, B=args.bootstrap_b, how='abs_d'
+                )
+                
+                if not np.isfinite(obs_rho) or enr_real.empty:
+                    continue
 
-            # 2) Bootstrap Rank Stability (Bootstrap rhos)
-            print(f"  [{gs_name}] Running bootstrap stability...")
-            boot_rhos, topk_boot = bootstrap_pathway_rank_stability(
-                data_ref, data_test, y, gene_sets, B=args.bootstrap_b, frac=0.8, how='abs_d'
-            )
-            
-            # 3) Compute Statistics
-            mu, sd, lo, hi = ci95(boot_rhos)
-            p_perm_final = perm_pvalue(null_dist, mu, side="greater")
-            g_delta = glass_delta(mu, null_dist)
-            
-            # Save Details (Enrichment results)
-            df_detail = pd.merge(
-                enr_real[['set', 'k', 't', 'p', 'q', 'mean_in', 'mean_out']].rename(columns=lambda x: 'Real_'+x.upper() if x!='set' else x),
-                enr_syn[['set', 'k', 't', 'p', 'q', 'mean_in', 'mean_out']].rename(columns=lambda x: 'Syn_'+x.upper() if x!='set' else x),
-                on='set', how='left'
-            )
-            df_detail = df_detail.sort_values('Real_P', ascending=True)
-            df_detail.to_csv(os.path.join(pathway_dir, f"Pathway_Details___{algo_name}___{gs_name}.csv"), index=False)
-            
-            # Save Summary Stats (compatible with old Pathway_Concordance if needed)
-            summary_res = {
-                'Algorithm': algo_name,
-                'Library': gs_name,
-                'Observed_Rho': obs_rho,
-                'Spearman_Rho': obs_rho, # Alias for frontend compatibility
-                'Bootstrap_Mean_Rho': mu,
-                'Bootstrap_SD': sd,
-                'CI_95_Low': lo,
-                'CI_95_High': hi,
-                'Permutation_P': p_perm_final,
-                'Glass_Delta': g_delta
-            }
-            pd.DataFrame([summary_res]).to_csv(
-                os.path.join(pathway_dir, f"Pathway_Summary___{algo_name}___{gs_name}.csv"), index=False
-            )
-            # Maintain old name for frontend compatibility
-            pd.DataFrame([summary_res]).to_csv(
-                os.path.join(pathway_dir, f"Pathway_Concordance___{algo_name}___{gs_name}.csv"), index=False
-            )
-            
-            # Save Top-K Jaccard Stats
-            common_sets = set(enr_real['set']) & set(enr_syn['set'])
-            M = len(common_sets)
-            topk_stats = []
-            for K in [10, 20, 50]:
-                if K > M: continue
-                emp_jac = np.nanmean(topk_boot[K]) if K in topk_boot else topK_overlap(enr_real, enr_syn, K=K)
-                null_jac_dist = jaccard_topk_mc(M, K, B=20000)
-                p_jac = perm_pvalue(null_jac_dist, emp_jac, side="greater")
-                exp_jac = expected_jaccard_random(M, K)
-                topk_stats.append({
-                    'K': K, 
-                    'Observed_Jaccard': emp_jac, 
-                    'Expected_Jaccard': exp_jac, 
-                    'P_Value': p_jac,
-                    'Spearman_Rho': obs_rho # For frontend compatibility
-                })
-            
-            if topk_stats:
-                pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_TopK___{algo_name}___{gs_name}.csv"), index=False)
+                # 2) Bootstrap Rank Stability (Bootstrap rhos)
+                print(f"  [{gs_name}] Running bootstrap stability...")
+                boot_rhos, topk_boot = bootstrap_pathway_rank_stability(
+                    data_ref, data_test, y, gene_sets, B=args.bootstrap_b, frac=0.8, how='abs_d'
+                )
+                
+                # 3) Compute Statistics
+                mu, sd, lo, hi = ci95(boot_rhos)
+                p_perm_final = perm_pvalue(null_dist, mu, side="greater")
+                g_delta = glass_delta(mu, null_dist)
+                
+                # Save Details (Enrichment results)
+                df_detail = pd.merge(
+                    enr_real[['set', 'k', 't', 'p', 'q', 'mean_in', 'mean_out']].rename(columns=lambda x: 'Real_'+x.upper() if x!='set' else x),
+                    enr_syn[['set', 'k', 't', 'p', 'q', 'mean_in', 'mean_out']].rename(columns=lambda x: 'Syn_'+x.upper() if x!='set' else x),
+                    on='set', how='left'
+                )
+                df_detail = df_detail.sort_values('Real_P', ascending=True)
+                df_detail.to_csv(os.path.join(pathway_dir, f"Pathway_Details___{algo_name}___{gs_name}.csv"), index=False)
+                
+                # Save Summary Stats (compatible with old Pathway_Concordance if needed)
+                summary_res = {
+                    'Algorithm': algo_name,
+                    'Library': gs_name,
+                    'Observed_Rho': obs_rho,
+                    'Spearman_Rho': obs_rho, # Alias for frontend compatibility
+                    'Bootstrap_Mean_Rho': mu,
+                    'Bootstrap_SD': sd,
+                    'CI_95_Low': lo,
+                    'CI_95_High': hi,
+                    'Permutation_P': p_perm_final,
+                    'Glass_Delta': g_delta
+                }
+                pd.DataFrame([summary_res]).to_csv(
+                    os.path.join(pathway_dir, f"Pathway_Summary___{algo_name}___{gs_name}.csv"), index=False
+                )
                 # Maintain old name for frontend compatibility
-                pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_Stats___{algo_name}___{gs_name}.csv"), index=False)
+                pd.DataFrame([summary_res]).to_csv(
+                    os.path.join(pathway_dir, f"Pathway_Concordance___{algo_name}___{gs_name}.csv"), index=False
+                )
+                
+                # Save Top-K Jaccard Stats
+                common_sets = set(enr_real['set']) & set(enr_syn['set'])
+                M = len(common_sets)
+                topk_stats = []
+                for K in [10, 20, 50]:
+                    if K > M: continue
+                    emp_jac = np.nanmean(topk_boot[K]) if K in topk_boot else topK_overlap(enr_real, enr_syn, K=K)
+                    null_jac_dist = jaccard_topk_mc(M, K, B=20000)
+                    p_jac = perm_pvalue(null_jac_dist, emp_jac, side="greater")
+                    exp_jac = expected_jaccard_random(M, K)
+                    topk_stats.append({
+                        'K': K, 
+                        'Observed_Jaccard': emp_jac, 
+                        'Expected_Jaccard': exp_jac, 
+                        'P_Value': p_jac,
+                        'Spearman_Rho': obs_rho # For frontend compatibility
+                    })
+                
+                if topk_stats:
+                    pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_TopK___{algo_name}___{gs_name}.csv"), index=False)
+                    # Maintain old name for frontend compatibility
+                    pd.DataFrame(topk_stats).to_csv(os.path.join(pathway_dir, f"Pathway_Stats___{algo_name}___{gs_name}.csv"), index=False)
 
-            # Save distributions for plotting (optional, but good for frontend)
-            dist_df = pd.DataFrame({
-                'Null_Rho': pd.Series(null_dist),
-                'Bootstrap_Rho': pd.Series(boot_rhos)
-            })
-            dist_df.to_csv(os.path.join(pathway_dir, f"Pathway_Distributions___{algo_name}___{gs_name}.csv"), index=False)
+                # Save distributions for plotting (optional, but good for frontend)
+                dist_df = pd.DataFrame({
+                    'Null_Rho': pd.Series(null_dist),
+                    'Bootstrap_Rho': pd.Series(boot_rhos)
+                })
+                dist_df.to_csv(os.path.join(pathway_dir, f"Pathway_Distributions___{algo_name}___{gs_name}.csv"), index=False)
 
     except Exception as e:
         print(f"CRITICAL ERROR: Pathway analysis failed: {e}")

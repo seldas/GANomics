@@ -250,7 +250,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="Pred" num="6" statusLabel={status?.pred_model ? 'Done' : 'Pending'} stepStatus={status?.pred_model}>
+        <WorkflowStep title="Pred" num="6" statusLabel={status?.pred_model ? 'Done' : 'Pending'} stepStatus={status?.pred_model} algoStatus={status?.algo_details?.pred_model}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.pred_model} onClick={() => fetchPredictionMetrics(selectedRunId)}>Results</button>
           {!status?.pred_model ? (
             <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(6)}>Run</button>
