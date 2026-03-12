@@ -195,7 +195,7 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="k" label={{ value: 'Top X Pathways (Real)', position: 'insideBottom', offset: -10 }} />
               <YAxis domain={[0, 1]} label={{ value: 'Sig. Ratio (Syn p < 0.05)', angle: -90, position: 'insideLeft' }} />
-              <Tooltip formatter={(val: number) => [val.toFixed(2), 'Preservation Ratio']} />
+              <Tooltip formatter={(val: number, name: string) => [val.toFixed(2), name]} />
               <Legend verticalAlign="top" />
               {availableAlgos.map((algo, i) => (
                 <Line 
