@@ -35,39 +35,36 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
   const currentLib = selectedLibrary || libraries[0] || '';
   const libData = data && currentLib ? data[currentLib] : null;
   const availableAlgos = useMemo(() => libData?.details ? Object.keys(libData.details) : [], [libData]);
+  
+  // Specific data for GANomics only sections
+  const ganomicsDetails = useMemo(() => libData?.details?.['GANomics'] || [], [libData]);
+  const ganomicsStats = useMemo(() => libData?.stats?.['GANomics'] || [], [libData]);
+
+  // Data for the ORA table (can still be switched)
   const currentDetails = useMemo(() => libData?.details?.[selectedAlgo] || [], [libData, selectedAlgo]);
-  const currentStats = useMemo(() => libData?.stats?.[selectedAlgo] || [], [libData, selectedAlgo]);
 
-  // 2. Prepare Slopegraph Data (-log10 FDR comparison) for ALL algorithms
+  // 2. Prepare Slopegraph Data (-log10 FDR comparison) for GANOMICS ONLY
   const slopeData = useMemo(() => {
-    if (!libData?.details) return [];
+    if (!ganomicsDetails.length) return [];
     
-    const refAlgo = 'GANomics';
-    const refDetails = libData.details[refAlgo] || Object.values(libData.details)[0] as any[] || [];
-    if (!refDetails.length) return [];
+    // Extract top pathways from GANomics
+    const topPathways = ganomicsDetails.slice(0, topKPlot).map((d: any) => d.set);
 
-    const topPathways = refDetails.slice(0, topKPlot).map((d: any) => d.set);
+    const pReal = ganomicsDetails.map((d: any) => d.Real_P);
+    const pSyn = ganomicsDetails.map((d: any) => d.Syn_P || 1.0);
+    const fdrReal = computeFDR(pReal);
+    const fdrSyn = computeFDR(pSyn);
 
-    return topPathways.map(pathName => {
-      const entry: any = { pathway: pathName };
-      availableAlgos.forEach(algo => {
-        const details = libData.details[algo] || [];
-        const pValues = details.map((d: any) => d.Real_P);
-        const fdrValues = computeFDR(pValues);
-        const pathwayIdx = details.findIndex((d: any) => d.set === pathName);
-        
-        if (pathwayIdx !== -1) {
-          entry[algo] = -Math.log10(Math.max(fdrValues[pathwayIdx], 1e-20));
-          if (algo === refAlgo || !entry.real_mlog) {
-            entry.real_mlog = -Math.log10(Math.max(details[pathwayIdx].Real_P, 1e-20));
-          }
-        }
-      });
-      return entry;
+    return topPathways.map((pathName, idx) => {
+      return {
+        pathway: pathName,
+        real_mlog: -Math.log10(Math.max(fdrReal[idx], 1e-20)),
+        GANomics: -Math.log10(Math.max(fdrSyn[idx], 1e-20))
+      };
     }).reverse();
-  }, [libData, availableAlgos, topKPlot]);
+  }, [ganomicsDetails, topKPlot]);
 
-  // 3. Calculate Significance Ratio Curve
+  // 3. Calculate Significance Ratio Curve for ALL algorithms
   const chartData = useMemo(() => {
     if (!libData?.details) return [];
     const results: any[] = [];
@@ -96,9 +93,9 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* 1. Header: Library Tabs */}
+      {/* 1. Header: Library Selection */}
       <div className="card" style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0 }}>Enrichment Analysis: <span style={{ color: 'var(--primary-color)' }}>{currentLib.replace(/_/g, ' ')}</span></h3>
+        <h3 style={{ margin: 0 }}>Pathway Analysis: <span style={{ color: 'var(--primary-color)' }}>{currentLib.replace(/_/g, ' ')}</span></h3>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {libraries.map(lib => (
             <button key={lib} className={`chip ${currentLib === lib ? 'selected' : ''}`} onClick={() => setSelectedLibrary(lib)}>
@@ -108,113 +105,50 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* 2. Slopegraph: Unified Significance Comparison */}
-      {slopeData.length > 0 && (
-        <div className="card" style={{ padding: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary-color)', marginBottom: '4px' }}>
-                <TrendingUp size={18} />
-                <span style={{ fontSize: '0.7rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Comparative FDR</span>
-              </div>
-              <h3 style={{ margin: 0 }}>Pathway Significance Preservation</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Comparing preservation of -log10(FDR) across methods for Top {topKPlot} pathways.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: '4px' }}>
-              {[10, 20, 30].map(k => (
-                <button key={k} className={`chip ${topKPlot === k ? 'selected' : ''}`} onClick={() => setTopKPlot(k)} style={{ fontSize: '0.7rem' }}>
-                  Top {k}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ height: `${slopeData.length * 45 + 120}px`, minHeight: '500px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={slopeData} layout="vertical" margin={{ top: 20, right: 120, left: 200, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} />
-                <XAxis type="number" label={{ value: '-log10(FDR q)', position: 'insideBottom', offset: -10 }} />
-                <YAxis dataKey="pathway" type="category" width={180} fontSize={10} tick={{ fill: 'var(--text-main)' }} />
-                <Tooltip formatter={(value: any, name: string) => [Number(value).toFixed(2), name]} />
-                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '20px' }} />
-                
-                <Scatter name="Real Reference" dataKey="real_mlog" fill="#cbd5e1" shape="diamond" />
-                {availableAlgos.map((algo, i) => (
-                  <Scatter 
-                    key={algo} 
-                    name={algo} 
-                    dataKey={algo} 
-                    fill={algo === 'Baseline' ? '#64748b' : (algo === 'GANomics' ? 'var(--primary-color)' : colors[i % colors.length])} 
-                  />
-                ))}
-
-                <Line 
-                  data={[{ pathway: slopeData[0]?.pathway, threshold: -Math.log10(0.05) }, { pathway: slopeData[slopeData.length-1]?.pathway, threshold: -Math.log10(0.05) }]}
-                  dataKey="threshold" stroke="#ef4444" strokeDasharray="5 5" dot={false} activeDot={false}
-                  label={{ position: 'top', value: 'q < 0.05', fill: '#ef4444', fontSize: 10 }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+      {/* 2. TOP ITEM: Significance Preservation Ratio (ALL ALGORITHMS) */}
+      <div className="card" style={{ padding: '2rem' }}>
+        <div style={{ marginBottom: '2rem' }}>
+          <h3>Significance Preservation Ratio (Comparative)</h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            Fraction of Top X pathways (ranked by Real P-value) that are also significant (p &lt; 0.05) in Synthetic data.
+          </p>
         </div>
-      )}
-
-      {/* 3. Algorithm Detail Section */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#f8fafc', padding: '1rem 2rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-        <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Detailed analysis for:</div>
-        <select className="chip" value={selectedAlgo} onChange={(e) => setSelectedAlgo(e.target.value)} style={{ border: '1px solid var(--primary-color)', fontWeight: '600', padding: '4px 12px' }}>
-          {availableAlgos.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
+        <div style={{ height: '400px' }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="k" label={{ value: 'Top X Pathways (Real)', position: 'insideBottom', offset: -10 }} />
+              <YAxis domain={[0, 1]} label={{ value: 'Sig. Ratio (Syn p < 0.05)', angle: -90, position: 'insideLeft' }} />
+              <Tooltip formatter={(val: number, name: string) => [val.toFixed(2), name]} />
+              <Legend verticalAlign="top" />
+              {availableAlgos.map((algo, i) => (
+                <Line 
+                  key={algo} 
+                  type="monotone" 
+                  dataKey={algo} 
+                  stroke={algo === 'Baseline' ? '#64748b' : (algo === 'GANomics' ? 'var(--primary-color)' : colors[i % colors.length])} 
+                  strokeWidth={algo === 'GANomics' ? 3 : (algo === 'Baseline' ? 2 : 1.5)} 
+                  strokeDasharray={algo === 'Baseline' ? "5 5" : "0"}
+                  dot={{ r: algo === 'GANomics' ? 4 : 2 }} 
+                  activeDot={{ r: 8 }} 
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
-      {/* 4. Statistical Validation */}
-      {currentStats.length > 0 && (
-        <div className="card" style={{ padding: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <div>
-              <h3 style={{ margin: 0 }}>Statistical Validation: {selectedAlgo}</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Rigorous comparison against random expectations.</p>
-            </div>
-            <div style={{ padding: '0.75rem 1.25rem', borderRadius: '8px', background: 'var(--primary-light)', border: '1px solid var(--primary-color)' }}>
-              <div style={{ fontSize: '0.7rem', color: 'var(--primary-color)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rank Concordance</div>
-              <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>Spearman ρ = {currentStats[0].Spearman_Rho?.toFixed(3)}</div>
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-              <thead>
-                <tr style={{ textAlign: 'left', borderBottom: '2px solid #eee' }}>
-                  <th style={{ padding: '0.75rem 1rem' }}>Top-K Pathways</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Observed Jaccard</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Random Expectation</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Significance (p-value)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentStats.map((s: any, i: number) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '0.75rem 1rem', fontWeight: '600' }}>Top {s.K}</td>
-                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center', color: 'var(--primary-color)', fontWeight: 'bold' }}>{s.Observed_Jaccard?.toFixed(3)}</td>
-                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{s.Expected_Jaccard?.toFixed(3)}</td>
-                    <td style={{ padding: '0.75rem 1rem', textAlign: 'right', color: s.P_Value < 0.05 ? '#16a34a' : 'inherit', fontWeight: '600' }}>
-                      {s.P_Value < 0.001 ? '< 0.001' : s.P_Value.toFixed(3)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* 5. ORA Table */}
+      {/* 3. ORA Results Table (with selector) */}
       <section className="card" style={{ padding: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Functional Annotation (ORA): {selectedAlgo}</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>Ranked by Real P-value.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <h3 style={{ margin: 0 }}>Functional Annotation (ORA)</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Algorithm:</span>
+              <select className="chip" value={selectedAlgo} onChange={(e) => setSelectedAlgo(e.target.value)} style={{ border: '1px solid #ddd', fontSize: '0.75rem' }}>
+                {availableAlgos.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <button className={`chip ${!showAll ? 'selected' : ''}`} onClick={() => setShowAll(false)} style={{ fontSize: '0.7rem' }}>
@@ -249,26 +183,100 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
         </div>
       </section>
 
-      {/* 6. Preservation Ratio: ONLY GANomics (at bottom) */}
-      <div className="card" style={{ padding: '2rem' }}>
-        <div style={{ marginBottom: '2rem' }}>
-          <h3>GANomics Significance Preservation Ratio</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Fraction of Top X pathways (ranked by Real P-value) that are also significant (p &lt; 0.05) in GANomics data.
-          </p>
-        </div>
-        <div style={{ height: '350px' }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="k" label={{ value: 'Top X Pathways (Real)', position: 'insideBottom', offset: -10 }} />
-              <YAxis domain={[0, 1]} label={{ value: 'Sig. Ratio (Syn p < 0.05)', angle: -90, position: 'insideLeft' }} />
-              <Tooltip formatter={(val: number) => [val.toFixed(2), 'GANomics Ratio']} />
-              <Line type="monotone" dataKey="GANomics" stroke="var(--primary-color)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+      <div style={{ borderTop: '2px dashed #e2e8f0', margin: '2rem 0' }} />
+      <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+        <h2 style={{ fontSize: '1.25rem', color: 'var(--primary-color)' }}>GANomics In-depth Validation</h2>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Detailed statistical preservation metrics for the GANomics model.</p>
       </div>
+
+      {/* 4. Statistical Validation (GANomics Only) */}
+      {ganomicsStats.length > 0 && (
+        <div className="card" style={{ padding: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Statistical Rigor (GANomics)</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Concordance against random expectation (Monte Carlo B=2000).</p>
+            </div>
+            <div style={{ padding: '0.75rem 1.25rem', borderRadius: '8px', background: 'var(--primary-light)', border: '1px solid var(--primary-color)' }}>
+              <div style={{ fontSize: '0.7rem', color: 'var(--primary-color)', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rank Concordance</div>
+              <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>Spearman ρ = {ganomicsStats[0].Spearman_Rho?.toFixed(3)}</div>
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', borderBottom: '2px solid #eee' }}>
+                  <th style={{ padding: '0.75rem 1rem' }}>Top-K Pathways</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Observed Jaccard</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Random Expectation</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Significance (p-value)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ganomicsStats.map((s: any, i: number) => (
+                  <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '0.75rem 1rem', fontWeight: '600' }}>Top {s.K}</td>
+                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center', color: 'var(--primary-color)', fontWeight: 'bold' }}>{s.Observed_Jaccard?.toFixed(3)}</td>
+                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{s.Expected_Jaccard?.toFixed(3)}</td>
+                    <td style={{ padding: '0.75rem 1rem', textAlign: 'right', color: s.P_Value < 0.05 ? '#16a34a' : 'inherit', fontWeight: '600' }}>
+                      {s.P_Value < 0.001 ? '< 0.001' : s.P_Value.toFixed(3)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Slopegraph (GANomics Only) */}
+      {slopeData.length > 0 && (
+        <div className="card" style={{ padding: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary-color)', marginBottom: '4px' }}>
+                <TrendingUp size={18} />
+                <span style={{ fontSize: '0.7rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Preservation Analysis</span>
+              </div>
+              <h3 style={{ margin: 0 }}>Pathway Significance Comparison (GANomics)</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Preservation of -log10(FDR) between Real and Synthetic data.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {[10, 20, 30].map(k => (
+                <button key={k} className={`chip ${topKPlot === k ? 'selected' : ''}`} onClick={() => setTopKPlot(k)} style={{ fontSize: '0.7rem' }}>
+                  Top {k}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ height: `${slopeData.length * 45 + 100}px`, minHeight: '400px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={slopeData} layout="vertical" margin={{ top: 20, right: 50, left: 200, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} />
+                <XAxis type="number" label={{ value: '-log10(FDR q)', position: 'insideBottom', offset: -10 }} />
+                <YAxis dataKey="pathway" type="category" width={180} fontSize={10} tick={{ fill: 'var(--text-main)' }} />
+                <Tooltip formatter={(value: any, name: string) => [Number(value).toFixed(2), name]} />
+                
+                <Scatter name="Real" dataKey="real_mlog" fill="#64748b" shape="circle" />
+                <Scatter name="GANomics" dataKey="GANomics" fill="var(--primary-color)" shape="circle" />
+
+                <Line 
+                  data={[{ pathway: slopeData[0]?.pathway, threshold: -Math.log10(0.05) }, { pathway: slopeData[slopeData.length-1]?.pathway, threshold: -Math.log10(0.05) }]}
+                  dataKey="threshold" stroke="#ef4444" strokeDasharray="5 5" dot={false} activeDot={false}
+                  label={{ position: 'top', value: 'q < 0.05', fill: '#ef4444', fontSize: 10 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '1rem', fontSize: '0.8rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#64748b' }} /> Real Data</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary-color)' }} /> GANomics</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
