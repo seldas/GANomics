@@ -145,12 +145,12 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
                 {filteredTableData.map((p: any, i: number) => (
                   <tr key={i} style={{ 
                     borderBottom: '1px solid #f3f4f6',
-                    backgroundColor: p.Real_P &lt; 0.05 && p.Syn_P &lt; 0.05 ? '#f0fdf4' : 'transparent'
+                    backgroundColor: p.Real_P < 0.05 && p.Syn_P < 0.05 ? '#f0fdf4' : 'transparent'
                   }}>
                     <td style={{ padding: '0.6rem 1rem', fontWeight: '500' }}>{p.set}</td>
                     <td style={{ padding: '0.6rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{p.Genes || '-'}</td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right', fontWeight: p.Real_P &lt; 0.05 ? '600' : 'normal' }}>{p.Real_P?.toExponential(2)}</td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: p.Syn_P &lt; 0.05 ? '#16a34a' : 'inherit' }}>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>{p.Real_P?.toExponential(2)}</td>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: p.Syn_P < 0.05 ? '#16a34a' : 'inherit' }}>
                       {p.Syn_P ? p.Syn_P.toExponential(2) : 'N/A'}
                     </td>
                   </tr>
