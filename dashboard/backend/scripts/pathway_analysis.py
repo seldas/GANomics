@@ -53,13 +53,23 @@ def main():
     gene_map = None
     if os.path.exists(mapping_path):
         df_map = pd.read_csv(mapping_path, sep='\t')
-        gene_map = dict(zip(df_map['Agilent_Probe_Name'], df_map['GeneSymbol']))
+        # Ensure we drop any rows without a symbol and convert to string dict
+        df_map = df_map.dropna(subset=['Agilent_Probe_Name', 'GeneSymbol'])
+        gene_map = dict(zip(df_map['Agilent_Probe_Name'].astype(str), df_map['GeneSymbol'].astype(str)))
+        print(f"Loaded {len(gene_map)} gene mappings from {mapping_path}")
+    else:
+        print(f"Warning: No gene mapping found at {mapping_path}. Proceeding with original IDs.")
     
     def apply_mapping(deg_df, mapping):
         if mapping is None: return deg_df
         df = deg_df.copy()
+        # Convert index to string to match mapping keys
+        df.index = df.index.astype(str)
+        # Apply mapping and remove any probes that didn't get a valid symbol
         df.index = [mapping.get(x, x) for x in df.index]
+        # Common Agilent prefixes to filter out if not mapped: UKv4, A_
         df = df[~df.index.astype(str).str.startswith('UKv4_')]
+        df = df[~df.index.astype(str).str.startswith('A_')]
         return df
 
     # Libraries

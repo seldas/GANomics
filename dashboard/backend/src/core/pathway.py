@@ -73,22 +73,27 @@ def ora_enrichment(deg_df, gene_sets, threshold=0.05, min_size=15, max_size=500)
     Perform Over-Representation Analysis (ORA) using Fisher's Exact Test via gseapy.
     This mimics the DAVID functional annotation process.
     """
-    # Identify DEGs using raw p-value instead of FDR for more sensitivity in functional mapping
-    degs = deg_df[deg_df['p_value'] < threshold].index.astype(str).unique().tolist()
-    background = deg_df.index.astype(str).unique().tolist()
-    
+    # Identify DEGs using raw p-value instead of FDR for more sensitivity
+    # Ensure symbols are string and uppercase
+    df = deg_df.copy()
+    df.index = df.index.astype(str).str.upper()
+
+    degs = df[df['p_value'] < threshold].index.unique().tolist()
+    background = df.index.unique().tolist()
+
     if len(degs) < 5:
-        # Not enough DEGs to run meaningful ORA
         return pd.DataFrame(columns=['set', 'p_value', 'fdr', 'overlap', 'rank', 'genes'])
-        
+
     try:
         # Pre-filter gene sets to remove generic/large ones and tiny ones
         filtered_sets = {}
         bg_set = set(background)
         for name, genes in gene_sets.items():
-            intersect_size = len(set(genes) & bg_set)
+            # Match gene set symbols to background (both uppercase)
+            genes_upper = [str(g).upper() for g in genes]
+            intersect_size = len(set(genes_upper) & bg_set)
             if min_size <= intersect_size <= max_size:
-                filtered_sets[name] = genes
+                filtered_sets[name] = genes_upper
 
         if not filtered_sets:
             return pd.DataFrame(columns=['set', 'p_value', 'fdr', 'overlap', 'rank', 'genes'])
@@ -98,6 +103,7 @@ def ora_enrichment(deg_df, gene_sets, threshold=0.05, min_size=15, max_size=500)
                             background=background,
                             outdir=None,
                             no_plot=True)
+
         
         res = enr.results
         if res.empty:

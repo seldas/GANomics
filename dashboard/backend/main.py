@@ -282,12 +282,26 @@ async def get_results_status():
     logs = [l.replace("_log.txt", "") for l in os.listdir(LOGS_DIR) if l.endswith("_log.txt")]
     run_statuses = {}
     now = time.time()
+    
+    algos = ['GANomics', 'COMBAT', 'YUGENE', 'CUBLOCK', 'TDM', 'QN']
+
     for run_id in logs:
         project_id = run_id.split('_')[0]
         sync_path = os.path.join(SYNC_DATA_DIR, run_id, "test", "microarray_fake.csv")
         log_path = os.path.join(LOGS_DIR, f"{run_id}_log.txt")
         checkpoint_latest = os.path.join(CHECKPOINTS_DIR, run_id, "net_latest.pth")
         is_running = os.path.exists(log_path) and (now - os.path.getmtime(log_path) < 60)
+
+        # Helper to check algorithm-specific files
+        def get_algo_status(folder, pattern, run_id_sub=None):
+            status_map = {}
+            base_dir = os.path.join(BIOMARKERS_DIR, folder, run_id if not run_id_sub else run_id_sub)
+            if not os.path.exists(base_dir): return {a: False for a in algos}
+            for a in algos:
+                # Check for various naming patterns (e.g. Jaccard_Curve_GANomics.csv or Pathway_Details_GANomics_KEGG...)
+                exists = any(f.lower().startswith(pattern.lower()) and a.lower() in f.lower() for f in os.listdir(base_dir))
+                status_map[a] = exists
+            return status_map
 
         ext_ids, ext_statuses = [], {}
         proj_ds_root = os.path.join(DATASET_DIR, project_id)
@@ -299,13 +313,33 @@ async def get_results_status():
                 try:
                     with open(os.path.join(proj_ds_root, eid, "metadata.json"), 'r') as f: meta = json.load(f)
                 except: pass
+                
+                # For external, comparative is in e_sync_dir
+                comp_exists = os.path.exists(os.path.join(e_sync_dir, "Test_performance.csv"))
+                
                 ext_statuses[eid] = {
-                    "metadata": meta, "sync": os.path.exists(os.path.join(e_sync_dir, "microarray_fake.csv")) or os.path.exists(os.path.join(e_sync_dir, "translated_ag.tsv")),
-                    "comparative": os.path.exists(os.path.join(e_sync_dir, "Test_performance.csv")),
+                    "metadata": meta, 
+                    "sync": os.path.exists(os.path.join(e_sync_dir, "microarray_fake.csv")) or os.path.exists(os.path.join(e_sync_dir, "translated_ag.tsv")),
+                    "comparative": comp_exists,
                     "deg": os.path.exists(os.path.join(e_sync_dir, "DEG", "Jaccard_Curve_GANomics.csv")),
-                    "pathway": os.path.exists(os.path.join(e_sync_dir, "Pathway", "Pathway_Concordance_GANomics.csv")),
+                    "pathway": any(f.startswith("Pathway_Concordance_") for f in os.listdir(os.path.join(e_sync_dir, "Pathway"))) if os.path.exists(os.path.join(e_sync_dir, "Pathway")) else False,
                     "pred_model": os.path.exists(os.path.join(e_sync_dir, "Prediction", "Classifier_Performance_GANomics.csv")),
                 }
+
+        # Determine Global Step Status (Main branch)
+        deg_algo_status = get_algo_status("DEG", "Jaccard_Curve_")
+        pathway_algo_status = get_algo_status("Pathway", "Pathway_Concordance_")
+        pred_algo_status = get_algo_status("Prediction", "Classifier_Performance_")
+        
+        # Comparative is special (one file contains all algos usually, but we check if file exists)
+        comp_path = os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")
+        comp_exists = os.path.exists(comp_path)
+        comp_algo_status = {a: False for a in algos}
+        if comp_exists:
+            try:
+                comp_df = pd.read_csv(comp_path)
+                for a in algos: comp_algo_status[a] = a.upper() in comp_df['Algorithm'].str.upper().values.tolist()
+            except: pass
 
         internal_meta = {"description": "Standard Internal Test Set", "note": "Original Test Set from Unseen data points", "samples": 0, "genes": 0}
         if os.path.exists(sync_path):
@@ -317,10 +351,16 @@ async def get_results_status():
         run_statuses[run_id] = {
             "training": "running" if is_running else ("completed" if os.path.exists(checkpoint_latest) else "idle"),
             "sync": os.path.exists(sync_path), 
-            "comparative": os.path.exists(os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")),
-            "deg": os.path.exists(os.path.join(BIOMARKERS_DIR, "DEG", run_id, "Jaccard_Curve_GANomics.csv")),
-            "pathway": os.path.exists(os.path.join(BIOMARKERS_DIR, "Pathway", run_id, "Pathway_Concordance_GANomics.csv")),
-            "pred_model": os.path.exists(os.path.join(BIOMARKERS_DIR, "Prediction", run_id, "Classifier_Performance_GANomics.csv")),
+            "comparative": comp_exists,
+            "deg": any(deg_algo_status.values()),
+            "pathway": any(pathway_algo_status.values()),
+            "pred_model": any(pred_algo_status.values()),
+            "algo_details": {
+                "comparative": comp_algo_status,
+                "deg": deg_algo_status,
+                "pathway": pathway_algo_status,
+                "pred_model": pred_algo_status
+            },
             "metadata": internal_meta, "ext_ids": ext_ids, "ext_statuses": ext_statuses, "sync_ext": len(ext_ids) > 0,
         }
     return {"checkpoints": os.listdir(CHECKPOINTS_DIR) if os.path.exists(CHECKPOINTS_DIR) else [], "logs": logs, "run_statuses": run_statuses}

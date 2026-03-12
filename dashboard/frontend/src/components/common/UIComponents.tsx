@@ -104,14 +104,33 @@ export const FileUploadBox = ({ label, file, setFile, accept, required }: any) =
   </div>
 );
 
-export const MetaPanel = ({ title, content }: { title: string, content: React.ReactNode }) => (
+export const MetaPanel = ({ title, description, samples, genes, note }: any) => (
   <section className="card" style={{ marginTop: '2rem', padding: '1.5rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: '#475569' }}>
       <Info size={18} />
-      <h4 style={{ margin: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Analysis Methodology: {title}</h4>
+      <h4 style={{ margin: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Test Dataset Details</h4>
     </div>
-    <div style={{ fontSize: '0.85rem', color: '#64748b', lineHeight: '1.6' }}>
-      {content}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+      <div>
+        <div style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Context</div>
+        <div style={{ fontSize: '0.85rem', color: '#475569', fontWeight: '500' }}>{description || 'No description available.'}</div>
+      </div>
+      <div style={{ display: 'flex', gap: '2rem' }}>
+        <div>
+          <div style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Samples</div>
+          <div style={{ fontSize: '1rem', color: 'var(--primary-color)', fontWeight: 'bold' }}>{samples || 0}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Genes</div>
+          <div style={{ fontSize: '1rem', color: 'var(--primary-color)', fontWeight: 'bold' }}>{genes || 0}</div>
+        </div>
+      </div>
+      {note && (
+        <div>
+          <div style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Note</div>
+          <div style={{ fontSize: '0.8rem', color: '#64748b', fontStyle: 'italic' }}>{note}</div>
+        </div>
+      )}
     </div>
   </section>
 );

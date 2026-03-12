@@ -151,12 +151,46 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
   if (taskView === 'prediction') return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}><button className="chip" onClick={() => onSetTaskView('overview')}><ArrowLeft size={18} /></button><h2 style={{ margin: 0 }}>Prediction Modeling</h2></div><PredictionAnalysis data={runPredictionData} /></div>;
 
   const WorkflowArrow = () => <div style={{ display: 'flex', alignItems: 'center', color: '#cbd5e1' }}><ChevronRight size={20} /></div>;
-  const WorkflowStep = ({ title, num, statusLabel, stepStatus, children }: any) => (
-    <section className="card" style={{ flex: 1, textAlign: 'center', padding: '1rem 0.5rem' }}>
+  const WorkflowStep = ({ title, num, statusLabel, stepStatus, children, algoStatus }: any) => (
+    <section className="card" style={{ flex: 1, textAlign: 'center', padding: '1rem 0.5rem', display: 'flex', flexDirection: 'column' }}>
       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#eee', margin: '0 auto 0.5rem auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 'bold' }}>{num}</div>
       <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '0.5rem', whiteSpace: 'nowrap' }}>{title}</div>
       <StatusButton label={statusLabel} status={stepStatus} />
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', justifyContent: 'center', marginTop: '1rem' }}>{children}</div>
+      
+      {algoStatus && (
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '4px', 
+          marginTop: '0.75rem', 
+          padding: '8px', 
+          background: '#f8fafc', 
+          borderRadius: '8px',
+          border: '1px solid #f1f5f9',
+          textAlign: 'left'
+        }}>
+          {Object.entries(algoStatus).map(([algo, exists]: any) => (
+            <div key={algo} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              fontSize: '0.65rem', 
+              color: exists ? 'var(--text-main)' : '#94a3b8' 
+            }}>
+              <div style={{ 
+                width: '6px', 
+                height: '6px', 
+                borderRadius: '50%', 
+                background: exists ? '#22c55e' : '#cbd5e1',
+                boxShadow: exists ? '0 0 4px rgba(34, 197, 94, 0.4)' : 'none'
+              }} />
+              <span style={{ fontWeight: exists ? '600' : 'normal' }}>{algo}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', justifyContent: 'center', marginTop: 'auto', paddingTop: '1rem' }}>{children}</div>
     </section>
   );
 
@@ -195,7 +229,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="Comp." num="3" statusLabel={status?.comparative ? 'Done' : 'Pending'} stepStatus={status?.comparative}>
+        <WorkflowStep title="Comp." num="3" statusLabel={status?.comparative ? 'Done' : 'Pending'} stepStatus={status?.comparative} algoStatus={status?.algo_details?.comparative}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.comparative} onClick={() => fetchComparativeMetrics(selectedRunId)}>Results</button>
           {!status?.comparative ? (
             <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => handleRunStepWithParams(3)}>Run</button>
@@ -204,7 +238,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="DEG" num="4" statusLabel={status?.deg ? 'Done' : 'Pending'} stepStatus={status?.deg}>
+        <WorkflowStep title="DEG" num="4" statusLabel={status?.deg ? 'Done' : 'Pending'} stepStatus={status?.deg} algoStatus={status?.algo_details?.deg}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.deg} onClick={() => fetchDegMetrics(selectedRunId)}>Results</button>
           {!status?.deg ? (
             <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(4)}>Run</button>
@@ -213,7 +247,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="Path" num="5" statusLabel={status?.pathway ? 'Done' : 'Pending'} stepStatus={status?.pathway}>
+        <WorkflowStep title="Path" num="5" statusLabel={status?.pathway ? 'Done' : 'Pending'} stepStatus={status?.pathway} algoStatus={status?.algo_details?.pathway}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.pathway} onClick={() => fetchPathwayMetrics(selectedRunId)}>Results</button>
           {!status?.pathway ? (
             <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => handleRunStepWithParams(5)}>Run</button>
@@ -222,7 +256,7 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
           )}
         </WorkflowStep>
         <WorkflowArrow />
-        <WorkflowStep title="Pred" num="6" statusLabel={status?.pred_model ? 'Done' : 'Pending'} stepStatus={status?.pred_model}>
+        <WorkflowStep title="Pred" num="6" statusLabel={status?.pred_model ? 'Done' : 'Pending'} stepStatus={status?.pred_model} algoStatus={status?.algo_details?.pred_model}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.pred_model} onClick={() => fetchPredictionMetrics(selectedRunId)}>Results</button>
           {!status?.pred_model ? (
             <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(6)}>Run</button>
