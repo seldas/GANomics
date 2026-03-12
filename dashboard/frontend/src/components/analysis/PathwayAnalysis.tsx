@@ -38,37 +38,45 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
   const currentDetails = useMemo(() => libData?.details?.[selectedAlgo] || [], [libData, selectedAlgo]);
   const currentStats = useMemo(() => libData?.stats?.[selectedAlgo] || [], [libData, selectedAlgo]);
 
-  // 2. Prepare Slopegraph Data (-log10 FDR comparison)
+  // 2. Prepare Slopegraph Data (-log10 FDR comparison) for ALL algorithms
   const slopeData = useMemo(() => {
-    if (!currentDetails.length) return [];
+    if (!libData?.details) return [];
     
-    // Extract p-values for FDR calculation
-    const pReal = currentDetails.map((d: any) => d.Real_P);
-    const pSyn = currentDetails.map((d: any) => d.Syn_P || 1.0);
-    
-    const fdrReal = computeFDR(pReal);
-    const fdrSyn = computeFDR(pSyn);
-    
-    const mlog10 = (v: number) => -Math.log10(Math.max(v, 1e-20));
+    // We use GANomics as the reference for which Top-K pathways to show
+    const refAlgo = 'GANomics';
+    const refDetails = libData.details[refAlgo] || libData.details['Baseline'] || [];
+    if (!refDetails.length) return [];
 
-    return currentDetails.map((d: any, i: number) => ({
-      pathway: d.set,
-      real_mlog: mlog10(fdrReal[i]),
-      syn_mlog: mlog10(fdrSyn[i]),
-      fdr_real: fdrReal[i],
-      fdr_syn: fdrSyn[i],
-      diff: Math.abs(mlog10(fdrReal[i]) - mlog10(fdrSyn[i]))
-    }))
-    .sort((a, b) => b.real_mlog - a.real_mlog) // Sort by most significant in Real
-    .slice(0, topKPlot)
-    .reverse(); // Reverse for horizontal layout (top at top)
-  }, [currentDetails, topKPlot]);
+    // Extract pathway names from top-K of reference
+    const topPathways = refDetails.slice(0, topKPlot).map((d: any) => d.set);
+
+    // Build data structure: { pathway: string, GANomics: mlog, Baseline: mlog, ... }
+    return topPathways.map(pathName => {
+      const entry: any = { pathway: pathName };
+      
+      availableAlgos.forEach(algo => {
+        const details = libData.details[algo] || [];
+        const pValues = details.map((d: any) => d.Real_P);
+        const fdrValues = computeFDR(pValues);
+        const pathwayIdx = details.findIndex((d: any) => d.set === pathName);
+        
+        if (pathwayIdx !== -1) {
+          const q = fdrValues[pathwayIdx];
+          entry[algo] = -Math.log10(Math.max(q, 1e-20));
+          // Store real mlog only once (it should be the same across algos, but we'll use Baseline/GANomics real)
+          if (algo === refAlgo) {
+            entry.real_mlog = -Math.log10(Math.max(details[pathwayIdx].Real_P, 1e-20)); // Approximate for visual anchor
+          }
+        }
+      });
+      return entry;
+    }).reverse();
+  }, [libData, availableAlgos, topKPlot]);
 
   // 3. Calculate Significance Ratio Curve for ALL algorithms
   const chartData = useMemo(() => {
     if (!libData?.details) return [];
     
-    // Thresholds: Top 5, 10, 15... 100
     const results: any[] = [];
     const maxK = 100;
     
@@ -95,22 +103,34 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
   if (libraries.length === 0) return <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>No pathway results available.</div>;
   if (!libData?.details) return <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>Loading pathway details...</div>;
 
-  const colors = ['var(--primary-color)', '#16a34a', '#818cf8', '#ea580c', '#db2777', '#7c3aed'];
+  const colors = ['var(--primary-color)', '#16a34a', '#818cf8', '#ea580c', '#db2777', '#7c3aed', '#0891b2', '#4ade80'];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* 1. Slopegraph: Significance Comparison */}
+      {/* Library Selection Header */}
+      <div className="card" style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0 }}>Pathway Library: <span style={{ color: 'var(--primary-color)' }}>{currentLib.replace(/_/g, ' ')}</span></h3>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {libraries.map(lib => (
+            <button key={lib} className={`chip ${currentLib === lib ? 'selected' : ''}`} onClick={() => setSelectedLibrary(lib)}>
+              {lib.replace(/_/g, ' ')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 1. Slopegraph: Significance Comparison (ALL ALGORITHMS) */}
       {slopeData.length > 0 && (
         <div className="card" style={{ padding: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary-color)', marginBottom: '4px' }}>
                 <TrendingUp size={18} />
-                <span style={{ fontSize: '0.7rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Preservation Analysis</span>
+                <span style={{ fontSize: '0.7rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Unified Comparison</span>
               </div>
-              <h3 style={{ margin: 0 }}>Pathway Significance Comparison</h3>
+              <h3 style={{ margin: 0 }}>Cross-Algorithm Significance Preservation</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Comparing -log10(FDR) between Real and Synthetic data for Top {topKPlot} pathways.
+                Preservation of -log10(FDR) across all methods for Top {topKPlot} pathways.
               </p>
             </div>
             <div style={{ display: 'flex', gap: '4px' }}>
@@ -122,30 +142,29 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
             </div>
           </div>
 
-          <div style={{ height: `${slopeData.length * 40 + 100}px`, minHeight: '400px' }}>
+          <div style={{ height: `${slopeData.length * 45 + 120}px`, minHeight: '500px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={slopeData} layout="vertical" margin={{ top: 20, right: 50, left: 200, bottom: 20 }}>
+              <ComposedChart data={slopeData} layout="vertical" margin={{ top: 20, right: 120, left: 200, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} />
                 <XAxis type="number" label={{ value: '-log10(FDR q)', position: 'insideBottom', offset: -10 }} />
-                <YAxis dataKey="pathway" type="category" width={180} fontSize={11} tick={{ fill: 'var(--text-main)' }} />
+                <YAxis dataKey="pathway" type="category" width={180} fontSize={10} tick={{ fill: 'var(--text-main)' }} />
                 <Tooltip 
-                  formatter={(value: any, name: string) => [Number(value).toFixed(2), name === 'real_mlog' ? 'Real (-log10 FDR)' : 'Syn (-log10 FDR)']}
+                  formatter={(value: any, name: string) => [Number(value).toFixed(2), name]}
                 />
+                <Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '20px' }} />
                 
-                {/* Connecting Lines */}
-                <Scatter data={slopeData} isAnimationActive={false}>
-                  {slopeData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill="none" />
-                  ))}
-                </Scatter>
+                {/* Dots for Real Anchor */}
+                <Scatter name="Real Reference" dataKey="real_mlog" fill="#cbd5e1" shape="diamond" />
 
-                {/* Draw custom lines between dots */}
-                <Line dataKey="real_mlog" stroke="transparent" dot={false} activeDot={false} />
-                
-                {/* Dots for Real */}
-                <Scatter name="Real" dataKey="real_mlog" fill="#64748b" shape="circle" />
-                {/* Dots for Synthetic */}
-                <Scatter name="Synthetic" dataKey="syn_mlog" fill="var(--primary-color)" shape="circle" />
+                {/* Lines and Dots for each Algorithm */}
+                {availableAlgos.map((algo, i) => (
+                  <Scatter 
+                    key={algo} 
+                    name={algo} 
+                    dataKey={algo} 
+                    fill={algo === 'Baseline' ? '#64748b' : (algo === 'GANomics' ? 'var(--primary-color)' : colors[i % colors.length])} 
+                  />
+                ))}
 
                 {/* FDR 0.05 Threshold Line */}
                 <Line 
@@ -160,33 +179,16 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '1rem', fontSize: '0.8rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#64748b' }} /> Real Data
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary-color)' }} /> Synthetic ({selectedAlgo})
-            </div>
-          </div>
         </div>
       )}
 
-      {/* 2. Figure Panel: Significance Ratio */}
+      {/* 2. Figure Panel: Significance Ratio (ALL ALGORITHMS) */}
       <div className="card" style={{ padding: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-          <div>
-            <h3>Significance Preservation Ratio</h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Fraction of Top X pathways (ranked by Real P-value) that are also significant (p &lt; 0.05) in Synthetic data.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {libraries.map(lib => (
-              <button key={lib} className={`chip ${currentLib === lib ? 'selected' : ''}`} style={{ fontSize: '0.7rem' }} onClick={() => setSelectedLibrary(lib)}>
-                {lib.replace(/_/g, ' ')}
-              </button>
-            ))}
-          </div>
+        <div style={{ marginBottom: '2rem' }}>
+          <h3>Significance Preservation Ratio</h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            Fraction of Top X pathways (ranked by Real P-value) that are also significant (p &lt; 0.05) in Synthetic data.
+          </p>
         </div>
 
         <div style={{ height: '400px' }}>
@@ -202,7 +204,7 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
                   key={algo} 
                   type="monotone" 
                   dataKey={algo} 
-                  stroke={algo === 'Baseline' ? '#64748b' : colors[i % colors.length]} 
+                  stroke={algo === 'Baseline' ? '#64748b' : (algo === 'GANomics' ? 'var(--primary-color)' : colors[i % colors.length])} 
                   strokeWidth={algo === 'GANomics' ? 3 : (algo === 'Baseline' ? 2 : 1.5)} 
                   strokeDasharray={algo === 'Baseline' ? "5 5" : "0"}
                   dot={{ r: algo === 'GANomics' ? 4 : 2 }} 
@@ -214,14 +216,29 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
         </div>
       </div>
 
+      <div style={{ borderTop: '1px solid #e2e8f0', margin: '1rem 0' }} />
+
+      {/* Algorithm Specific Section */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#f8fafc', padding: '1rem 2rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+        <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Detailed analysis for:</div>
+        <select 
+          className="chip" 
+          value={selectedAlgo} 
+          onChange={(e) => setSelectedAlgo(e.target.value)} 
+          style={{ border: '1px solid var(--primary-color)', fontWeight: '600', padding: '4px 12px' }}
+        >
+          {availableAlgos.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </div>
+
       {/* Statistical Validation Panel */}
       {currentStats.length > 0 && (
         <div className="card" style={{ padding: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
             <div>
-              <h3 style={{ margin: 0 }}>Statistical Validation</h3>
+              <h3 style={{ margin: 0 }}>Statistical Validation: {selectedAlgo}</h3>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Rigorous comparison of {selectedAlgo} against random expectations.
+                Rigorous comparison against random expectations.
               </p>
             </div>
             <div style={{ padding: '0.75rem 1.25rem', borderRadius: '8px', background: 'var(--primary-light)', border: '1px solid var(--primary-color)' }}>
@@ -231,6 +248,7 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
               </div>
             </div>
           </div>
+          {/* ... table content remains same ... */}
 
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
