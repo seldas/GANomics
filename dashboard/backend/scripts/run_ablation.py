@@ -45,12 +45,16 @@ def run_trial(args_tuple):
     # Run the process and capture output line by line
     process = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     
+    full_output = []
+    error_captured = False
+    
     for line in process.stdout:
         line = line.strip()
+        full_output.append(line)
         if line.startswith("[PROGRESS]"):
             progress_dict[run_name] = f"Epoch: {line.replace('[PROGRESS] ', '')}"
-        elif "Traceback" in line or "Error" in line:
-            progress_dict[run_name] = "Error"
+        elif "Traceback" in line or "Error" in line or "Exception" in line:
+            error_captured = True
 
     process.wait()
     
@@ -59,8 +63,9 @@ def run_trial(args_tuple):
         update_ongoing_tasks(run_name, 'remove')
         progress_dict[run_name] = "Completed"
     else:
-        if progress_dict[run_name] != "Error":
-            progress_dict[run_name] = "Failed"
+        # Capture the last few lines of output as the error context if generic error string used
+        error_context = "\n".join(full_output[-10:])
+        progress_dict[run_name] = f"Error: {error_context}" if error_captured or process.returncode != 0 else "Failed"
 
 def run_ablation():
     parser = argparse.ArgumentParser(description="Run GANomics Ablation & Sensitivity Study")
