@@ -20,6 +20,9 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [windowSize, setWindowSize] = useState(20);
   const [windowStart, setWindowStart] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragStartWindow, setDragStartWindow] = useState(0);
   const pageSize = 20;
 
   const fullChartData = useMemo(() => {
@@ -35,14 +38,56 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
   }, [logData]);
 
   const chartData = useMemo(() => {
-    return fullChartData.slice(windowStart, windowStart + windowSize);
+    const rawData = fullChartData.slice(windowStart, windowStart + windowSize);
+    if (rawData.length <= 50) return rawData;
+    
+    // Downsample: pick 50 points evenly spaced
+    const step = rawData.length / 50;
+    const downsampled = [];
+    for (let i = 0; i < 50; i++) {
+      const idx = Math.min(Math.floor(i * step), rawData.length - 1);
+      downsampled.push(rawData[idx]);
+    }
+    // Always include the very last point of the window for finality
+    if (downsampled[downsampled.length - 1] !== rawData[rawData.length - 1]) {
+      downsampled[downsampled.length - 1] = rawData[rawData.length - 1];
+    }
+    return downsampled;
   }, [fullChartData, windowStart, windowSize]);
 
   if (!logData) return null;
 
+  const totalEpochs = logData.structured.length;
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStartX(e.clientX);
+    setDragStartWindow(windowStart);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    
+    const deltaX = e.clientX - dragStartX;
+    // Sensitivity: how many pixels moved = 1 epoch shift
+    // We'll estimate based on a standard chart width (~800px)
+    const sensitivity = 800 / windowSize; 
+    const shift = Math.round(deltaX / (sensitivity / 2)); // Adjust divisor for "feel"
+    
+    let newStart = dragStartWindow - shift;
+    newStart = Math.max(0, Math.min(newStart, totalEpochs - windowSize));
+    
+    if (newStart !== windowStart) {
+      setWindowStart(newStart);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
   const first = logData.structured[0] || {};
   const last = logData.structured[logData.structured.length - 1] || {};
-  const totalEpochs = logData.structured.length;
 
   const getLossValue = (row: any, key: string) => {
     if (['G_A', 'G_B', 'D_A', 'D_B'].includes(key)) return row[key];
@@ -130,7 +175,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
           {logMode === 'chart' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>RANGE:</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>DISPLAY WINDOW:</span>
                 <input 
                   type="number" 
                   value={windowSize} 
@@ -141,28 +186,34 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
                   }}
                   style={{ width: '60px', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}
                 />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Epochs</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '200px' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>PAN:</span>
-                <input 
-                  type="range" 
-                  min={0} 
-                  max={Math.max(0, totalEpochs - windowSize)} 
-                  value={windowStart} 
-                  onChange={(e) => setWindowStart(parseInt(e.target.value))}
-                  style={{ flex: 1, cursor: 'pointer' }}
-                />
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', minWidth: '60px', textAlign: 'right' }}>
-                  E{fullChartData[windowStart]?.name?.substring(1) || 0} - E{fullChartData[Math.min(windowStart + windowSize - 1, totalEpochs - 1)]?.name?.substring(1) || 0}
-                </span>
+              <div style={{ fontSize: '0.75rem', background: '#f1f5f9', padding: '4px 12px', borderRadius: '6px', color: 'var(--text-muted)', fontWeight: '500' }}>
+                Showing: E{fullChartData[windowStart]?.name?.substring(1) || 0} - E{fullChartData[Math.min(windowStart + windowSize - 1, totalEpochs - 1)]?.name?.substring(1) || 0}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--primary-color)', fontWeight: 'bold' }}>
+                (Drag Figure to Pan)
               </div>
             </div>
           )}
         </div>
 
-        <div style={{ borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: '#fff', overflow: 'hidden' }}>
+        <div 
+          style={{ 
+            borderRadius: '12px', 
+            border: '1px solid var(--border-color)', 
+            backgroundColor: '#fff', 
+            overflow: 'hidden',
+            cursor: logMode === 'chart' ? (isDragging ? 'grabbing' : 'grab') : 'default',
+            userSelect: 'none'
+          }}
+          onMouseDown={logMode === 'chart' ? handleMouseDown : undefined}
+          onMouseMove={logMode === 'chart' ? handleMouseMove : undefined}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
           {logMode === 'chart' ? (
-            <div style={{ width: '100%', height: '400px', padding: '1.5rem' }}>
+            <div style={{ width: '100%', height: '400px', padding: '1.5rem', pointerEvents: 'none' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -171,7 +222,7 @@ export const LogViewer: React.FC<LogViewerProps> = ({ logData, runId }) => {
                   <Tooltip />
                   <Legend iconSize={10} wrapperStyle={{fontSize: '10px'}} />
                   {LOSS_METRICS.map(m => visibleMetrics.includes(m.key) && (
-                    <Line key={m.key} type="monotone" dataKey={m.key} stroke={m.color} dot={{ r: 2 }} strokeWidth={1.5} animationDuration={300} />
+                    <Line key={m.key} type="monotone" dataKey={m.key} stroke={m.color} dot={{ r: 2 }} strokeWidth={1.5} animationDuration={0} isAnimationActive={false} />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
