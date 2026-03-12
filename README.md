@@ -102,14 +102,11 @@ Follow these steps to reproduce the Neuroblastoma benchmark study using the dash
 - **Click:** The **"Sync"** button under Step 2 (Sync Data).
 - **Expectation:** The backend generates synthetic Microarray/RNA-seq matrices. When finished, a **"Details"** button appears, allowing you to view t-SNE plots comparing Real vs. Synthetic distributions.
 
-### 4. Comparative & Biomarker Analysis
-- **Action:** Click the **"Start"** button under Step 3 (Comparative) and then Step 4 (Bio-markers).
-- **Expectation:** 
-    - **Comparative:** Displays Pearson correlation and RMSE benchmarks against TDM/QN.
-    - **Bio-markers:** Navigate to the **"Results"** button in Step 4 to view:
-        - **DEG Tab:** Jaccard curves showing gene overlap between platforms.
-        - **Pathway Tab:** Concordance metrics across KEGG/Reactome libraries.
-        - **Prediction Tab:** Accuracy of classifiers trained on synthetic data and tested on real samples.
+### 4. Downstream Analytics (Steps 3-6)
+- **Step 3 (Comparative):** Benchmark against legacy methods (TDM, QN). Click **"Run"**, then **"Results"** to see Pearson/RMSE metrics.
+- **Step 4 (DEG):** Click **"Run"** to compute Jaccard overlap curves.
+- **Step 5 (Pathway):** Configure libraries in **"Parameters"**, then click **"Run"** to get ORA p-values and Rank Concordance.
+- **Step 6 (Prediction):** Click **"Run"** to evaluate the four cross-platform modeling scenarios (Real→Real, Real→Syn, etc.).
 
 ---
 

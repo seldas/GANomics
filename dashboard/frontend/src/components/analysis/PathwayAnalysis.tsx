@@ -94,22 +94,28 @@ export const PathwayAnalysis: React.FC<PathwayAnalysisProps> = ({ data }) => {
               <thead style={{ position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
                 <tr style={{ textAlign: 'left', borderBottom: '2px solid #eee' }}>
                   <th style={{ padding: '0.75rem 1rem' }}>Pathway Name</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Genes</th>
                   <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Real Rank</th>
                   <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>Syn Rank</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Real Score</th>
-                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Syn Score</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>p-val (Real)</th>
+                  <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>p-val (Syn)</th>
                 </tr>
               </thead>
               <tbody>
                 {currentDetails.map((p: any, i: number) => (
                   <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
                     <td style={{ padding: '0.6rem 1rem', fontWeight: '500' }}>{p.set}</td>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>{p.Real_Count || '-'}</td>
                     <td style={{ padding: '0.6rem 1rem', textAlign: 'center' }}>{Math.round(p.Real_Rank)}</td>
                     <td style={{ padding: '0.6rem 1rem', textAlign: 'center', color: Math.abs(p.Real_Rank - p.Syn_Rank) < 10 ? 'var(--success-color)' : 'inherit' }}>
                       {Math.round(p.Syn_Rank)}
                     </td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>{p.Real_Score?.toFixed(4)}</td>
-                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>{p.Syn_Score?.toFixed(4)}</td>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>
+                      {p.Real_P !== undefined && p.Real_P !== null ? p.Real_P.toExponential(2) : '-'}
+                    </td>
+                    <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>
+                      {p.Syn_P !== undefined && p.Syn_P !== null ? p.Syn_P.toExponential(2) : '-'}
+                    </td>
                   </tr>
                 ))}
               </tbody>

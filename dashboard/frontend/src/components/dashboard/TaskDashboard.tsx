@@ -188,27 +188,47 @@ export const TaskDashboard: React.FC<TaskDashboardProps> = ({
         <WorkflowArrow />
         <WorkflowStep title="Sync" num="2" statusLabel={status?.sync ? 'Done' : 'Pending'} stepStatus={status?.sync}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.sync} onClick={() => fetchSyncStatus(selectedRunId)}>Results</button>
-          {!status?.sync && <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(2)}>Run</button>}
+          {!status?.sync ? (
+            <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(2)}>Run</button>
+          ) : (
+            <button className="chip" style={{ fontSize: '0.65rem', padding: '4px' }} title="Re-sync data" onClick={() => onRunStep(2)}><RotateCcw size={12} /></button>
+          )}
         </WorkflowStep>
         <WorkflowArrow />
         <WorkflowStep title="Comp." num="3" statusLabel={status?.comparative ? 'Done' : 'Pending'} stepStatus={status?.comparative}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.comparative} onClick={() => fetchComparativeMetrics(selectedRunId)}>Results</button>
-          {!status?.comparative && <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => handleRunStepWithParams(3)}>Run</button>}
+          {!status?.comparative ? (
+            <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => handleRunStepWithParams(3)}>Run</button>
+          ) : (
+            <button className="chip" style={{ fontSize: '0.65rem', padding: '4px' }} title="Re-run Comparative" onClick={() => handleRunStepWithParams(3)}><RotateCcw size={12} /></button>
+          )}
         </WorkflowStep>
         <WorkflowArrow />
         <WorkflowStep title="DEG" num="4" statusLabel={status?.deg ? 'Done' : 'Pending'} stepStatus={status?.deg}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.deg} onClick={() => fetchDegMetrics(selectedRunId)}>Results</button>
-          {!status?.deg && <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(4)}>Run</button>}
+          {!status?.deg ? (
+            <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(4)}>Run</button>
+          ) : (
+            <button className="chip" style={{ fontSize: '0.65rem', padding: '4px' }} title="Re-run DEG Analysis" onClick={() => onRunStep(4)}><RotateCcw size={12} /></button>
+          )}
         </WorkflowStep>
         <WorkflowArrow />
         <WorkflowStep title="Path" num="5" statusLabel={status?.pathway ? 'Done' : 'Pending'} stepStatus={status?.pathway}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.pathway} onClick={() => fetchPathwayMetrics(selectedRunId)}>Results</button>
-          {!status?.pathway && <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => handleRunStepWithParams(5)}>Run</button>}
+          {!status?.pathway ? (
+            <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => handleRunStepWithParams(5)}>Run</button>
+          ) : (
+            <button className="chip" style={{ fontSize: '0.65rem', padding: '4px' }} title="Re-run Pathway Analysis" onClick={() => handleRunStepWithParams(5)}><RotateCcw size={12} /></button>
+          )}
         </WorkflowStep>
         <WorkflowArrow />
         <WorkflowStep title="Pred" num="6" statusLabel={status?.pred_model ? 'Done' : 'Pending'} stepStatus={status?.pred_model}>
           <button className="chip" style={{ fontSize: '0.65rem' }} disabled={!status?.pred_model} onClick={() => fetchPredictionMetrics(selectedRunId)}>Results</button>
-          {!status?.pred_model && <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(6)}>Run</button>}
+          {!status?.pred_model ? (
+            <button className="chip selected" style={{ fontSize: '0.65rem' }} onClick={() => onRunStep(6)}>Run</button>
+          ) : (
+            <button className="chip" style={{ fontSize: '0.65rem', padding: '4px' }} title="Re-run Prediction" onClick={() => onRunStep(6)}><RotateCcw size={12} /></button>
+          )}
         </WorkflowStep>
       </div>
 
