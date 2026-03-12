@@ -94,14 +94,26 @@ def get_project_stats(config_path):
     try:
         with open(config_path, 'r') as f:
             cfg = yaml.safe_load(f)
+        
+        # Priority 1: Check if already in metadata
+        meta = cfg.get('metadata', {})
+        if meta.get('genes') and meta.get('samples'):
+            return meta['genes'], meta['samples']
+
+        # Priority 2: High-speed peek (no pandas)
         path_a = cfg['dataset']['path_A']
         actual_path = path_a if os.path.isabs(path_a) else os.path.abspath(os.path.join(BACKEND_DIR, path_a))
         
         if os.path.exists(actual_path):
-            df_headers = pd.read_csv(actual_path, index_col=0, nrows=0, sep=None, engine='python')
-            genes_count = len(df_headers.columns)
-            with open(actual_path, 'rb') as f:
-                samples_count = sum(1 for _ in f) - 1
+            with open(actual_path, 'r', encoding='utf-8', errors='ignore') as f:
+                header = f.readline()
+                # Deduce separator (tab or comma)
+                sep = '\t' if '\t' in header else ','
+                genes_count = len(header.split(sep)) - 1
+                
+                # Fast sample count (don't load content)
+                samples_count = 0
+                for _ in f: samples_count += 1
             return genes_count, samples_count
     except: pass
     return 0, 0
@@ -128,25 +140,42 @@ def parse_log_line(line: str):
 async def list_projects():
     projects = []
     if not os.path.exists(DATASET_DIR): return []
-    for root, dirs, files in os.walk(DATASET_DIR):
-        for file in files:
-            if file.endswith("_config.yaml"):
-                full_path = os.path.join(root, file)
-                pid = os.path.basename(root)
-                has_label = os.path.exists(os.path.join(root, "label.txt"))
-                config_data = {}
-                try:
-                    with open(full_path, 'r') as f: config_data = yaml.safe_load(f)
-                except: pass
-                metadata = config_data.get('metadata', {})
+    
+    # Optimization: Shallow listing only
+    for pid in os.listdir(DATASET_DIR):
+        proj_dir = os.path.join(DATASET_DIR, pid)
+        if not os.path.isdir(proj_dir): continue
+        
+        # Look for the config file
+        config_files = [f for f in os.listdir(proj_dir) if f.endswith("_config.yaml")]
+        for config_file in config_files:
+            full_path = os.path.join(proj_dir, config_file)
+            
+            config_data = {}
+            try:
+                with open(full_path, 'r') as f: 
+                    config_data = yaml.safe_load(f)
+            except: continue
+            
+            metadata = config_data.get('metadata', {})
+            # Only call get_project_stats if metadata is incomplete
+            if not metadata.get('genes') or not metadata.get('samples'):
                 f_genes, f_samples = get_project_stats(full_path)
-                projects.append(ProjectInfo(
-                    id=pid, name=metadata.get('name', pid), 
-                    description=metadata.get('description', ""),
-                    genes=metadata.get('genes', f_genes), 
-                    samples=metadata.get('samples', f_samples), 
-                    config_path=full_path, has_label=has_label, config=config_data
-                ))
+            else:
+                f_genes, f_samples = metadata['genes'], metadata['samples']
+                
+            projects.append(ProjectInfo(
+                id=pid, name=metadata.get('name', pid), 
+                description=metadata.get('description', ""),
+                genes=f_genes, 
+                samples=f_samples, 
+                config_path=full_path, 
+                has_label=os.path.exists(os.path.join(proj_dir, "label.txt")), 
+                config=config_data
+            ))
+            # Found a project config, move to next folder
+            break
+            
     return projects
 
 @app.get("/api/projects/{project_id}/samples/download")
