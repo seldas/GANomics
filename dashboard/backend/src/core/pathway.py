@@ -143,7 +143,35 @@ def spearman_rank_concordance(df_real, df_syn):
     rho, _ = stats.spearmanr(-a, -b)
     return rho
 
-def run_permutation_test(deg_real, deg_syn, gene_sets, B=1000, min_size=15, max_size=500):
+def jaccard_topk_mc(M, K, B=5000):
+    """
+    Monte Carlo simulation for Jaccard overlap of two random Top-K sets.
+    M: total number of pathways, K: size of top set, B: iterations.
+    """
+    if M <= 0 or K <= 0 or K > M: return np.zeros(B)
+    rng = np.random.default_rng(42)
+    # Draw two random K-sets from M items; compute Jaccard = |∩| / |∪|
+    # Hypergeometric draws the size of intersection
+    ints = rng.hypergeometric(ngood=K, nbad=M-K, nsample=K, size=B)
+    j = ints / (2*K - ints)
+    return j
+
+def expected_jaccard_random(M, K):
+    """Analytical baseline for random Jaccard overlap."""
+    if M <= 0: return 0.0
+    f = K / M
+    return f / (2 - f)
+
+def perm_pvalue(null, stat, side="greater"):
+    null = np.asarray(null); null = null[null != np.nan]
+    if null.size == 0 or not np.isfinite(stat): return np.nan
+    if side == "greater":
+        return (np.sum(null >= stat) + 1.0) / (null.size + 1.0)
+    elif side == "less":
+        return (np.sum(null <= stat) + 1.0) / (null.size + 1.0)
+    return np.nan
+
+def run_permutation_test(deg_real, deg_syn, gene_sets, B=100, min_size=15, max_size=500):
     """
     Permutation test: randomize gene-set membership to build a null distribution
     for the Spearman rank concordance (rho).

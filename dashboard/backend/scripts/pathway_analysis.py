@@ -143,6 +143,42 @@ def main():
                     os.path.join(pathway_dir, f"Pathway_Concordance_{algo_name}_{gs_name}.csv"), index=False
                 )
 
+                # --- Statistical Validation ---
+                common_sets = set(ora_real['set']) & set(ora_syn['set'])
+                M = len(common_sets)
+                if M > 0:
+                    stats_res = []
+                    # 1. Spearman Rank Concordance
+                    from src.core.pathway import spearman_rank_concordance
+                    rho = spearman_rank_concordance(ora_real, ora_syn)
+                    
+                    # 2. Top-K Jaccard Significance
+                    from src.core.pathway import jaccard_topk_mc, expected_jaccard_random, perm_pvalue
+                    for K in [10, 20, 50]:
+                        if K > M: continue
+                        # Observed Jaccard
+                        top_real = set(ora_real.nsmallest(K, 'p_value')['set'])
+                        top_syn = set(ora_syn.nsmallest(K, 'p_value')['set'])
+                        obs_jac = len(top_real & top_syn) / len(top_real | top_syn) if len(top_real | top_syn) > 0 else 0.0
+                        
+                        # Random Expectation
+                        null_dist = jaccard_topk_mc(M, K, B=2000)
+                        p_val = perm_pvalue(null_dist, obs_jac)
+                        exp_jac = expected_jaccard_random(M, K)
+                        
+                        stats_res.append({
+                            'K': K, 
+                            'Observed_Jaccard': obs_jac, 
+                            'Expected_Jaccard': exp_jac, 
+                            'P_Value': p_val,
+                            'Spearman_Rho': rho
+                        })
+                    
+                    if stats_res:
+                        pd.DataFrame(stats_res).to_csv(
+                            os.path.join(pathway_dir, f"Pathway_Stats_{algo_name}_{gs_name}.csv"), index=False
+                        )
+
     print("✅ Pathway analysis completed.")
 
 if __name__ == "__main__":

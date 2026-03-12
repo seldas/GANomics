@@ -489,10 +489,14 @@ async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
             if lib not in results: results[lib] = {"concordance": {}, "details": {}}
             results[lib]["concordance"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")[0]
         elif f.startswith("Pathway_Details_"):
-            lib = "_".join(parts[3:])
-            if lib not in results: results[lib] = {"concordance": {}, "details": {}}
+            lib = "_".join(parts[2:])
+            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}}
             results[lib]["details"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
-    return results
+        elif f.startswith("Pathway_Stats_"):
+            lib = "_".join(parts[2:])
+            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}}
+            results[lib]["stats"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
+        return results
 
 @app.get("/api/projects/{project_id}/ablation")
 async def get_project_ablation_metrics(project_id: str):
