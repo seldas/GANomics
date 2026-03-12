@@ -254,8 +254,12 @@ def jaccard_threshold_curve(deg_real, deg_syn, thresholds=[1e-4, 1e-3, 1e-2, 0.0
     
     results = []
     for tau in thresholds:
-        set_real = set(dr[dr['p'] <= tau].index) if 'p' in dr.columns else set()
-        set_syn = set(ds[ds['p'] <= tau].index) if 'p' in ds.columns else set()
+        # Check for 'p_value' (standard) or 'p' (legacy/alternative)
+        p_col_r = 'p_value' if 'p_value' in dr.columns else ('p' if 'p' in dr.columns else None)
+        p_col_s = 'p_value' if 'p_value' in ds.columns else ('p' if 'p' in ds.columns else None)
+
+        set_real = set(dr[dr[p_col_r] <= tau].index) if p_col_r else set()
+        set_syn = set(ds[ds[p_col_s] <= tau].index) if p_col_s else set()
         
         inter = len(set_real & set_syn)
         union = len(set_real | set_syn)

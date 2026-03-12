@@ -48,14 +48,41 @@ def main():
     
     print(f"Analyzing {len(common_idx)} samples across both directions.")
 
+    # --- Gene Symbol Mapping ---
+    mapping_path = os.path.join(backend_dir, "dataset", project_id, "gene_mapping.tsv")
+    gene_map = None
+    if os.path.exists(mapping_path):
+        print("Loading gene symbol mapping...")
+        df_map = pd.read_csv(mapping_path, sep='\t').dropna(subset=['Agilent_Probe_Name', 'GeneSymbol'])
+        gene_map = dict(zip(df_map['Agilent_Probe_Name'].astype(str), df_map['GeneSymbol'].astype(str)))
+    
+    def apply_mapping(df, mapping):
+        if mapping is None: return df
+        new_df = df.copy()
+        # Map columns to uppercase symbols
+        new_df.columns = [mapping.get(str(c), str(c)).upper() for c in new_df.columns]
+        # Keep only valid symbols (filter out raw probes that didn't map)
+        keep_cols = [c for c in new_df.columns if not c.startswith(('UKV4_', 'A_'))]
+        if not keep_cols:
+            print("Warning: Mapping resulted in 0 columns. Keeping all.")
+            return new_df
+        # If duplicate symbols exist after mapping (many probes -> one gene), average them
+        return new_df[keep_cols].T.groupby(level=0).mean().T
+
+    print("Mapping gene symbols for all profiles...")
+    ma_real = apply_mapping(ma_real.loc[common_idx], gene_map)
+    rs_real = apply_mapping(rs_real.loc[common_idx], gene_map)
+    ma_fake = apply_mapping(ma_fake.loc[common_idx], gene_map)
+    rs_fake = apply_mapping(rs_fake.loc[common_idx], gene_map)
+
     # 1. Compute DEGs for all profiles
     print("Computing DEGs: Real Platforms...")
-    deg_ma_real = run_deg_analysis(ma_real.loc[common_idx], y)
-    deg_rs_real = run_deg_analysis(rs_real.loc[common_idx], y)
+    deg_ma_real = run_deg_analysis(ma_real, y)
+    deg_rs_real = run_deg_analysis(rs_real, y)
     
     print("Computing DEGs: GANomics Synthetic...")
-    deg_ma_fake = run_deg_analysis(ma_fake.loc[common_idx], y)
-    deg_rs_fake = run_deg_analysis(rs_fake.loc[common_idx], y)
+    deg_ma_fake = run_deg_analysis(ma_fake, y)
+    deg_rs_fake = run_deg_analysis(rs_fake, y)
 
     deg_dir = os.path.join(out_root, "DEG", args.run_id) if not args.ext_id else os.path.join(out_root, "DEG")
     os.makedirs(deg_dir, exist_ok=True)
@@ -63,8 +90,8 @@ def main():
     # 2. Calculate Jaccard Curves for the 3 Key Comparisons
     comparisons = [
         ('Baseline', deg_ma_real, deg_rs_real, "Native Cross-Platform"),
-        ('GANomics_MA_to_RS', deg_rs_fake, deg_rs_real, "Microarray -> RNA-Seq"),
-        ('GANomics_RS_to_MA', deg_ma_fake, deg_ma_real, "RNA-Seq -> Microarray")
+        ('GANomics_MA_to_RS', deg_ma_fake, deg_rs_real, "Microarray -> RNA-Seq"),
+        ('GANomics_RS_to_MA', deg_rs_fake, deg_ma_real, "RNA-Seq -> Microarray")
     ]
 
     for algo_name, deg_test, deg_ref, desc in comparisons:
@@ -74,11 +101,13 @@ def main():
 
     # Save Significant DEG lists (p < 0.05) for download
     def save_deg_list(df, filename):
-        if not df.empty and 'p_value' in df.columns:
-            # Sort by p-value (lowest first)
-            sigs = df[df['p_value'] < 0.05].sort_values('p_value')
-            with open(os.path.join(deg_dir, filename), 'w') as f:
-                f.write("\n".join(sigs.index.astype(str).tolist()))
+        if not df.empty:
+            p_col = 'p_value' if 'p_value' in df.columns else ('p' if 'p' in df.columns else None)
+            if p_col:
+                # Sort by p-value (lowest first)
+                sigs = df[df[p_col] < 0.05].sort_values(p_col)
+                with open(os.path.join(deg_dir, filename), 'w') as f:
+                    f.write("\n".join(sigs.index.astype(str).tolist()))
 
     save_deg_list(deg_ma_real, "DEGs_Microarray_Real.txt")
     save_deg_list(deg_rs_real, "DEGs_RNAseq_Real.txt")
