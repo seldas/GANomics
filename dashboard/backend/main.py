@@ -594,7 +594,7 @@ async def list_manuscript_tasks():
         project_id = ""
         # Parsing project_id from run_id
         if run_id.startswith("NB_Size"): project_id = "NB"
-        elif run_id.startswith("CycleGAN"): project_id = "NB"
+        elif run_id.startswith("CycleGAN"): project_id = "CycleGAN"
         elif "_" in run_id: project_id = run_id.split("_")[0]
         else: project_id = run_id # fallback
         
@@ -617,14 +617,38 @@ async def list_manuscript_tasks():
         if f.endswith(".txt"):
             run_id = f[:-4]
             status = check_ms_status(run_id)
+            
+            # Extract size and repeats for numerical sorting
+            size = 0
+            repeats = 0
+            try:
+                if "NB_Size_" in run_id:
+                    parts = run_id.split("_")
+                    size = int(parts[2])
+                    repeats = int(parts[4])
+                elif "CycleGAN_" in run_id:
+                    parts = run_id.split("_")
+                    size = int(parts[1])
+                    repeats = int(parts[2])
+                else:
+                    parts = run_id.split("_")
+                    if len(parts) >= 3:
+                        size = int(parts[1])
+                        repeats = int(parts[2])
+            except:
+                pass
+
             tasks.append({
                 "run_id": run_id,
                 "project": status["project"],
+                "major_group": 0 if status["project"] in ["NB", "CycleGAN"] else 1,
+                "size": size,
+                "repeats": repeats,
                 "status": status,
                 "mtime": os.path.getmtime(os.path.join(MS_LOGS_DIR, f))
             })
             
-    return sorted(tasks, key=lambda x: (x['project'], x['run_id']))
+    return sorted(tasks, key=lambda x: (x['major_group'], x['project'], x['size'], x['repeats'], x['run_id']))
 
 @app.get("/api/manuscript/download/{run_id}/{step}/{filename}")
 async def download_ms_file(run_id: str, step: str, filename: str):

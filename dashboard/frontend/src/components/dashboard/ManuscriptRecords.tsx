@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { 
-  FileText, Loader2, Calendar, CheckCircle2, Clock, LineChart as ChartIcon, X
+  FileText, Loader2, Calendar, CheckCircle2, Clock, LineChart as ChartIcon, X, LayoutGrid, Globe
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
@@ -11,6 +11,9 @@ import { API_BASE } from '../../constants';
 interface ManuscriptTask {
   run_id: string;
   project: string;
+  major_group: number;
+  size: number;
+  repeats: number;
   status: {
     sync: boolean;
     comparative: boolean;
@@ -36,7 +39,6 @@ const LossModal = ({ runId, onClose }: { runId: string, onClose: () => void }) =
     if (!data) return [];
     if (data.length <= 50) return data;
     const step = Math.ceil(data.length / 50);
-    // Downsample to max 50 points
     return data.filter((_, i) => i % step === 0).slice(0, 50);
   }, [data]);
 
@@ -56,11 +58,7 @@ const LossModal = ({ runId, onClose }: { runId: string, onClose: () => void }) =
               <LineChart data={displayedData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="epoch" label={{ value: 'Epoch', position: 'insideBottom', offset: -5 }} />
-                <YAxis 
-                  scale="log" 
-                  domain={['auto', 'auto']}
-                  label={{ value: 'Loss (log)', angle: -90, position: 'insideLeft' }} 
-                />
+                <YAxis scale="log" domain={['auto', 'auto']} label={{ value: 'Loss (log)', angle: -90, position: 'insideLeft' }} />
                 <Tooltip />
                 <Legend />
                 <Line type="monotone" dataKey="G_loss" stroke="#3b82f6" dot={{ r: 3 }} strokeWidth={2} name="Generator Loss" />
@@ -77,11 +75,96 @@ const LossModal = ({ runId, onClose }: { runId: string, onClose: () => void }) =
   );
 };
 
+const TaskTable = ({ tasks, title, icon: Icon }: { tasks: ManuscriptTask[], title: string, icon: any }) => {
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp * 1000).toLocaleDateString();
+  };
+
+  const StatusIcon = ({ exists }: { exists: boolean }) => (
+    exists 
+      ? <CheckCircle2 size={16} color="#16a34a" title="Completed" /> 
+      : <Clock size={16} color="#94a3b8" title="Not Found" />
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 0.5rem' }}>
+        <Icon size={18} color="var(--primary-color)" />
+        <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{title}</h3>
+        <span className="chip" style={{ fontSize: '0.7rem' }}>{tasks.length} tasks</span>
+      </div>
+      
+      <div className="card" style={{ padding: '0' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', backgroundColor: '#f8fafc', borderBottom: '2px solid var(--border-color)' }}>
+                <th style={{ padding: '1rem 1.5rem' }}>Run ID</th>
+                <th style={{ padding: '1rem' }}>Project</th>
+                <th style={{ padding: '1rem', textAlign: 'center' }}>Size</th>
+                <th style={{ padding: '1rem', textAlign: 'center' }}>Rep.</th>
+                <th style={{ padding: '1rem', textAlign: 'center' }}>Losses</th>
+                <th style={{ padding: '1rem' }}>Sync</th>
+                <th style={{ padding: '1rem' }}>Comp.</th>
+                <th style={{ padding: '1rem' }}>DEG</th>
+                <th style={{ padding: '1rem' }}>Path.</th>
+                <th style={{ padding: '1rem' }}>Pred.</th>
+                <th style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>Archived</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map((task) => (
+                <tr key={task.run_id} className="hover-row" style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '0.75rem 1.5rem', fontWeight: 'bold', fontFamily: 'monospace' }}>
+                    {task.run_id}
+                  </td>
+                  <td style={{ padding: '0.75rem 1rem' }}>
+                    <span className="chip" style={{ fontSize: '0.7rem', backgroundColor: task.project === 'CycleGAN' ? '#fef3c7' : 'var(--bg-muted)', color: task.project === 'CycleGAN' ? '#92400e' : 'inherit' }}>
+                      {task.project}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: '600' }}>{task.size}</td>
+                  <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>{task.repeats}</td>
+                  <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                    <button 
+                      className="chip selected" 
+                      style={{ padding: '4px 8px' }}
+                      onClick={() => setSelectedRunId(task.run_id)}
+                    >
+                      <ChartIcon size={14} />
+                    </button>
+                  </td>
+                  <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.sync} /></td>
+                  <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.comparative} /></td>
+                  <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.deg} /></td>
+                  <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.pathway} /></td>
+                  <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.prediction} /></td>
+                  <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', color: 'var(--text-muted)' }}>
+                    {formatDate(task.mtime)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      {selectedRunId && (
+        <LossModal 
+          runId={selectedRunId} 
+          onClose={() => setSelectedRunId(null)} 
+        />
+      )}
+    </div>
+  );
+};
+
 export const ManuscriptRecords: React.FC = () => {
   const [tasks, setTasks] = useState<ManuscriptTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -98,15 +181,12 @@ export const ManuscriptRecords: React.FC = () => {
     fetchTasks();
   }, []);
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString();
-  };
-
-  const StatusIcon = ({ exists }: { exists: boolean }) => (
-    exists 
-      ? <CheckCircle2 size={16} color="#16a34a" title="Completed" /> 
-      : <Clock size={16} color="#94a3b8" title="Not Found" />
-  );
+  const { nbGroup, otherGroup } = useMemo(() => {
+    return {
+      nbGroup: tasks.filter(t => t.major_group === 0),
+      otherGroup: tasks.filter(t => t.major_group === 1)
+    };
+  }, [tasks]);
 
   if (loading) return <div style={{ padding: '4rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={32} /></div>;
 
@@ -117,82 +197,32 @@ export const ManuscriptRecords: React.FC = () => {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <div className="card" style={{ padding: '1.5rem 2rem' }}>
         <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
           <FileText size={24} color="var(--primary-color)" />
           Manuscript Records
         </h2>
         <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          Displaying tasks archived for the manuscript. Click the chart icon to view training progress.
+          Displaying archived tasks for the manuscript.
         </p>
       </div>
 
-      <div className="card" style={{ padding: '0' }}>
-        {tasks.length === 0 ? (
-          <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-            No manuscript tasks found.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-              <thead>
-                <tr style={{ textAlign: 'left', backgroundColor: '#f8fafc', borderBottom: '2px solid var(--border-color)' }}>
-                  <th style={{ padding: '1rem 1.5rem' }}>Run ID</th>
-                  <th style={{ padding: '1rem' }}>Project</th>
-                  <th style={{ padding: '1rem', textAlign: 'center' }}>Losses</th>
-                  <th style={{ padding: '1rem' }}>Sync</th>
-                  <th style={{ padding: '1rem' }}>Comp.</th>
-                  <th style={{ padding: '1rem' }}>DEG</th>
-                  <th style={{ padding: '1rem' }}>Path.</th>
-                  <th style={{ padding: '1rem' }}>Pred.</th>
-                  <th style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>Archived</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((task) => (
-                  <tr key={task.run_id} className="hover-row" style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '0.75rem 1.5rem', fontWeight: 'bold', fontFamily: 'monospace' }}>
-                      {task.run_id}
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem' }}>
-                      <span className="chip" style={{ fontSize: '0.7rem' }}>{task.project}</span>
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
-                      <button 
-                        className="chip selected" 
-                        style={{ padding: '4px 8px' }}
-                        onClick={() => setSelectedRunId(task.run_id)}
-                      >
-                        <ChartIcon size={14} />
-                      </button>
-                    </td>
-                    <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.sync} /></td>
-                    <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.comparative} /></td>
-                    <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.deg} /></td>
-                    <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.pathway} /></td>
-                    <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.prediction} /></td>
-                    <td style={{ padding: '0.75rem 1.5rem', textAlign: 'right', color: 'var(--text-muted)' }}>
-                      {formatDate(task.mtime)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <TaskTable 
+        title="Neuroblastoma (NB & CycleGAN)" 
+        tasks={nbGroup} 
+        icon={LayoutGrid}
+      />
+
+      <TaskTable 
+        title="Generalization (Other Projects)" 
+        tasks={otherGroup} 
+        icon={Globe}
+      />
 
       <div style={{ padding: '0 0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
         * Note: For manuscript records, <b>G_loss</b>, <b>D_loss</b>, and <b>cycle_loss</b> are calculated as the average of their respective A and B components (e.g., (G_A + G_B)/2) for consistency with the project dashboard visualization.
       </div>
-
-      {selectedRunId && (
-        <LossModal 
-          runId={selectedRunId} 
-          onClose={() => setSelectedRunId(null)} 
-        />
-      )}
     </div>
   );
 };
