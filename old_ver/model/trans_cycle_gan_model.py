@@ -1,6 +1,6 @@
 import itertools
 
-from util.image_pool import ImagePool
+from .image_pool import ImagePool
 from . import networks
 from .base_model import BaseModel
 import torch

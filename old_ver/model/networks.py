@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
-from model.unet.unet_parts import Down, DoubleConv, Up, OutConv
+from .unet.unet_parts import Down, DoubleConv, Up, OutConv
 
 
 ###############################################################################

@@ -12,8 +12,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.abspath(os.path.join(current_dir, '..'))
 backend_dir = os.path.join(root_dir, 'dashboard', 'backend')
 sys.path.insert(0, backend_dir)
-
-from src.models.ganomics_model import GANomicsModel
+from src.models.ganomics_model_compatible import GANomicsModel
+# from old_ver.model.test_model import TestModel as GANomicsModel
 
 def run_ms_sync():
     ms_training_dir = os.path.join(backend_dir, "results_ms", "1_Training")
@@ -29,13 +29,17 @@ def run_ms_sync():
     run_ids = []
     for d in os.listdir(checkpoint_root):
         d_path = os.path.join(checkpoint_root, d)
-        if os.path.isdir(d_path) and os.path.exists(os.path.join(d_path, "G_A.pth")):
+        if os.path.isdir(d_path) and os.path.exists(os.path.join(d_path, "latest_net_G_A.pth")):
             run_ids.append(d)
             
     print(f"Found {len(run_ids)} tasks to process.")
 
     for run_id in tqdm(run_ids, desc="Processing Tasks"):
         ckp_dir = os.path.join(checkpoint_root, run_id)
+        exist_check = os.path.join(sync_root, run_id, 'test/microarray_fake.csv')
+        if os.path.exists(exist_check): 
+            print(run_id, 'has already been processed, skip ...')
+            continue # skip existed 
         
         # 1. Determine Project and Load Dataset
         project_id = run_id.split('_')[0]
@@ -76,14 +80,13 @@ def run_ms_sync():
         # 3. Setup Model
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         input_nc = len(df_a_full.columns)
-        
         # Initialize model shell
         model = GANomicsModel(input_nc=input_nc, output_nc=input_nc, device=device)
         
         # Load manuscript-specific checkpoint structure (separate Generator files)
         try:
-            model.netG_A.load_state_dict(torch.load(os.path.join(ckp_dir, "G_A.pth"), map_location=device))
-            model.netG_B.load_state_dict(torch.load(os.path.join(ckp_dir, "G_B.pth"), map_location=device))
+            model.netG_A.load_state_dict(torch.load(os.path.join(ckp_dir, "latest_net_G_A.pth"), map_location=device))
+            model.netG_B.load_state_dict(torch.load(os.path.join(ckp_dir, "latest_net_G_B.pth"), map_location=device))
             model.eval()
         except Exception as e:
             print(f"  ❌ Error loading weights for {run_id}: {e}")
