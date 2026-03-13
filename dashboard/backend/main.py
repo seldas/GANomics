@@ -142,6 +142,15 @@ def parse_log_line(line: str):
     metric_pairs = re.findall(r"(\w+):\s*([\d\.\-]+)", metrics_str)
     for k, v in metric_pairs:
         data[k] = float(v)
+    
+    # Hardcode mapping for Chart compatibility (Manuscript naming vs Dashboard naming)
+    if 'G_A' in data and 'G_B' in data and 'G_loss' not in data:
+        data['G_loss'] = (data['G_A'] + data['G_B']) / 2
+    if 'D_A' in data and 'D_B' in data and 'D_loss' not in data:
+        data['D_loss'] = (data['D_A'] + data['D_B']) / 2
+    if 'cycle_A' in data and 'cycle_B' in data and 'cycle_loss' not in data:
+        data['cycle_loss'] = (data['cycle_A'] + data['cycle_B']) / 2
+        
     return data
 
 @app.get("/api/projects", response_model=List[ProjectInfo])
@@ -615,7 +624,7 @@ async def list_manuscript_tasks():
                 "mtime": os.path.getmtime(os.path.join(MS_LOGS_DIR, f))
             })
             
-    return sorted(tasks, key=lambda x: x['mtime'], reverse=True)
+    return sorted(tasks, key=lambda x: (x['project'], x['run_id']))
 
 @app.get("/api/manuscript/download/{run_id}/{step}/{filename}")
 async def download_ms_file(run_id: str, step: str, filename: str):

@@ -32,6 +32,14 @@ const LossModal = ({ runId, onClose }: { runId: string, onClose: () => void }) =
       .finally(() => setLoading(false));
   }, [runId]);
 
+  const displayedData = useMemo(() => {
+    if (!data) return [];
+    if (data.length <= 50) return data;
+    const step = Math.ceil(data.length / 50);
+    // Downsample to max 50 points
+    return data.filter((_, i) => i % step === 0).slice(0, 50);
+  }, [data]);
+
   return (
     <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
       <div className="modal-content" style={{ width: '80%', maxWidth: '900px', height: '600px', display: 'flex', flexDirection: 'column' }}>
@@ -43,17 +51,21 @@ const LossModal = ({ runId, onClose }: { runId: string, onClose: () => void }) =
         <div style={{ flex: 1, minHeight: 0 }}>
           {loading ? (
             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" /></div>
-          ) : data && data.length > 0 ? (
+          ) : displayedData && displayedData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data}>
+              <LineChart data={displayedData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="epoch" label={{ value: 'Epoch', position: 'insideBottom', offset: -5 }} />
-                <YAxis label={{ value: 'Loss', angle: -90, position: 'insideLeft' }} />
+                <YAxis 
+                  scale="log" 
+                  domain={['auto', 'auto']}
+                  label={{ value: 'Loss (log)', angle: -90, position: 'insideLeft' }} 
+                />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="G_loss" stroke="#3b82f6" dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="D_loss" stroke="#ef4444" dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="cycle_loss" stroke="#16a34a" dot={false} strokeWidth={1} />
+                <Line type="monotone" dataKey="G_loss" stroke="#3b82f6" dot={{ r: 3 }} strokeWidth={2} name="Generator Loss" />
+                <Line type="monotone" dataKey="D_loss" stroke="#ef4444" dot={{ r: 3 }} strokeWidth={2} name="Discriminator Loss" />
+                <Line type="monotone" dataKey="cycle_loss" stroke="#16a34a" dot={{ r: 3 }} strokeWidth={1} name="Cycle Loss" />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -169,6 +181,10 @@ export const ManuscriptRecords: React.FC = () => {
             </table>
           </div>
         )}
+      </div>
+
+      <div style={{ padding: '0 0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+        * Note: For manuscript records, <b>G_loss</b>, <b>D_loss</b>, and <b>cycle_loss</b> are calculated as the average of their respective A and B components (e.g., (G_A + G_B)/2) for consistency with the project dashboard visualization.
       </div>
 
       {selectedRunId && (
