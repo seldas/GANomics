@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { 
-  FileText, Loader2, Calendar, Database, CheckCircle2, XCircle, Clock
+  FileText, Loader2, Calendar, CheckCircle2, Clock, LineChart as ChartIcon, X
 } from 'lucide-react';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+} from 'recharts';
 import { API_BASE } from '../../constants';
 
 interface ManuscriptTask {
@@ -18,10 +21,55 @@ interface ManuscriptTask {
   mtime: number;
 }
 
+const LossModal = ({ runId, onClose }: { runId: string, onClose: () => void }) => {
+  const [data, setData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios.get(`${API_BASE}/manuscript/logs/${runId}`)
+      .then(res => setData(res.data.structured))
+      .catch(err => console.error(err))
+      .finally(() => setLoading(false));
+  }, [runId]);
+
+  return (
+    <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+      <div className="modal-content" style={{ width: '80%', maxWidth: '900px', height: '600px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h3 style={{ margin: 0 }}>Training Losses: {runId}</h3>
+          <button onClick={onClose} className="chip" style={{ padding: '4px' }}><X size={20} /></button>
+        </div>
+        
+        <div style={{ flex: 1, minHeight: 0 }}>
+          {loading ? (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" /></div>
+          ) : data && data.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="epoch" label={{ value: 'Epoch', position: 'insideBottom', offset: -5 }} />
+                <YAxis label={{ value: 'Loss', angle: -90, position: 'insideLeft' }} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="G_loss" stroke="#3b82f6" dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="D_loss" stroke="#ef4444" dot={false} strokeWidth={2} />
+                <Line type="monotone" dataKey="cycle_loss" stroke="#16a34a" dot={false} strokeWidth={1} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No loss data available in logs.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const ManuscriptRecords: React.FC = () => {
   const [tasks, setTasks] = useState<ManuscriptTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -64,7 +112,7 @@ export const ManuscriptRecords: React.FC = () => {
           Manuscript Records
         </h2>
         <p style={{ margin: '0.5rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          Displaying tasks archived for the manuscript. Status icons represent availability of results in each pipeline step.
+          Displaying tasks archived for the manuscript. Click the chart icon to view training progress.
         </p>
       </div>
 
@@ -80,6 +128,7 @@ export const ManuscriptRecords: React.FC = () => {
                 <tr style={{ textAlign: 'left', backgroundColor: '#f8fafc', borderBottom: '2px solid var(--border-color)' }}>
                   <th style={{ padding: '1rem 1.5rem' }}>Run ID</th>
                   <th style={{ padding: '1rem' }}>Project</th>
+                  <th style={{ padding: '1rem', textAlign: 'center' }}>Losses</th>
                   <th style={{ padding: '1rem' }}>Sync</th>
                   <th style={{ padding: '1rem' }}>Comp.</th>
                   <th style={{ padding: '1rem' }}>DEG</th>
@@ -97,6 +146,15 @@ export const ManuscriptRecords: React.FC = () => {
                     <td style={{ padding: '0.75rem 1rem' }}>
                       <span className="chip" style={{ fontSize: '0.7rem' }}>{task.project}</span>
                     </td>
+                    <td style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>
+                      <button 
+                        className="chip selected" 
+                        style={{ padding: '4px 8px' }}
+                        onClick={() => setSelectedRunId(task.run_id)}
+                      >
+                        <ChartIcon size={14} />
+                      </button>
+                    </td>
                     <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.sync} /></td>
                     <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.comparative} /></td>
                     <td style={{ padding: '0.75rem 1rem' }}><StatusIcon exists={task.status.deg} /></td>
@@ -112,6 +170,13 @@ export const ManuscriptRecords: React.FC = () => {
           </div>
         )}
       </div>
+
+      {selectedRunId && (
+        <LossModal 
+          runId={selectedRunId} 
+          onClose={() => setSelectedRunId(null)} 
+        />
+      )}
     </div>
   );
 };

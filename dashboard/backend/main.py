@@ -638,6 +638,14 @@ async def download_manuscript_record(filename: str):
     if not os.path.exists(path): raise HTTPException(status_code=404)
     return FileResponse(path, filename=filename)
 
+@app.get("/api/manuscript/logs/{run_id}")
+async def get_manuscript_logs(run_id: str):
+    log_path = os.path.join(MS_LOGS_DIR, f"{run_id}.txt")
+    if not os.path.exists(log_path): raise HTTPException(status_code=404)
+    with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines(); structured = [p for p in [parse_log_line(l) for l in lines] if p]
+    return {"run_id": run_id, "structured": structured, "total_lines": len(lines)}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8832)
