@@ -36,18 +36,41 @@ const LossModal = ({ runId, onClose }: { runId: string, onClose: () => void }) =
   }, [runId]);
 
   const displayedData = useMemo(() => {
-    if (!data) return [];
-    if (data.length <= 50) return data;
-    const step = Math.ceil(data.length / 50);
-    return data.filter((_, i) => i % step === 0).slice(0, 50);
+    if (!data || data.length === 0) return [];
+    
+    // 1. Apply Moving Average (Window size = 20)
+    const windowSize = 20;
+    const smoothed = data.map((point, index) => {
+      const start = Math.max(0, index - Math.floor(windowSize / 2));
+      const end = Math.min(data.length, start + windowSize);
+      const subset = data.slice(start, end);
+      
+      const avg = (key: string) => subset.reduce((sum, p) => sum + (p[key] || 0), 0) / subset.length;
+      
+      return {
+        ...point,
+        G_loss: avg('G_loss'),
+        D_loss: avg('D_loss'),
+        cycle_loss: avg('cycle_loss')
+      };
+    });
+
+    // 2. Downsample to max 50 points for display performance
+    if (smoothed.length <= 50) return smoothed;
+    const step = Math.ceil(smoothed.length / 50);
+    return smoothed.filter((_, i) => i % step === 0).slice(0, 50);
   }, [data]);
 
   return (
     <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
       <div className="modal-content" style={{ width: '80%', maxWidth: '900px', height: '600px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h3 style={{ margin: 0 }}>Training Losses: {runId}</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h3 style={{ margin: 0 }}>Validation Losses: {runId}</h3>
           <button onClick={onClose} className="chip" style={{ padding: '4px' }}><X size={20} /></button>
+        </div>
+        
+        <div style={{ marginBottom: '1rem', padding: '0.5rem 1rem', backgroundColor: '#f0f9ff', borderRadius: '6px', fontSize: '0.85rem', color: '#0369a1' }}>
+          <b>Note:</b> These curves represent the <b>Validation Loss</b> measured during the training process (Smoothed MA-20).
         </div>
         
         <div style={{ flex: 1, minHeight: 0 }}>
@@ -58,12 +81,15 @@ const LossModal = ({ runId, onClose }: { runId: string, onClose: () => void }) =
               <LineChart data={displayedData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="epoch" label={{ value: 'Epoch', position: 'insideBottom', offset: -5 }} />
-                <YAxis scale="log" domain={['auto', 'auto']} label={{ value: 'Loss (log)', angle: -90, position: 'insideLeft' }} />
+                <YAxis 
+                  domain={['auto', 'auto']}
+                  label={{ value: 'Validation Loss', angle: -90, position: 'insideLeft' }} 
+                />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="G_loss" stroke="#3b82f6" dot={{ r: 3 }} strokeWidth={2} name="Generator Loss" />
-                <Line type="monotone" dataKey="D_loss" stroke="#ef4444" dot={{ r: 3 }} strokeWidth={2} name="Discriminator Loss" />
-                <Line type="monotone" dataKey="cycle_loss" stroke="#16a34a" dot={{ r: 3 }} strokeWidth={1} name="Cycle Loss" />
+                <Line type="monotone" dataKey="G_loss" stroke="#3b82f6" dot={false} strokeWidth={2} name="Generator Loss" />
+                <Line type="monotone" dataKey="D_loss" stroke="#ef4444" dot={false} strokeWidth={2} name="Discriminator Loss" />
+                <Line type="monotone" dataKey="cycle_loss" stroke="#16a34a" dot={false} strokeWidth={1} name="Cycle Loss" />
               </LineChart>
             </ResponsiveContainer>
           ) : (
