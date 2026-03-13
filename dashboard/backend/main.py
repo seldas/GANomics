@@ -61,6 +61,14 @@ SYNC_DATA_DIR = os.path.join(RESULTS_DIR, "2_SyncData")
 COMPARATIVE_DIR = os.path.join(RESULTS_DIR, "3_ComparativeAnalysis")
 BIOMARKERS_DIR = os.path.join(RESULTS_DIR, "4_Biomarkers")
 FIGURES_DIR = os.path.join(RESULTS_DIR, "5_Figures")
+RESULTS_MS_DIR = os.path.join(BACKEND_DIR, "results_ms")
+os.makedirs(RESULTS_MS_DIR, exist_ok=True)
+
+MS_TRAINING_DIR = os.path.join(RESULTS_MS_DIR, "1_Training")
+MS_LOGS_DIR = os.path.join(MS_TRAINING_DIR, "logs")
+MS_SYNC_DIR = os.path.join(RESULTS_MS_DIR, "2_SyncData")
+MS_COMPARATIVE_DIR = os.path.join(RESULTS_MS_DIR, "3_ComparativeAnalysis")
+MS_BIOMARKERS_DIR = os.path.join(RESULTS_MS_DIR, "4_Biomarkers")
 
 class ProjectInfo(BaseModel):
     id: str
@@ -134,6 +142,15 @@ def parse_log_line(line: str):
     metric_pairs = re.findall(r"(\w+):\s*([\d\.\-]+)", metrics_str)
     for k, v in metric_pairs:
         data[k] = float(v)
+    
+    # Hardcode mapping for Chart compatibility (Manuscript naming vs Dashboard naming)
+    if 'G_A' in data and 'G_B' in data and 'G_loss' not in data:
+        data['G_loss'] = (data['G_A'] + data['G_B']) / 2
+    if 'D_A' in data and 'D_B' in data and 'D_loss' not in data:
+        data['D_loss'] = (data['D_A'] + data['D_B']) / 2
+    if 'cycle_A' in data and 'cycle_B' in data and 'cycle_loss' not in data:
+        data['cycle_loss'] = (data['cycle_A'] + data['cycle_B']) / 2
+        
     return data
 
 @app.get("/api/projects", response_model=List[ProjectInfo])
@@ -566,6 +583,101 @@ async def get_project_ablation_logs(project_id: str, category: str):
                             if len(struct) >= 2: res.append({"run_id": rid, "first": struct[0], "last": struct[-1]})
                     except: pass
     return res
+
+@app.get("/api/manuscript/tasks")
+async def list_manuscript_tasks():
+    if not os.path.exists(MS_LOGS_DIR): return []
+    tasks = []
+    
+    # helper to check algo presence in ms folders
+    def check_ms_status(run_id):
+        project_id = ""
+        # Parsing project_id from run_id
+        if run_id.startswith("NB_Size"): project_id = "NB"
+        elif run_id.startswith("CycleGAN"): project_id = "CycleGAN"
+        elif "_" in run_id: project_id = run_id.split("_")[0]
+        else: project_id = run_id # fallback
+        
+        sync_path = os.path.join(MS_SYNC_DIR, run_id, "test", "microarray_fake.csv")
+        comp_path = os.path.join(MS_COMPARATIVE_DIR, run_id, "Test_performance.csv")
+        deg_path = os.path.join(MS_BIOMARKERS_DIR, "DEG", run_id)
+        pathway_path = os.path.join(MS_BIOMARKERS_DIR, "Pathway", run_id)
+        pred_path = os.path.join(MS_BIOMARKERS_DIR, "Prediction", run_id)
+        
+        return {
+            "project": project_id,
+            "sync": os.path.exists(sync_path),
+            "comparative": os.path.exists(comp_path),
+            "deg": os.path.exists(deg_path) and any(f.endswith(".csv") for f in os.listdir(deg_path)) if os.path.exists(deg_path) else False,
+            "pathway": os.path.exists(pathway_path) and any(f.endswith(".csv") for f in os.listdir(pathway_path)) if os.path.exists(pathway_path) else False,
+            "prediction": os.path.exists(pred_path) and any(f.endswith(".csv") for f in os.listdir(pred_path)) if os.path.exists(pred_path) else False,
+        }
+
+    for f in os.listdir(MS_LOGS_DIR):
+        if f.endswith(".txt"):
+            run_id = f[:-4]
+            status = check_ms_status(run_id)
+            
+            # Extract size and repeats for numerical sorting
+            size = 0
+            repeats = 0
+            try:
+                if "NB_Size_" in run_id:
+                    parts = run_id.split("_")
+                    size = int(parts[2])
+                    repeats = int(parts[4])
+                elif "CycleGAN_" in run_id:
+                    parts = run_id.split("_")
+                    size = int(parts[1])
+                    repeats = int(parts[2])
+                else:
+                    parts = run_id.split("_")
+                    if len(parts) >= 3:
+                        size = int(parts[1])
+                        repeats = int(parts[2])
+            except:
+                pass
+
+            tasks.append({
+                "run_id": run_id,
+                "project": status["project"],
+                "major_group": 0 if status["project"] in ["NB", "CycleGAN"] else 1,
+                "size": size,
+                "repeats": repeats,
+                "status": status,
+                "mtime": os.path.getmtime(os.path.join(MS_LOGS_DIR, f))
+            })
+            
+    return sorted(tasks, key=lambda x: (x['major_group'], x['project'], x['size'], x['repeats'], x['run_id']))
+
+@app.get("/api/manuscript/download/{run_id}/{step}/{filename}")
+async def download_ms_file(run_id: str, step: str, filename: str):
+    # Mapping step to folder
+    folders = {
+        "sync": os.path.join(MS_SYNC_DIR, run_id, "test"),
+        "comparative": os.path.join(MS_COMPARATIVE_DIR, run_id),
+        "deg": os.path.join(MS_BIOMARKERS_DIR, "DEG", run_id),
+        "pathway": os.path.join(MS_BIOMARKERS_DIR, "Pathway", run_id),
+        "prediction": os.path.join(MS_BIOMARKERS_DIR, "Prediction", run_id)
+    }
+    if step not in folders: raise HTTPException(status_code=400, detail="Invalid step")
+    path = os.path.join(folders[step], filename)
+    if not os.path.exists(path): raise HTTPException(status_code=404)
+    return FileResponse(path, filename=filename)
+
+@app.get("/api/manuscript/download/{filename}")
+async def download_manuscript_record(filename: str):
+    path = os.path.join(RESULTS_MS_DIR, filename)
+    if not os.path.exists(path): raise HTTPException(status_code=404)
+    return FileResponse(path, filename=filename)
+
+@app.get("/api/manuscript/logs/{run_id}")
+async def get_manuscript_logs(run_id: str):
+    log_path = os.path.join(MS_LOGS_DIR, f"{run_id}.txt")
+    if not os.path.exists(log_path): raise HTTPException(status_code=404)
+    with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines(); structured = [p for p in [parse_log_line(l) for l in lines] if p]
+    return {"run_id": run_id, "structured": structured, "total_lines": len(lines)}
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-  LayoutDashboard, Activity, FlaskConical, Database
+  LayoutDashboard, Activity, FlaskConical, Database, FileText
 } from 'lucide-react';
 
 import type { Project, ResultsStatus, LogResponse } from './types';
@@ -12,12 +12,13 @@ import { SyncExternalModal } from './components/modals/SyncExternalModal';
 import { ProjectDashboard } from './components/dashboard/ProjectDashboard';
 import { TaskDashboard } from './components/dashboard/TaskDashboard';
 import { NewSessionPanel } from './components/dashboard/NewSessionPanel';
+import { ManuscriptRecords } from './components/dashboard/ManuscriptRecords';
 import { AblationAnalyticsModal } from './components/modals/AblationAnalyticsModal';
 
 import './App.css';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'train' | 'analysis' | 'new-session'>('train');
+  const [activeTab, setActiveTab] = useState<'train' | 'analysis' | 'new-session' | 'manuscript'>('train');
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('');
   const [selectedSizes, setSelectedSizes] = useState<number[]>([50]);
@@ -263,6 +264,7 @@ const fetchStatus = async () => {
           <div style={{ padding: '1rem' }}><button className="chip selected" style={{ width: '100%', padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 'bold' }} onClick={() => setActiveTab('new-session')}><FlaskConical size={18} /> New Experiment</button></div>
           <div style={{ padding: '0.5rem 1rem', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Menu</div>
           <a className={`nav-item ${activeTab === 'train' && !selectedRunId ? 'active' : ''}`} onClick={() => { setActiveTab('train'); setSelectedRunId(null); }}><LayoutDashboard size={18} /> Project Dashboard</a>
+          <a className={`nav-item ${activeTab === 'manuscript' ? 'active' : ''}`} onClick={() => { setActiveTab('manuscript'); setSelectedRunId(null); }}><FileText size={18} /> Manuscript Records</a>
           {selectedRunId && (
             <><div style={{ padding: '1.5rem 1rem 0.5rem 1rem', fontSize: '0.65rem', fontWeight: 'bold', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Task Pipeline</div>
               <StepItem num="1" label="Training" active={taskView === 'training'} status={status?.training} onClick={() => setTaskView('training')} />
@@ -312,6 +314,8 @@ const fetchStatus = async () => {
             useGpu={useGpu} setUseGpu={setUseGpu} onStartSession={handleStartSession}
             onBack={() => setActiveTab('train')} toggleSelection={toggleSelection}
           />
+        ) : activeTab === 'manuscript' ? (
+          <ManuscriptRecords />
         ) : selectedRunId ? (
           <TaskDashboard 
             selectedRunId={selectedRunId} selectedExtId={selectedExtId} runStatus={runStatus} status={status}
