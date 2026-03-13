@@ -61,6 +61,14 @@ SYNC_DATA_DIR = os.path.join(RESULTS_DIR, "2_SyncData")
 COMPARATIVE_DIR = os.path.join(RESULTS_DIR, "3_ComparativeAnalysis")
 BIOMARKERS_DIR = os.path.join(RESULTS_DIR, "4_Biomarkers")
 FIGURES_DIR = os.path.join(RESULTS_DIR, "5_Figures")
+RESULTS_MS_DIR = os.path.join(BACKEND_DIR, "results_ms")
+os.makedirs(RESULTS_MS_DIR, exist_ok=True)
+
+MS_TRAINING_DIR = os.path.join(RESULTS_MS_DIR, "1_Training")
+MS_LOGS_DIR = os.path.join(MS_TRAINING_DIR, "logs")
+MS_SYNC_DIR = os.path.join(RESULTS_MS_DIR, "2_SyncData")
+MS_COMPARATIVE_DIR = os.path.join(RESULTS_MS_DIR, "3_ComparativeAnalysis")
+MS_BIOMARKERS_DIR = os.path.join(RESULTS_MS_DIR, "4_Biomarkers")
 
 class ProjectInfo(BaseModel):
     id: str
@@ -566,6 +574,69 @@ async def get_project_ablation_logs(project_id: str, category: str):
                             if len(struct) >= 2: res.append({"run_id": rid, "first": struct[0], "last": struct[-1]})
                     except: pass
     return res
+
+@app.get("/api/manuscript/tasks")
+async def list_manuscript_tasks():
+    if not os.path.exists(MS_LOGS_DIR): return []
+    tasks = []
+    
+    # helper to check algo presence in ms folders
+    def check_ms_status(run_id):
+        project_id = ""
+        # Parsing project_id from run_id
+        if run_id.startswith("NB_Size"): project_id = "NB"
+        elif run_id.startswith("CycleGAN"): project_id = "NB"
+        elif "_" in run_id: project_id = run_id.split("_")[0]
+        else: project_id = run_id # fallback
+        
+        sync_path = os.path.join(MS_SYNC_DIR, run_id, "test", "microarray_fake.csv")
+        comp_path = os.path.join(MS_COMPARATIVE_DIR, run_id, "Test_performance.csv")
+        deg_path = os.path.join(MS_BIOMARKERS_DIR, "DEG", run_id)
+        pathway_path = os.path.join(MS_BIOMARKERS_DIR, "Pathway", run_id)
+        pred_path = os.path.join(MS_BIOMARKERS_DIR, "Prediction", run_id)
+        
+        return {
+            "project": project_id,
+            "sync": os.path.exists(sync_path),
+            "comparative": os.path.exists(comp_path),
+            "deg": os.path.exists(deg_path) and any(f.endswith(".csv") for f in os.listdir(deg_path)) if os.path.exists(deg_path) else False,
+            "pathway": os.path.exists(pathway_path) and any(f.endswith(".csv") for f in os.listdir(pathway_path)) if os.path.exists(pathway_path) else False,
+            "prediction": os.path.exists(pred_path) and any(f.endswith(".csv") for f in os.listdir(pred_path)) if os.path.exists(pred_path) else False,
+        }
+
+    for f in os.listdir(MS_LOGS_DIR):
+        if f.endswith(".txt"):
+            run_id = f[:-4]
+            status = check_ms_status(run_id)
+            tasks.append({
+                "run_id": run_id,
+                "project": status["project"],
+                "status": status,
+                "mtime": os.path.getmtime(os.path.join(MS_LOGS_DIR, f))
+            })
+            
+    return sorted(tasks, key=lambda x: x['mtime'], reverse=True)
+
+@app.get("/api/manuscript/download/{run_id}/{step}/{filename}")
+async def download_ms_file(run_id: str, step: str, filename: str):
+    # Mapping step to folder
+    folders = {
+        "sync": os.path.join(MS_SYNC_DIR, run_id, "test"),
+        "comparative": os.path.join(MS_COMPARATIVE_DIR, run_id),
+        "deg": os.path.join(MS_BIOMARKERS_DIR, "DEG", run_id),
+        "pathway": os.path.join(MS_BIOMARKERS_DIR, "Pathway", run_id),
+        "prediction": os.path.join(MS_BIOMARKERS_DIR, "Prediction", run_id)
+    }
+    if step not in folders: raise HTTPException(status_code=400, detail="Invalid step")
+    path = os.path.join(folders[step], filename)
+    if not os.path.exists(path): raise HTTPException(status_code=404)
+    return FileResponse(path, filename=filename)
+
+@app.get("/api/manuscript/download/{filename}")
+async def download_manuscript_record(filename: str):
+    path = os.path.join(RESULTS_MS_DIR, filename)
+    if not os.path.exists(path): raise HTTPException(status_code=404)
+    return FileResponse(path, filename=filename)
 
 if __name__ == "__main__":
     import uvicorn
