@@ -98,29 +98,51 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
     train_idx, test_idx = train_test_split(common_idx, test_size=0.5, random_state=42, stratify=y)
 
     # Use original profiles (without symbol mapping as RF handles features fine)
+    # BUT for Cross-Platform Baselines, we NEED to map to a common space
+    
+    # 1. GANomics Microarray (Fake vs Real)
+    # Both use Microarray Probes
     pred_profiles = [
         ('GANomics_MA', ma_fake.loc[common_idx], ma_real.loc[common_idx]),
         ('GANomics_RS', rs_fake.loc[common_idx], rs_real.loc[common_idx]),
-        ('Baseline_MA_to_RS', rs_real.loc[common_idx], ma_real.loc[common_idx]),
-        ('Baseline_RS_to_MA', ma_real.loc[common_idx], rs_real.loc[common_idx])
     ]
+
+    # 2. Baselines (Real vs Real) - require symbol mapping to align features
+    # Only keep common symbols
+    common_symbols = rs_real_mapped.columns.intersection(ma_real_mapped.columns)
+    if len(common_symbols) > 100:
+        rs_mapped_sub = rs_real_mapped.loc[common_idx, common_symbols]
+        ma_mapped_sub = ma_real_mapped.loc[common_idx, common_symbols]
+        
+        pred_profiles.append(('Baseline_MA_to_RS', rs_mapped_sub, ma_mapped_sub))
+        pred_profiles.append(('Baseline_RS_to_MA', ma_mapped_sub, rs_mapped_sub))
+    else:
+        print(f"Warning: Only {len(common_symbols)} common symbols found for {run_id}. Skipping cross-platform baseline.")
 
     for algo_name, syn_df, real_df in pred_profiles:
         all_metrics = []
-        # Real -> Real
-        m_rr = train_eval_rf(real_df.loc[train_idx], y.loc[train_idx], real_df.loc[test_idx], y.loc[test_idx])
-        m_rr['Scenario'] = 'Real->Real'; all_metrics.append(m_rr)
-        # Real -> Syn
-        m_rs = train_eval_rf(real_df.loc[train_idx], y.loc[train_idx], syn_df.loc[test_idx], y.loc[test_idx])
-        m_rs['Scenario'] = 'Real->Syn'; all_metrics.append(m_rs)
-        # Syn -> Real
-        m_sr = train_eval_rf(syn_df.loc[train_idx], y.loc[train_idx], real_df.loc[test_idx], y.loc[test_idx])
-        m_sr['Scenario'] = 'Syn->Real'; all_metrics.append(m_sr)
-        # Syn -> Syn
-        m_ss = train_eval_rf(syn_df.loc[train_idx], y.loc[train_idx], syn_df.loc[test_idx], y.loc[test_idx])
-        m_ss['Scenario'] = 'Syn->Syn'; all_metrics.append(m_ss)
-        
-        pd.DataFrame(all_metrics).to_csv(os.path.join(pred_out_dir, f"Classifier_Performance_{algo_name}.csv"), index=False)
+        try:
+            # 1. Real -> Real (Train on Real, Test on Real)
+            m_rr = train_eval_rf(real_df.loc[train_idx], y.loc[train_idx], real_df.loc[test_idx], y.loc[test_idx])
+            m_rr['Scenario'] = 'Real->Real'; all_metrics.append(m_rr)
+            
+            # 2. Real -> Syn (Train on Real, Test on Synthetic)
+            # This measures if the model trained on Real knowledge can predict Synthetic samples
+            m_rs = train_eval_rf(real_df.loc[train_idx], y.loc[train_idx], syn_df.loc[test_idx], y.loc[test_idx])
+            m_rs['Scenario'] = 'Real->Syn'; all_metrics.append(m_rs)
+            
+            # 3. Syn -> Real (Train on Synthetic, Test on Real)
+            # THIS IS THE MOST IMPORTANT: Can synthetic data be used to train models for real data?
+            m_sr = train_eval_rf(syn_df.loc[train_idx], y.loc[train_idx], real_df.loc[test_idx], y.loc[test_idx])
+            m_sr['Scenario'] = 'Syn->Real'; all_metrics.append(m_sr)
+            
+            # 4. Syn -> Syn (Consistency)
+            m_ss = train_eval_rf(syn_df.loc[train_idx], y.loc[train_idx], syn_df.loc[test_idx], y.loc[test_idx])
+            m_ss['Scenario'] = 'Syn->Syn'; all_metrics.append(m_ss)
+            
+            pd.DataFrame(all_metrics).to_csv(os.path.join(pred_out_dir, f"Classifier_Performance_{algo_name}.csv"), index=False)
+        except Exception as e:
+            print(f"Error in prediction analysis for {run_id} ({algo_name}): {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="Batch Biomarker Analysis (DEG and Prediction)")
