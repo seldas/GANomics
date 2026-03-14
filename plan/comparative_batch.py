@@ -23,10 +23,6 @@ def measure_perf_detailed(df_real, df_fake):
     Compute per-sample metrics and return summary with CI (standard deviation).
     Derived from dashboard/backend/scripts/comparative_analysis.py
     """
-    # Ensure they have the same genes
-    common_genes = df_real.columns.intersection(df_fake.columns)
-    df_real = df_real[common_genes]
-    df_fake = df_fake[common_genes]
     
     pearsons, spearmans, maes, rmses, l1s, l2s = [], [], [], [], [], []
     
@@ -135,9 +131,10 @@ def run_comparative_for_task(run_id, sync_root, comp_root, algorithms):
         
     if test_ag is not None and test_ngs is not None:
         comparisons.append(("Baseline (paired)", test_ag, test_ngs))
-    
+
     final_results = []
     for name, real, fake in comparisons:
+        print(name, real.shape, fake.shape)
         perf = measure_perf_detailed(real, fake)
         perf['Algorithm'] = name
         final_results.append(perf)
@@ -150,13 +147,13 @@ def run_comparative_for_task(run_id, sync_root, comp_root, algorithms):
 
 def main():
     parser = argparse.ArgumentParser(description="Batch Comparative Analysis for GANomics")
-    parser.add_argument("parent_dir", type=str, help="Parent results directory containing 2_testSync (e.g. dashboard/backend/results)")
+    parser.add_argument("--parent_dir", type=str, help="Parent results directory containing 2_testSync (e.g. dashboard/backend/results)")
     parser.add_argument("--algorithms", type=str, nargs="+", default=[], help="Baseline algorithms to run (default: none, only GANomics included)")
     args = parser.parse_args()
 
     # Determine absolute paths for input and output
     parent_dir = os.path.abspath(args.parent_dir)
-    sync_root = os.path.join(parent_dir, "2_testSync")
+    sync_root = os.path.join(parent_dir, "2_SyncData")
     comp_root = os.path.join(parent_dir, "3_ComparativeAnalysis")
 
     if not os.path.exists(sync_root):
