@@ -26,6 +26,29 @@ def apply_mapping(df, mapping):
     # If duplicate symbols exist after mapping (many probes -> one gene), average them
     return new_df[keep_cols].T.groupby(level=0).mean().T
 
+def jaccard_topk_curve(deg_ref, deg_test, k_list=[10, 50, 100, 200, 500, 1000]):
+    """Compute Jaccard overlap of top-K genes."""
+    # Ensure indices are strings and common genes only
+    common_genes = deg_ref.index.intersection(deg_test.index)
+    dr = deg_ref.loc[common_genes].sort_values('p_value')
+    dt = deg_test.loc[common_genes].sort_values('p_value')
+    
+    results = []
+    for k in k_list:
+        k_val = min(k, len(common_genes))
+        set_ref = set(dr.index[:k_val])
+        set_test = set(dt.index[:k_val])
+        
+        inter = len(set_ref & set_test)
+        union = len(set_ref | set_test)
+        jac = inter / union if union > 0 else 0.0
+        results.append({
+            'k': k_val, 
+            'jaccard': jac, 
+            'n_overlap': inter
+        })
+    return pd.DataFrame(results)
+
 def run_biomarker_for_task(run_id, sync_root, biomarker_root):
     task_sync_dir = os.path.join(sync_root, run_id)
     test_dir = os.path.join(task_sync_dir, "test")
@@ -107,6 +130,10 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
     # Native Baseline
     jac_native = jaccard_threshold_curve(deg_rs_real, deg_ma_real)
     jac_native.to_csv(os.path.join(deg_out_dir, "Jaccard_Curve_Baseline.csv"), index=False)
+    
+    # NEW: Top-K Jaccard for Baseline
+    jac_topk_native = jaccard_topk_curve(deg_rs_real, deg_ma_real)
+    jac_topk_native.to_csv(os.path.join(deg_out_dir, "Jaccard_TopK_Baseline.csv"), index=False)
 
     for algo_name, ma_f, rs_f in algorithms:
         ma_f_mapped = apply_mapping(ma_f.loc[common_idx], gene_map)
@@ -119,9 +146,15 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
         jac_ma_rs = jaccard_threshold_curve(deg_rs_real, deg_ma_f)
         jac_ma_rs.to_csv(os.path.join(deg_out_dir, f"Jaccard_Curve_{algo_name}_MA_to_RS.csv"), index=False)
         
+        topk_ma_rs = jaccard_topk_curve(deg_rs_real, deg_ma_f)
+        topk_ma_rs.to_csv(os.path.join(deg_out_dir, f"Jaccard_TopK_{algo_name}_MA_to_RS.csv"), index=False)
+        
         # RS -> MA comparison
         jac_rs_ma = jaccard_threshold_curve(deg_ma_real, deg_rs_f)
         jac_rs_ma.to_csv(os.path.join(deg_out_dir, f"Jaccard_Curve_{algo_name}_RS_to_MA.csv"), index=False)
+        
+        topk_rs_ma = jaccard_topk_curve(deg_ma_real, deg_rs_f)
+        topk_rs_ma.to_csv(os.path.join(deg_out_dir, f"Jaccard_TopK_{algo_name}_RS_to_MA.csv"), index=False)
 
     # --- Prediction Analysis ---
     pred_out_dir = os.path.join(biomarker_root, "Prediction", run_id)
