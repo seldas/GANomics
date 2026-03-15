@@ -54,6 +54,7 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
     test_dir = os.path.join(task_sync_dir, "test")
     algo_dir = os.path.join(task_sync_dir, "algorithms")
     project_id = run_id.split('_')[0]
+    if project_id!='CycleGAN': return
     
     if not os.path.exists(test_dir):
         print(f"Skipping {run_id}: test directory not found.")
@@ -65,15 +66,22 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
         rs_real = pd.read_csv(os.path.join(test_dir, "rnaseq_real.csv"), index_col=0)
         ma_fake_gan = pd.read_csv(os.path.join(test_dir, "microarray_fake.csv"), index_col=0)
         rs_fake_gan = pd.read_csv(os.path.join(test_dir, "rnaseq_fake.csv"), index_col=0)
+        # consistent the column (gene) names;
+        rs_real.columns = ma_real.columns
+        rs_fake_gan.columns = ma_real.columns
     except Exception as e:
         print(f"Error loading real/GANomics data for {run_id}: {e}")
         return
 
     # 2. Load Labels
-    label_path = os.path.join(BACKEND_DIR, "dataset", project_id, "label.txt")
+    if project_id == 'CycleGAN':
+        label_id = 'NB'
+    else:
+        label_id = project_id
+    label_path = os.path.join(BACKEND_DIR, "dataset", label_id, "label.txt")
     if not os.path.exists(label_path):
         # Try finding label.txt in task directory as fallback
-        label_path = os.path.join(BACKEND_DIR, "dataset", project_id, "labels.txt")
+        label_path = os.path.join(BACKEND_DIR, "dataset", label_id, "labels.txt")
         if not os.path.exists(label_path):
             print(f"Skipping {run_id}: label.txt not found at {label_path}")
             return
@@ -83,15 +91,10 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
     if len(common_idx) < 10:
         print(f"Skipping {run_id}: too few samples ({len(common_idx)})")
         return
-        
     y = df_labels.loc[common_idx, 'label']
 
     # --- Setup Mapping ---
-    mapping_path = os.path.join(BACKEND_DIR, "dataset", project_id, "gene_mapping.tsv")
     gene_map = None
-    if os.path.exists(mapping_path):
-        df_map = pd.read_csv(mapping_path, sep='\t').dropna(subset=['Agilent_Probe_Name', 'GeneSymbol'])
-        gene_map = dict(zip(df_map['Agilent_Probe_Name'].astype(str), df_map['GeneSymbol'].astype(str)))
 
     ma_real_mapped = apply_mapping(ma_real.loc[common_idx], gene_map)
     rs_real_mapped = apply_mapping(rs_real.loc[common_idx], gene_map)
@@ -138,22 +141,21 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
     for algo_name, ma_f, rs_f in algorithms:
         ma_f_mapped = apply_mapping(ma_f.loc[common_idx], gene_map)
         rs_f_mapped = apply_mapping(rs_f.loc[common_idx], gene_map)
-        
         deg_ma_f = run_deg_analysis(ma_f_mapped, y)
         deg_rs_f = run_deg_analysis(rs_f_mapped, y)
         
         # MA -> RS comparison
-        jac_ma_rs = jaccard_threshold_curve(deg_rs_real, deg_ma_f)
+        jac_ma_rs = jaccard_threshold_curve(deg_rs_real, deg_rs_f)
         jac_ma_rs.to_csv(os.path.join(deg_out_dir, f"Jaccard_Curve_{algo_name}_MA_to_RS.csv"), index=False)
         
-        topk_ma_rs = jaccard_topk_curve(deg_rs_real, deg_ma_f)
+        topk_ma_rs = jaccard_topk_curve(deg_rs_real, deg_rs_f)
         topk_ma_rs.to_csv(os.path.join(deg_out_dir, f"Jaccard_TopK_{algo_name}_MA_to_RS.csv"), index=False)
         
         # RS -> MA comparison
-        jac_rs_ma = jaccard_threshold_curve(deg_ma_real, deg_rs_f)
+        jac_rs_ma = jaccard_threshold_curve(deg_ma_real, deg_ma_f)
         jac_rs_ma.to_csv(os.path.join(deg_out_dir, f"Jaccard_Curve_{algo_name}_RS_to_MA.csv"), index=False)
         
-        topk_rs_ma = jaccard_topk_curve(deg_ma_real, deg_rs_f)
+        topk_rs_ma = jaccard_topk_curve(deg_ma_real, deg_ma_f)
         topk_rs_ma.to_csv(os.path.join(deg_out_dir, f"Jaccard_TopK_{algo_name}_RS_to_MA.csv"), index=False)
 
     # --- Prediction Analysis ---
