@@ -118,13 +118,19 @@ GANomics/
 │   ├── backend/        # FastAPI Server, API Logic & Project Data
 │   │   ├── dataset/    # Genomic datasets and configurations
 │   │   ├── results/    # Training checkpoints, logs, and analytics
+│   │   ├── results_ms/ # Manuscript-grade records (comprehensive CSVs used in the paper)
 │   │   ├── src/        # Core GANomics Package (Models & Layers)
 │   │   └── scripts/    # Data processing and analysis tasks
 │   └── frontend/       # React (Vite) User Interface
+├── plan/               # Research scripts and DEG/Sync utilities referenced in the manuscript
 ├── run_dashboard.py    # Unified application launcher (Windows/Linux)
 ├── requirements.txt    # Backend dependencies
 └── app_logs/           # Captured logs from the dashboard sessions
 ```
+
+## 🧾 Manuscript-Level Results
+- `dashboard/backend/results_ms/` stores the CSV exports that were cited in the manuscript, including comparative DEG curves, prediction tables, and biomarker Jaccard scores. Treat this folder as the single source of truth for any figures or tables in MANUSCRIPT R1.
+- When you regenerate results for a new submission, replace the contents of `results_ms/` and update its README/comments so reviewers can trace exactly which data produced each plot.
 
 ---
 
@@ -149,6 +155,10 @@ The primary benchmark dataset curated by the MAQC/SEQC consortium (498 primary s
 - **RNA-seq:** [GEO GSE135134](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE135134)
 
 ---
+
+## 🏗️ Architecture Guides
+- `dashboard/backend/architecture.md`: backend FastAPI orchestration, dataset paths, scripts, and the manuscript-focused `results_ms/` tier. It explains how to navigate the backend when adding new API endpoints or reproducing published figures.
+- `dashboard/frontend/architecture.md`: React + Vite layout, core component groups (`analysis`, `dashboard`, `modals`), and the flow for wiring new analytics views that consume the FastAPI services.
 
 ## 📝 Citation
 If you use GANomics in your research, please cite:
