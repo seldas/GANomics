@@ -52,7 +52,7 @@ def jaccard_topk_curve(deg_ref, deg_test, k_list=[10, 50, 100, 200, 500, 1000]):
 def run_biomarker_for_task(run_id, sync_root, biomarker_root):
     task_sync_dir = os.path.join(sync_root, run_id)
     test_dir = os.path.join(task_sync_dir, "test")
-    algo_dir = os.path.join(task_sync_dir, "algorithms")
+    algo_dir = os.path.join(task_sync_dir, "algorithm")
     project_id = run_id.split('_')[0]
 
     if not os.path.exists(test_dir):
@@ -121,6 +121,7 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
                 except:
                     pass
 
+    print('Total algorithm testing: ', len(algorithms))
     # --- DEG Analysis ---
     deg_out_dir = os.path.join(biomarker_root, "DEG", run_id)
     os.makedirs(deg_out_dir, exist_ok=True)
@@ -233,6 +234,7 @@ def main():
         return
 
     task_ids = [d for d in os.listdir(sync_root) if os.path.isdir(os.path.join(sync_root, d))]
+    task_ids = [d for d in task_ids if 'NB_Ablation_Size_50_Run_'  in d]
     print(f"Found {len(task_ids)} tasks in {sync_root}")
 
     for task_id in tqdm(task_ids, desc="Processing Biomarkers"):
