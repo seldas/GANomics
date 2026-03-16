@@ -75,6 +75,9 @@ def run_comparative_for_task(run_id, sync_root, comp_root, algorithms):
         
         test_ag = pd.read_csv(os.path.join(test_dir, "microarray_real.csv"), index_col=0)
         test_ngs = pd.read_csv(os.path.join(test_dir, "rnaseq_real.csv"), index_col=0)
+        # harmonize gene id (columns)
+        train_ngs.columns = train_ag.columns
+        test_ngs.columns = test_ag.columns
         
         # GANomics Results (Fake) produced by previous sync step
         df_ma_fake = pd.read_csv(os.path.join(test_dir, "microarray_fake.csv"), index_col=0) if os.path.exists(os.path.join(test_dir, "microarray_fake.csv")) else None
@@ -84,33 +87,53 @@ def run_comparative_for_task(run_id, sync_root, comp_root, algorithms):
         return
 
     # Run Baselines (only if requested)
+    if algorithms:
+        alg_dir = os.path.join(task_sync_dir, 'algorithm')
+        if not os.path.exists(alg_dir):
+            os.system('mkdir -p '+alg_dir)
+
     df_ma_combat, df_rs_combat = None, None
     if 'combat' in algorithms and train_ag is not None and train_ngs is not None:
         res_combat = combat_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
         df_ma_combat, df_rs_combat = res_combat['rnaseq_to_microarray'], res_combat['microarray_to_rnaseq']
-    
+        df_ma_combat.to_csv(os.path.join(alg_dir, 'microarray_fake_combat.csv'))
+        df_rs_combat.to_csv(os.path.join(alg_dir, 'rnaseq_fake_combat.csv'))
+        
+
     df_ma_yugene, df_rs_yugene = None, None
     if 'yugene' in algorithms and train_ag is not None and train_ngs is not None:
         res_yugene = yugene_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
         df_ma_yugene, df_rs_yugene = res_yugene['rnaseq_to_microarray'], res_yugene['microarray_to_rnaseq']
-    
+        df_ma_yugene.to_csv(os.path.join(alg_dir, 'microarray_fake_yugene.csv'))
+        df_rs_yugene.to_csv(os.path.join(alg_dir, 'rnaseq_fake_yugene.csv'))
+
+        
     df_ma_cublock, df_rs_cublock = None, None
     if 'cublock' in algorithms and train_ag is not None and train_ngs is not None:
         trans_rs = fit_cublock_translator(train_ag, train_ngs)
         df_rs_cublock = translate_cublock(test_ag, trans_rs) if test_ag is not None else None
         trans_ma = fit_cublock_translator(train_ngs, train_ag)
         df_ma_cublock = translate_cublock(test_ngs, trans_ma) if test_ngs is not None else None
+        df_ma_cublock.to_csv(os.path.join(alg_dir, 'microarray_fake_cublock.csv'))
+        df_rs_cublock.to_csv(os.path.join(alg_dir, 'rnaseq_fake_cublock.csv'))
+        
     
     df_ma_tdm, df_rs_tdm = None, None
     if 'tdm' in algorithms and train_ag is not None and train_ngs is not None:
         res_tdm = tdm_normalize(train_ag, test_ag, train_ngs, test_ngs)
         df_ma_tdm, df_rs_tdm = res_tdm['rnaseq_to_microarray'], res_tdm['microarray_to_rnaseq']
+        df_ma_tdm.to_csv(os.path.join(alg_dir, 'microarray_fake_tdm.csv'))
+        df_rs_tdm.to_csv(os.path.join(alg_dir, 'rnaseq_fake_tdm.csv'))
+        
     
     df_ma_qn, df_rs_qn = None, None
     if 'qn' in algorithms and train_ag is not None and train_ngs is not None:
         res_qn = quantile_normalize(train_ag, test_ag, train_ngs, test_ngs)
         df_ma_qn, df_rs_qn = res_qn['rnaseq_to_microarray'], res_qn['microarray_to_rnaseq']
-
+        df_ma_qn.to_csv(os.path.join(alg_dir, 'microarray_fake_qn.csv'))
+        df_rs_qn.to_csv(os.path.join(alg_dir, 'rnaseq_fake_qn.csv'))
+        
+    
     # Aggregate Metrics for comparisons
     comparisons = []
     if test_ag is not None:
@@ -148,7 +171,7 @@ def run_comparative_for_task(run_id, sync_root, comp_root, algorithms):
 def main():
     parser = argparse.ArgumentParser(description="Batch Comparative Analysis for GANomics")
     parser.add_argument("--parent_dir", type=str, help="Parent results directory containing 2_testSync (e.g. dashboard/backend/results)")
-    parser.add_argument("--algorithms", type=str, nargs="+", default=[], help="Baseline algorithms to run (default: none, only GANomics included)")
+    parser.add_argument("--algorithms", type=str, nargs="+", default='[combat,yugene,cublock,qn,tdm]', help="Baseline algorithms to run (default: none, only GANomics included)")
     args = parser.parse_args()
 
     # Determine absolute paths for input and output
@@ -162,6 +185,7 @@ def main():
 
     # Iterate through all task directories in 2_testSync
     task_ids = [d for d in os.listdir(sync_root) if os.path.isdir(os.path.join(sync_root, d))]
+    task_ids = [d for d in task_ids if 'Ablation_Size_50' in d] # specific filters
     print(f"Found {len(task_ids)} tasks in {sync_root}")
 
     for task_id in tqdm(task_ids, desc="Processing tasks"):

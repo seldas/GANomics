@@ -12,13 +12,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.abspath(os.path.join(current_dir, '..'))
 backend_dir = os.path.join(root_dir, 'dashboard', 'backend')
 sys.path.insert(0, backend_dir)
-from src.models.ganomics_model import GANomicsModel
+from src.models.ganomics_model_compatible import GANomicsModel
 # from old_ver.model.test_model import TestModel as GANomicsModel
 
 def run_ms_sync():
-    ms_training_dir = os.path.join(backend_dir, "results", "1_Training")
+    ms_training_dir = os.path.join(backend_dir, "results_ms", "1_Training")
     checkpoint_root = os.path.join(ms_training_dir, "checkpoints")
-    sync_root = os.path.join(backend_dir, "results", "2_SyncData")
+    sync_root = os.path.join(backend_dir, "results_ms", "2_SyncData")
     dataset_root = os.path.join(backend_dir, "dataset")
 
     if not os.path.exists(checkpoint_root):
@@ -29,7 +29,7 @@ def run_ms_sync():
     run_ids = []
     for d in os.listdir(checkpoint_root):
         d_path = os.path.join(checkpoint_root, d)
-        if os.path.isdir(d_path) and os.path.exists(os.path.join(d_path, "net_latest.pth")):
+        if os.path.isdir(d_path) and os.path.exists(os.path.join(d_path, "latest_net_G_A.pth")):
             run_ids.append(d)
             
     print(f"Found {len(run_ids)} tasks to process.")
@@ -80,22 +80,16 @@ def run_ms_sync():
         # 3. Setup Model
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         input_nc = len(df_a_full.columns)
+        # Initialize model shell
+        model = GANomicsModel(input_nc=input_nc, output_nc=input_nc, device=device)
         
+        # Load manuscript-specific checkpoint structure (separate Generator files)
         try:
-            # Initialize model with appropriate configuration
-            model = GANomicsModel(input_nc=input_nc, output_nc=input_nc, device=device)
-            
-            # Load checkpoint with all components
-            checkpoint_path = os.path.join(ckp_dir, "net_latest.pth")
-            if not os.path.exists(checkpoint_path):
-                print(f"  ⚠️ Skipping {run_id}: net_latest.pth not found")
-                continue
-                
-            model.load_networks(checkpoint_path)
+            model.netG_A.load_state_dict(torch.load(os.path.join(ckp_dir, "latest_net_G_A.pth"), map_location=device))
+            model.netG_B.load_state_dict(torch.load(os.path.join(ckp_dir, "latest_net_G_B.pth"), map_location=device))
             model.eval()
-            
         except Exception as e:
-            print(f"  ❌ Error loading model for {run_id}: {e}")
+            print(f"  ❌ Error loading weights for {run_id}: {e}")
             continue
 
         # 4. Process both Train and Test splits
@@ -117,9 +111,9 @@ def run_ms_sync():
                 tensor_b = torch.from_numpy(real_b.values).float().to(device)
                 
                 # A -> B (Microarray -> RNAseq)
-                fake_b_tensor = model.netG_A(tensor_a).detach()
+                fake_b_tensor = model.netG_A(tensor_a)
                 # B -> A (RNAseq -> Microarray)
-                fake_a_tensor = model.netG_B(tensor_b).detach()
+                fake_a_tensor = model.netG_B(tensor_b)
                 
                 # Squeeze handling for batch_size=1 vs batch_size>1
                 fb_np = fake_b_tensor.cpu().numpy()

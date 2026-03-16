@@ -54,8 +54,7 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
     test_dir = os.path.join(task_sync_dir, "test")
     algo_dir = os.path.join(task_sync_dir, "algorithms")
     project_id = run_id.split('_')[0]
-    if project_id!='CycleGAN': return
-    
+
     if not os.path.exists(test_dir):
         print(f"Skipping {run_id}: test directory not found.")
         return
