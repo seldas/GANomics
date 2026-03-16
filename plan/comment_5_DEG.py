@@ -11,7 +11,7 @@ Results are derived from dashboard/backend/results_ms/4_Biomarkers/DEG.
 """
 
 def aggregate_deg_results():
-    base_path = r'dashboard\backend\results_ms\4_Biomarkers\DEG'
+    base_path = r'dashboard/backend/results_ms/4_Biomarkers/DEG'
     # Comparison groups as requested
     method_map = {
         'CycleGAN_50': 'CycleGAN (Baseline)',

@@ -1,4 +1,4 @@
-export const API_BASE = "http://localhost:8832/api";
+export const API_BASE = "http://ncshpcgpu01:8832/api";
 
 export const LOSS_METRICS = [
   { key: 'G_A', color: '#007bff', label: 'Gen A' },
