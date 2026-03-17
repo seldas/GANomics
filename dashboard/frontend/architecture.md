@@ -66,7 +66,9 @@ dashboard/frontend/
 
 ## Backend Integration
 
-The frontend relies on FastAPI endpoints under `http://localhost:8832/api/`. When adding new UI routes or data displays:
+The frontend communicates with FastAPI endpoints via `API_BASE`, which now dynamically resolves to the current page’s origin (`window.location`). That means when the app is served from `http://ncshpcgpu01:8832`, it will automatically point to `http://ncshpcgpu01:8832/api`. To force a different target (e.g., when you build for another host), set the `VITE_API_BASE` environment variable before running `npm run dev` or `npm run build`. The constant file appends `/api` so you only need to supply the host (e.g., `VITE_API_BASE=https://ncshocgpu01:8832`).
+
+When adding new UI routes or data displays:
 1. Identify/make the matching backend route in `dashboard/backend/main.py` or `scripts/`.
 2. Update `src/types.ts` to reflect the JSON contract.
 3. Update constants (if endpoint path, algorithm key, etc. were added).

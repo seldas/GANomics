@@ -1,4 +1,13 @@
-export const API_BASE = "http://ncshpcgpu01:8832/api";
+const deriveApiHost = (): string => {
+  if (import.meta.env.VITE_API_BASE) return import.meta.env.VITE_API_BASE;
+  if (typeof window !== "undefined") {
+    const { protocol, hostname, port } = window.location;
+    return `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+  }
+  return "http://localhost:8832";
+};
+
+export const API_BASE = `${deriveApiHost()}/api`;
 
 export const LOSS_METRICS = [
   { key: 'G_A', color: '#007bff', label: 'Gen A' },
