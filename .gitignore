@@ -1,5 +1,6 @@
 package-lock.json
 venv/
+.env
 
 *.docx
 
