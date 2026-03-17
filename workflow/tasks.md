@@ -1,42 +1,12 @@
 # Offline Training Task Log
+## default folder dashboard/backend/results_ms
 
-This keeps track of the `workflow/train.py` invocations that are currently running or were just executed for manuscript data. Each entry documents the task ID, purpose, and the exact command used so you can reproduce or rerun it manually.
+`NB_398_0` - `NB_398_4`: We first evaluated GANomics on the NB dataset (n = 498). Using 398 paired profiles for training and holding out 100 for testing, we repeated the train/test split five times for robustness. 
 
-| Task ID | Description | Command | Notes |
-| --- | --- | --- | --- |
-| `NB_Size_400` | Train on the Neuroblastoma project with 400 samples per epoch; repeat 5 independent seeds for stability. All other config values (beta=10, lambda=10, epochs=500/decay) remain at their defaults from `*_config.yaml`. | ```bash
-python workflow/train.py \
-  --dataset-dir dashboard/backend/dataset/NB \
-  --samples 400 \
-  --epochs 500 \
-  --run-name NB_Size_400_Run_0
-python workflow/train.py \
-  --dataset-dir dashboard/backend/dataset/NB \
-  --samples 400 \
-  --epochs 500 \
-  --run-name NB_Size_400_Run_1
-python workflow/train.py \
-  --dataset-dir dashboard/backend/dataset/NB \
-  --samples 400 \
-  --epochs 500 \
-  --run-name NB_Size_400_Run_2
-python workflow/train.py \
-  --dataset-dir dashboard/backend/dataset/NB \
-  --samples 400 \
-  --epochs 500 \
-  --run-name NB_Size_400_Run_3
-python workflow/train.py \
-  --dataset-dir dashboard/backend/dataset/NB \
-  --samples 400 \
-  --epochs 500 \
-  --run-name NB_Size_400_Run_4
-``` | Each run writes checkpoints/logs under `dashboard/backend/results_ms/1_Training`. Adjust `--run-name` suffix to keep outputs tied to unique repeats. |
-| `CycleGAN_Size_50` | Benchmark CycleGAN architecture on the 50-sample run from the manuscript to compare legacy vs. GANomics performance. Uses the project folder `dashboard/backend/dataset/CycleGAN_50_0` and default betas/lambdas. | ```bash
-python workflow/train.py \
-  --dataset-dir dashboard/backend/dataset/CycleGAN_50_0 \
-  --samples 50 \
-  --epochs 500 \
-  --run-name CycleGAN_50_0_Run_0
-``` | Add additional repeats by rerunning with `_Run_1`, `_Run_2`, etc., if you need more statistical confidence. |
+ - Observed results: Training converged in ~30 epochs, with generator, discriminator, cycle-consistency, and feedback losses stabilizing concordantly (Fig. 2a–d). The per-sample L1 distance between real microarray and RNA-seq profiles from the same sample was used as a baseline; translations with lower distances were deemed successful. GANomics fell well below the baseline on the 100 held-out samples (Fig. 2e–f).
 
-Add new rows here whenever you queue another offline batch task so the manuscript team can track what’s already been generated.
+`NB_100_0` - `NB-300-4`: To determine the number of paired samples required for reliable translation, we varied the training set size from 10 to 400 paired profiles, randomly selected from the full neuroblastoma dataset (n = 498). The remaining samples were reserved for testing. To balance training efficiency and convergence, we used 50 epochs for larger training sets (100–398 pairs), and 500 epochs for small training sets (10–50 pairs). Each train–test split was repeated five times with random sampling to ensure robustness.
+
+`NB_Size_10_run_0` - `Nb_Size_50_run_4`: experiments running with old version of GANomics Model; the architecture of GANomics model has been optimized for its I/O to accelerate training process.
+
+
