@@ -7,7 +7,7 @@ from scipy.stats import pearsonr, spearmanr
 from tqdm import tqdm
 
 # Add the backend directory to sys.path to make 'src' importable
-# This script is located in ./plan/
+# This script is located in ./workflow/
 # Backend is in ./dashboard/backend/
 PLAN_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.abspath(os.path.join(PLAN_DIR, "..", "dashboard", "backend"))
