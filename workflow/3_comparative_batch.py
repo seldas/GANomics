@@ -86,71 +86,76 @@ def run_comparative_for_task(run_id, sync_root, comp_root, algorithms):
         print(f"Error loading data for {run_id}: {e}")
         return
 
-    # Run Baselines (only if requested)
-    if algorithms:
-        alg_dir = os.path.join(task_sync_dir, 'algorithm')
-        if not os.path.exists(alg_dir):
-            os.system('mkdir -p '+alg_dir)
-
-    df_ma_combat, df_rs_combat = None, None
-    if 'combat' in algorithms and train_ag is not None and train_ngs is not None:
-        res_combat = combat_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
-        df_ma_combat, df_rs_combat = res_combat['rnaseq_to_microarray'], res_combat['microarray_to_rnaseq']
-        df_ma_combat.to_csv(os.path.join(alg_dir, 'microarray_fake_combat.csv'))
-        df_rs_combat.to_csv(os.path.join(alg_dir, 'rnaseq_fake_combat.csv'))
-        
-
-    df_ma_yugene, df_rs_yugene = None, None
-    if 'yugene' in algorithms and train_ag is not None and train_ngs is not None:
-        res_yugene = yugene_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
-        df_ma_yugene, df_rs_yugene = res_yugene['rnaseq_to_microarray'], res_yugene['microarray_to_rnaseq']
-        df_ma_yugene.to_csv(os.path.join(alg_dir, 'microarray_fake_yugene.csv'))
-        df_rs_yugene.to_csv(os.path.join(alg_dir, 'rnaseq_fake_yugene.csv'))
-
-        
-    df_ma_cublock, df_rs_cublock = None, None
-    if 'cublock' in algorithms and train_ag is not None and train_ngs is not None:
-        trans_rs = fit_cublock_translator(train_ag, train_ngs)
-        df_rs_cublock = translate_cublock(test_ag, trans_rs) if test_ag is not None else None
-        trans_ma = fit_cublock_translator(train_ngs, train_ag)
-        df_ma_cublock = translate_cublock(test_ngs, trans_ma) if test_ngs is not None else None
-        df_ma_cublock.to_csv(os.path.join(alg_dir, 'microarray_fake_cublock.csv'))
-        df_rs_cublock.to_csv(os.path.join(alg_dir, 'rnaseq_fake_cublock.csv'))
-        
-    
-    df_ma_tdm, df_rs_tdm = None, None
-    if 'tdm' in algorithms and train_ag is not None and train_ngs is not None:
-        res_tdm = tdm_normalize(train_ag, test_ag, train_ngs, test_ngs)
-        df_ma_tdm, df_rs_tdm = res_tdm['rnaseq_to_microarray'], res_tdm['microarray_to_rnaseq']
-        df_ma_tdm.to_csv(os.path.join(alg_dir, 'microarray_fake_tdm.csv'))
-        df_rs_tdm.to_csv(os.path.join(alg_dir, 'rnaseq_fake_tdm.csv'))
-        
-    
-    df_ma_qn, df_rs_qn = None, None
-    if 'qn' in algorithms and train_ag is not None and train_ngs is not None:
-        res_qn = quantile_normalize(train_ag, test_ag, train_ngs, test_ngs)
-        df_ma_qn, df_rs_qn = res_qn['rnaseq_to_microarray'], res_qn['microarray_to_rnaseq']
-        df_ma_qn.to_csv(os.path.join(alg_dir, 'microarray_fake_qn.csv'))
-        df_rs_qn.to_csv(os.path.join(alg_dir, 'rnaseq_fake_qn.csv'))
-        
-    
-    # Aggregate Metrics for comparisons
     comparisons = []
-    if test_ag is not None:
+    if test_ag is not None:        
         if df_ma_fake is not None: comparisons.append(("GANomics (MA)", test_ag, df_ma_fake))
-        if df_ma_combat is not None: comparisons.append(("ComBat (MA)",   test_ag, df_ma_combat))
-        if df_ma_yugene is not None: comparisons.append(("YuGene (MA)",   test_ag, df_ma_yugene))
-        if df_ma_cublock is not None: comparisons.append(("CuBlock (MA)",  test_ag, df_ma_cublock))
-        if df_ma_tdm is not None: comparisons.append(("TDM (MA)",      test_ag, df_ma_tdm))
-        if df_ma_qn is not None: comparisons.append(("Quantile (MA)", test_ag, df_ma_qn))
-        
     if test_ngs is not None:
         if df_rs_fake is not None: comparisons.append(("GANomics (RS)", test_ngs, df_rs_fake))
-        if df_rs_combat is not None: comparisons.append(("ComBat (RS)",   test_ngs, df_rs_combat))
-        if df_rs_yugene is not None: comparisons.append(("YuGene (RS)",   test_ngs, df_rs_yugene))
-        if df_rs_cublock is not None: comparisons.append(("CuBlock (RS)",  test_ngs, df_rs_cublock))
-        if df_rs_tdm is not None: comparisons.append(("TDM (RS)",      test_ngs, df_rs_tdm))
-        if df_rs_qn is not None: comparisons.append(("Quantile (RS)", test_ngs, df_rs_qn))
+
+    if 'NB_50_' in run_id:
+        # Run Baselines (only if requested)
+        if algorithms:
+            alg_dir = os.path.join(task_sync_dir, 'algorithm')
+            if not os.path.exists(alg_dir):
+                os.system('mkdir -p '+alg_dir)
+
+        df_ma_combat, df_rs_combat = None, None
+        if 'combat' in algorithms and train_ag is not None and train_ngs is not None:
+            res_combat = combat_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
+            df_ma_combat, df_rs_combat = res_combat['rnaseq_to_microarray'], res_combat['microarray_to_rnaseq']
+            df_ma_combat.to_csv(os.path.join(alg_dir, 'microarray_fake_combat.csv'))
+            df_rs_combat.to_csv(os.path.join(alg_dir, 'rnaseq_fake_combat.csv'))
+            
+
+        df_ma_yugene, df_rs_yugene = None, None
+        if 'yugene' in algorithms and train_ag is not None and train_ngs is not None:
+            res_yugene = yugene_evaluate_paired(train_ag, train_ngs, test_ag, test_ngs)
+            df_ma_yugene, df_rs_yugene = res_yugene['rnaseq_to_microarray'], res_yugene['microarray_to_rnaseq']
+            df_ma_yugene.to_csv(os.path.join(alg_dir, 'microarray_fake_yugene.csv'))
+            df_rs_yugene.to_csv(os.path.join(alg_dir, 'rnaseq_fake_yugene.csv'))
+
+            
+        df_ma_cublock, df_rs_cublock = None, None
+        if 'cublock' in algorithms and train_ag is not None and train_ngs is not None:
+            trans_rs = fit_cublock_translator(train_ag, train_ngs)
+            df_rs_cublock = translate_cublock(test_ag, trans_rs) if test_ag is not None else None
+            trans_ma = fit_cublock_translator(train_ngs, train_ag)
+            df_ma_cublock = translate_cublock(test_ngs, trans_ma) if test_ngs is not None else None
+            df_ma_cublock.to_csv(os.path.join(alg_dir, 'microarray_fake_cublock.csv'))
+            df_rs_cublock.to_csv(os.path.join(alg_dir, 'rnaseq_fake_cublock.csv'))
+            
+        
+        df_ma_tdm, df_rs_tdm = None, None
+        if 'tdm' in algorithms and train_ag is not None and train_ngs is not None:
+            res_tdm = tdm_normalize(train_ag, test_ag, train_ngs, test_ngs)
+            df_ma_tdm, df_rs_tdm = res_tdm['rnaseq_to_microarray'], res_tdm['microarray_to_rnaseq']
+            df_ma_tdm.to_csv(os.path.join(alg_dir, 'microarray_fake_tdm.csv'))
+            df_rs_tdm.to_csv(os.path.join(alg_dir, 'rnaseq_fake_tdm.csv'))
+            
+        
+        df_ma_qn, df_rs_qn = None, None
+        if 'qn' in algorithms and train_ag is not None and train_ngs is not None:
+            res_qn = quantile_normalize(train_ag, test_ag, train_ngs, test_ngs)
+            df_ma_qn, df_rs_qn = res_qn['rnaseq_to_microarray'], res_qn['microarray_to_rnaseq']
+            df_ma_qn.to_csv(os.path.join(alg_dir, 'microarray_fake_qn.csv'))
+            df_rs_qn.to_csv(os.path.join(alg_dir, 'rnaseq_fake_qn.csv'))
+            
+        
+        # Aggregate Metrics for comparisons
+        
+        if test_ag is not None:            
+            if df_ma_combat is not None: comparisons.append(("ComBat (MA)",   test_ag, df_ma_combat))
+            if df_ma_yugene is not None: comparisons.append(("YuGene (MA)",   test_ag, df_ma_yugene))
+            if df_ma_cublock is not None: comparisons.append(("CuBlock (MA)",  test_ag, df_ma_cublock))
+            if df_ma_tdm is not None: comparisons.append(("TDM (MA)",      test_ag, df_ma_tdm))
+            if df_ma_qn is not None: comparisons.append(("Quantile (MA)", test_ag, df_ma_qn))
+            
+        if test_ngs is not None:
+            if df_rs_combat is not None: comparisons.append(("ComBat (RS)",   test_ngs, df_rs_combat))
+            if df_rs_yugene is not None: comparisons.append(("YuGene (RS)",   test_ngs, df_rs_yugene))
+            if df_rs_cublock is not None: comparisons.append(("CuBlock (RS)",  test_ngs, df_rs_cublock))
+            if df_rs_tdm is not None: comparisons.append(("TDM (RS)",      test_ngs, df_rs_tdm))
+            if df_rs_qn is not None: comparisons.append(("Quantile (RS)", test_ngs, df_rs_qn))
         
     if test_ag is not None and test_ngs is not None:
         comparisons.append(("Baseline (paired)", test_ag, test_ngs))
@@ -185,7 +190,7 @@ def main():
 
     # Iterate through all task directories in 2_testSync
     task_ids = [d for d in os.listdir(sync_root) if os.path.isdir(os.path.join(sync_root, d))]
-    task_ids = [d for d in task_ids if 'Ablation_Size_50' in d] # specific filters
+    # task_ids = [d for d in task_ids if 'Ablation_Size_50' in d] # specific filters
     print(f"Found {len(task_ids)} tasks in {sync_root}")
 
     for task_id in tqdm(task_ids, desc="Processing tasks"):

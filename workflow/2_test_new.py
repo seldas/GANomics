@@ -28,6 +28,7 @@ def run_ms_sync():
     # Filter for directories that contain .pth files
     run_ids = []
     for d in os.listdir(checkpoint_root):
+        # if 'NB_50_' not in d: continue
         d_path = os.path.join(checkpoint_root, d)
         if os.path.isdir(d_path) and os.path.exists(os.path.join(d_path, "net_latest.pth")):
             run_ids.append(d)
