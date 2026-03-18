@@ -16,9 +16,9 @@ from src.models.ganomics_model_compatible import GANomicsModel
 # from old_ver.model.test_model import TestModel as GANomicsModel
 
 def run_ms_sync():
-    ms_training_dir = os.path.join(backend_dir, "results_ms", "1_Training")
+    ms_training_dir = os.path.join(backend_dir, "results_old", "1_Training")
     checkpoint_root = os.path.join(ms_training_dir, "checkpoints")
-    sync_root = os.path.join(backend_dir, "results_ms", "2_SyncData")
+    sync_root = os.path.join(backend_dir, "results_old", "2_SyncData")
     dataset_root = os.path.join(backend_dir, "dataset")
 
     if not os.path.exists(checkpoint_root):
@@ -28,6 +28,7 @@ def run_ms_sync():
     # Filter for directories that contain .pth files
     run_ids = []
     for d in os.listdir(checkpoint_root):
+        if 'LAML' not in d: continue
         d_path = os.path.join(checkpoint_root, d)
         if os.path.isdir(d_path) and os.path.exists(os.path.join(d_path, "latest_net_G_A.pth")):
             run_ids.append(d)

@@ -17,3 +17,6 @@ dashboard/backend/results_ms/2_SyncData/
 # ignore raw data files
 dashboard/backend/dataset/*/df_ag.tsv
 dashboard/backend/dataset/*/df_rs.tsv
+
+#python notebook tmp files:
+.ipynb_checkpoints/
