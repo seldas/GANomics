@@ -222,7 +222,7 @@ def run_biomarker_for_task(run_id, sync_root, biomarker_root):
 
 def main():
     parser = argparse.ArgumentParser(description="Batch Biomarker Analysis (DEG and Prediction)")
-    parser.add_argument("--parent_dir", type=str, default="dashboard/backend/results", help="Parent results directory containing 2_SyncData")
+    parser.add_argument("--parent_dir", type=str, default="dashboard/backend/results_ms", help="Parent results directory containing 2_SyncData")
     args = parser.parse_args()
 
     parent_dir = os.path.abspath(args.parent_dir)
@@ -234,7 +234,7 @@ def main():
         return
 
     task_ids = [d for d in os.listdir(sync_root) if os.path.isdir(os.path.join(sync_root, d))]
-    task_ids = [d for d in task_ids if 'NB_Ablation_Size_50_Run_'  in d]
+    task_ids = [d for d in task_ids if 'NB_100_'  in d]
     print(f"Found {len(task_ids)} tasks in {sync_root}")
 
     for task_id in tqdm(task_ids, desc="Processing Biomarkers"):
