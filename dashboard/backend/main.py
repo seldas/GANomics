@@ -70,15 +70,16 @@ MS_SYNC_DIR = os.path.join(RESULTS_MS_DIR, "2_SyncData")
 MS_COMPARATIVE_DIR = os.path.join(RESULTS_MS_DIR, "3_ComparativeAnalysis")
 MS_BIOMARKERS_DIR = os.path.join(RESULTS_MS_DIR, "4_Biomarkers")
 
-class ProjectInfo(BaseModel):
-    id: str
-    name: str
-    description: Optional[str] = ""
-    genes: int
-    samples: int
-    config_path: str
-    has_label: bool
-    config: Optional[dict] = None
+class ExperimentInfo(BaseModel):
+    exp_name: str
+    dataset_name: str
+    result_category: str
+    training_checkpoints_folder: str
+    training_logs: str
+    sync_data_files: dict
+    comparative_analysis_results: str
+    deg_analysis_result_folder: str
+    modeling_result_folder: str
 
 class TrainRequest(BaseModel):
     config_path: str
@@ -160,65 +161,78 @@ def parse_log_line(line: str):
         
     return data
 
-@app.get("/api/projects", response_model=List[ProjectInfo])
-async def list_projects(db: Session = Depends(get_db)):
-    projects = []
-    db_projects = db.query(Project).all()
-    for project in db_projects:
-        project_config = db.query(ProjectConfig).filter(ProjectConfig.project_id == project.id).first()
-        projects.append(ProjectInfo(
-            id=project.id,
-            name=project.name,
-            description=project.description,
-            genes=project.genes,
-            samples=project.samples,
-            config_path=project.config_path,
-            has_label=project.has_label,
-            config=project_config.config if project_config else None
+@app.get("/api/experiments", response_model=List[ExperimentInfo])
+async def list_experiments(db: Session = Depends(get_db)):
+    experiments = []
+    db_experiments = db.query(Experiment).all()
+    for experiment in db_experiments:
+        experiments.append(ExperimentInfo(
+            exp_name=experiment.exp_name,
+            dataset_name=experiment.dataset_name,
+            result_category=experiment.result_category,
+            training_checkpoints_folder=experiment.training_checkpoints_folder,
+            training_logs=experiment.training_logs,
+            sync_data_files=experiment.sync_data_files,
+            comparative_analysis_results=experiment.comparative_analysis_results,
+            deg_analysis_result_folder=experiment.deg_analysis_result_folder,
+            modeling_result_folder=experiment.modeling_result_folder
         ))
-    return projects
+    return experiments
 
-@app.get("/api/projects/{project_id}/samples/download")
-async def download_samples(project_id: str, db: Session = Depends(get_db)):
-    db_project = db.query(Project).filter(Project.id == project_id).first()
-    if not db_project: raise HTTPException(status_code=404, detail="Project not found")
+@app.get("/api/datasets", response_model=List[DatasetInfo])
+async def list_datasets(db: Session = Depends(get_db)):
+    datasets = []
+    db_datasets = db.query(Dataset).all()
+    for dataset in db_datasets:
+        datasets.append(DatasetInfo(
+            dataset_name=dataset.dataset_name,
+            folder=dataset.folder,
+            config_file=dataset.config_file
+        ))
+    return datasets
+
+@app.get("/api/datasets/{dataset_name}/samples/download")
+async def download_samples(dataset_name: str, db: Session = Depends(get_db)):
+    db_dataset = db.query(Dataset).filter(Dataset.dataset_name == dataset_name).first()
+    if not db_dataset: raise HTTPException(status_code=404, detail="Dataset not found")
     
-    samples_path = os.path.join(db_project.config_path).replace('_config.yaml', 'samples.tsv')
+    samples_path = os.path.join(db_dataset.folder, "samples.tsv")
     if not os.path.exists(samples_path): raise HTTPException(status_code=404)
-    return FileResponse(samples_path, filename=f"{project_id}_samples.tsv")
+    return FileResponse(samples_path, filename=f"{dataset_name}_samples.tsv")
 
-@app.post("/api/projects/{project_id}/labels/upload")
-async def upload_labels(project_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    db_project = db.query(Project).filter(Project.id == project_id).first()
-    if not db_project: raise HTTPException(status_code=404, detail="Project not found")
+@app.post("/api/datasets/{dataset_name}/labels/upload")
+async def upload_labels(dataset_name: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    db_dataset = db.query(Dataset).filter(Dataset.dataset_name == dataset_name).first()
+    if not db_dataset: raise HTTPException(status_code=404, detail="Dataset not found")
     
-    proj_dir = os.path.dirname(db_project.config_path)
-    final_path = os.path.join(proj_dir, "label.txt")
+    final_path = os.path.join(db_dataset.folder, "label.txt")
     with open(final_path, "wb") as f: f.write(await file.read())
     
-    # Update has_label status in database
-    db_project.has_label = True
+    # Update experiment has_label status in database
+    db_experiments = db.query(Experiment).filter(Experiment.dataset_name == dataset_name).all()
+    for experiment in db_experiments:
+        experiment.has_label = True
     db.commit()
     
     return {"message": "label.txt uploaded successfully"}
 
-@app.post("/api/projects/create")
-async def create_project(
-    project_name: str = Form(...), description: str = Form(""),
+@app.post("/api/datasets/create")
+async def create_dataset(
+    dataset_name: str = Form(...), description: str = Form(""),
     df_ag: UploadFile = File(...), df_rs: UploadFile = File(...),
     label: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
     try:
         # Save files
-        proj_dir = os.path.join(DATASET_DIR, project_name)
-        os.makedirs(proj_dir, exist_ok=True)
-        ag_path = os.path.join(proj_dir, "df_ag.tsv")
-        rs_path = os.path.join(proj_dir, "df_rs.tsv")
+        dataset_folder = os.path.join(DATASET_DIR, dataset_name)
+        os.makedirs(dataset_folder, exist_ok=True)
+        ag_path = os.path.join(dataset_folder, "df_ag.tsv")
+        rs_path = os.path.join(dataset_folder, "df_rs.tsv")
         with open(ag_path, "wb") as f: f.write(await df_ag.read())
         with open(rs_path, "wb") as f: f.write(await df_rs.read())
         if label:
-            with open(os.path.join(proj_dir, "label.txt"), "wb") as f: f.write(await label.read())
+            with open(os.path.join(dataset_folder, "label.txt"), "wb") as f: f.write(await label.read())
         
         # Count genes and samples
         df_peek = pd.read_csv(ag_path, sep='\t', index_col=0, nrows=0)
@@ -227,44 +241,35 @@ async def create_project(
             
         # Create config
         config = {
-            'metadata': {'name': project_name, 'description': description, 'genes': genes_count, 'samples': samples_count},
+            'metadata': {'name': dataset_name, 'description': description, 'genes': genes_count, 'samples': samples_count},
             'model': {'input_nc': genes_count, 'output_nc': genes_count, 'lambda_A': 10.0, 'lambda_B': 10.0, 'lambda_feedback': 10.0, 'lambda_idt': 0.5, 'gan_mode': 'lsgan'},
             'optimizer': {'lr': 0.0002, 'beta1': 0.5, 'beta2': 0.999},
             'train': {'n_epochs': 500, 'n_epochs_decay': 50, 'batch_size': 1, 'device': 'cuda:0', 'seed': 42, 'print_freq': 10, 'save_epoch_freq': 10, 'explosion_factor': 3.0},
-            'dataset': {'path_A': f'dataset/{project_name}/df_ag.tsv', 'path_B': f'dataset/{project_name}/df_rs.tsv', 'max_samples': samples_count, 'force_index_mapping': True},
-            'output': {'checkpoints_dir': 'results/1_Training/checkpoints', 'name': f'{project_name}_GANomics', 'logs_dir': 'results/1_Training/logs'},
+            'dataset': {'path_A': f'dataset/{dataset_name}/df_ag.tsv', 'path_B': f'dataset/{dataset_name}/df_rs.tsv', 'max_samples': samples_count, 'force_index_mapping': True},
+            'output': {'checkpoints_dir': 'results/1_Training/checkpoints', 'name': f'{dataset_name}_GANomics', 'logs_dir': 'results/1_Training/logs'},
             'default_ablation': {'size': 50, 'beta': 10.0, 'lambda': 10.0}
         }
-        config_path = os.path.join(proj_dir, f"{project_name.lower()}_config.yaml")
+        config_path = os.path.join(dataset_folder, f"{dataset_name.lower()}_config.yaml")
         with open(config_path, 'w') as f: yaml.dump(config, f)
         
         # Create samples.tsv and genelist.tsv
         df_ag_full = pd.read_csv(ag_path, sep='\t', index_col=0)
-        pd.DataFrame({'sample_id': df_ag_full.index.tolist()}).to_csv(os.path.join(proj_dir, "samples.tsv"), sep='\t', index=False)
-        pd.DataFrame({'gene_id': df_ag_full.columns.tolist()}).to_csv(os.path.join(proj_dir, "genelist.tsv"), sep='\t', index=False)
+        pd.DataFrame({'sample_id': df_ag_full.index.tolist()}).to_csv(os.path.join(dataset_folder, "samples.tsv"), sep='\t', index=False)
+        pd.DataFrame({'gene_id': df_ag_full.columns.tolist()}).to_csv(os.path.join(dataset_folder, "genelist.tsv"), sep='\t', index=False)
 
         # Add to database
-        db_project = Project(
-            id=project_name,
-            name=project_name,
-            description=description,
-            genes=genes_count,
-            samples=samples_count,
-            has_label=label is not None,
-            config_path=config_path
+        db_dataset = Dataset(
+            dataset_name=dataset_name,
+            folder=dataset_folder,
+            config_file=config_path
         )
-        db.add(db_project)
-        db_project_config = ProjectConfig(
-            project_id=project_name,
-            config=config
-        )
-        db.add(db_project_config)
+        db.add(db_dataset)
         db.commit()
 
-        return {"message": "Project created successfully"}
+        return {"message": "Dataset created successfully"}
     except Exception as e:
         db.rollback()
-        if os.path.exists(proj_dir): import shutil; shutil.rmtree(proj_dir)
+        if os.path.exists(dataset_folder): import shutil; shutil.rmtree(dataset_folder)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/runs/{run_id}/inference")
@@ -314,18 +319,18 @@ async def sync_external(
     return {"message": "Files uploaded successfully", "ext_id": ext_id}
 
 @app.get("/api/results")
-async def get_results_status():
-    logs = [l.replace("_log.txt", "") for l in os.listdir(LOGS_DIR) if l.endswith("_log.txt")]
+async def get_results_status(db: Session = Depends(get_db)):
+    db_experiments = db.query(Experiment).filter(Experiment.result_category == "results").all()
     run_statuses = {}
     now = time.time()
     
     algos = ['GANomics', 'COMBAT', 'YUGENE', 'CUBLOCK', 'TDM', 'QN']
 
-    for run_id in logs:
-        project_id = run_id.split('_')[0]
-        sync_path = os.path.join(SYNC_DATA_DIR, run_id, "test", "microarray_fake.csv")
-        log_path = os.path.join(LOGS_DIR, f"{run_id}_log.txt")
-        checkpoint_latest = os.path.join(CHECKPOINTS_DIR, run_id, "net_latest.pth")
+    for experiment in db_experiments:
+        run_id = experiment.exp_name
+        sync_path = experiment.sync_data_files.get('test_microarray_fake', None)
+        log_path = experiment.training_logs
+        checkpoint_latest = os.path.join(experiment.training_checkpoints_folder, "net_latest.pth")
         is_running = os.path.exists(log_path) and (now - os.path.getmtime(log_path) < 60)
 
         # Helper to check algorithm-specific files
@@ -340,27 +345,29 @@ async def get_results_status():
             return status_map
 
         ext_ids, ext_statuses = [], {}
-        proj_ds_root = os.path.join(DATASET_DIR, project_id)
-        if os.path.exists(proj_ds_root):
-            ext_ids = [d for d in os.listdir(proj_ds_root) if d.startswith("ext_") and os.path.isdir(os.path.join(proj_ds_root, d))]
-            for eid in ext_ids:
-                e_sync_dir = os.path.join(SYNC_DATA_DIR, run_id, eid)
-                meta = {"description": "External Testing dataset", "samples": 0, "genes": 0}
-                try:
-                    with open(os.path.join(proj_ds_root, eid, "metadata.json"), 'r') as f: meta = json.load(f)
-                except: pass
-                
-                # For external, comparative is in e_sync_dir
-                comp_exists = os.path.exists(os.path.join(e_sync_dir, "Test_performance.csv"))
-                
-                ext_statuses[eid] = {
-                    "metadata": meta, 
-                    "sync": os.path.exists(os.path.join(e_sync_dir, "microarray_fake.csv")) or os.path.exists(os.path.join(e_sync_dir, "translated_ag.tsv")),
-                    "comparative": comp_exists,
-                    "deg": os.path.exists(os.path.join(e_sync_dir, "DEG", "Jaccard_Curve_GANomics.csv")),
-                    "pathway": any(f.startswith("Pathway_Concordance_") for f in os.listdir(os.path.join(e_sync_dir, "Pathway"))) if os.path.exists(os.path.join(e_sync_dir, "Pathway")) else False,
-                    "pred_model": os.path.exists(os.path.join(e_sync_dir, "Prediction", "Classifier_Performance_GANomics.csv")),
-                }
+        db_dataset = db.query(Dataset).filter(Dataset.dataset_name == experiment.dataset_name).first()
+        if db_dataset:
+            proj_ds_root = db_dataset.folder
+            if os.path.exists(proj_ds_root):
+                ext_ids = [d for d in os.listdir(proj_ds_root) if d.startswith("ext_") and os.path.isdir(os.path.join(proj_ds_root, d))]
+                for eid in ext_ids:
+                    e_sync_dir = os.path.join(SYNC_DATA_DIR, run_id, eid)
+                    meta = {"description": "External Testing dataset", "samples": 0, "genes": 0}
+                    try:
+                        with open(os.path.join(proj_ds_root, eid, "metadata.json"), 'r') as f: meta = json.load(f)
+                    except: pass
+                    
+                    # For external, comparative is in e_sync_dir
+                    comp_exists = os.path.exists(os.path.join(e_sync_dir, "Test_performance.csv"))
+                    
+                    ext_statuses[eid] = {
+                        "metadata": meta, 
+                        "sync": os.path.exists(os.path.join(e_sync_dir, "microarray_fake.csv")) or os.path.exists(os.path.join(e_sync_dir, "translated_ag.tsv")),
+                        "comparative": comp_exists,
+                        "deg": os.path.exists(os.path.join(e_sync_dir, "DEG", "Jaccard_Curve_GANomics.csv")),
+                        "pathway": any(f.startswith("Pathway_Concordance_") for f in os.listdir(os.path.join(e_sync_dir, "Pathway"))) if os.path.exists(os.path.join(e_sync_dir, "Pathway")) else False,
+                        "pred_model": os.path.exists(os.path.join(e_sync_dir, "Prediction", "Classifier_Performance_GANomics.csv")),
+                    }
 
         # Determine Global Step Status (Main branch)
         deg_algo_status = get_algo_status("DEG", "Jaccard_Curve_")
@@ -368,7 +375,7 @@ async def get_results_status():
         pred_algo_status = get_algo_status("Prediction", "Classifier_Performance_")
         
         # Comparative: Check if file exists and parse algorithm names robustly (handle MA/RS suffixes)
-        comp_path = os.path.join(COMPARATIVE_DIR, run_id, "Test_performance.csv")
+        comp_path = experiment.comparative_analysis_results
         comp_exists = os.path.exists(comp_path)
         comp_algo_status = {a: False for a in algos}
         if comp_exists:
@@ -382,7 +389,7 @@ async def get_results_status():
             except: pass
 
         internal_meta = {"description": "Standard Internal Test Set", "note": "Original Test Set from Unseen data points", "samples": 0, "genes": 0}
-        if os.path.exists(sync_path):
+        if sync_path and os.path.exists(sync_path):
             try:
                 df = pd.read_csv(sync_path, index_col=0, nrows=0); internal_meta["genes"] = len(df.columns)
                 with open(os.path.join(SYNC_DATA_DIR, run_id, "test", "microarray_real.csv"), 'rb') as f: internal_meta["samples"] = sum(1 for _ in f) - 1
@@ -390,7 +397,7 @@ async def get_results_status():
 
         run_statuses[run_id] = {
             "training": "running" if is_running else ("completed" if os.path.exists(checkpoint_latest) else "idle"),
-            "sync": os.path.exists(sync_path), 
+            "sync": sync_path is not None and os.path.exists(sync_path), 
             "comparative": comp_exists,
             "deg": any(deg_algo_status.values()),
             "pathway": any(pathway_algo_status.values()),
@@ -403,7 +410,7 @@ async def get_results_status():
             "ext_ids": ext_ids,
             "ext_statuses": ext_statuses
         }
-    return {"checkpoints": os.listdir(CHECKPOINTS_DIR) if os.path.exists(CHECKPOINTS_DIR) else [], "logs": logs, "run_statuses": run_statuses}
+    return {"logs": [e.exp_name for e in db_experiments], "run_statuses": run_statuses}
 
 @app.post("/api/train")
 async def start_training(req: TrainRequest):
@@ -604,70 +611,60 @@ async def get_project_ablation_logs(project_id: str, category: str):
     return res
 
 @app.get("/api/manuscript/tasks")
-async def list_manuscript_tasks():
-    if not os.path.exists(MS_LOGS_DIR): return []
+async def list_manuscript_tasks(db: Session = Depends(get_db)):
+    db_experiments = db.query(Experiment).filter(Experiment.result_category == "results_ms").all()
     tasks = []
     
-    # helper to check algo presence in ms folders
-    def check_ms_status(run_id):
-        project_id = ""
-        # Parsing project_id from run_id
-        if run_id.startswith("NB_Size"): project_id = "NB"
-        elif run_id.startswith("CycleGAN"): project_id = "CycleGAN"
-        elif "_" in run_id: project_id = run_id.split("_")[0]
-        else: project_id = run_id # fallback
+    for experiment in db_experiments:
+        run_id = experiment.exp_name
+        dataset_name = experiment.dataset_name
         
-        sync_path = os.path.join(MS_SYNC_DIR, run_id, "test", "microarray_fake.csv")
-        comp_path = os.path.join(MS_COMPARATIVE_DIR, run_id, "Test_performance.csv")
-        deg_path = os.path.join(MS_BIOMARKERS_DIR, "DEG", run_id)
-        pathway_path = os.path.join(MS_BIOMARKERS_DIR, "Pathway", run_id)
-        pred_path = os.path.join(MS_BIOMARKERS_DIR, "Prediction", run_id)
+        sync_path = experiment.sync_data_files.get('test_microarray_fake', None)
+        comp_path = experiment.comparative_analysis_results
+        deg_path = experiment.deg_analysis_result_folder
+        pathway_path = os.path.join(os.path.dirname(experiment.deg_analysis_result_folder), 'Pathway', run_id)
+        pred_path = os.path.join(os.path.dirname(experiment.deg_analysis_result_folder), 'Prediction', run_id)
         
-        return {
-            "project": project_id,
-            "sync": os.path.exists(sync_path),
-            "comparative": os.path.exists(comp_path),
-            "deg": os.path.exists(deg_path) and any(f.endswith(".csv") for f in os.listdir(deg_path)) if os.path.exists(deg_path) else False,
-            "pathway": os.path.exists(pathway_path) and any(f.endswith(".csv") for f in os.listdir(pathway_path)) if os.path.exists(pathway_path) else False,
-            "prediction": os.path.exists(pred_path) and any(f.endswith(".csv") for f in os.listdir(pred_path)) if os.path.exists(pred_path) else False,
+        status = {
+            "dataset": dataset_name,
+            "sync": sync_path is not None and os.path.exists(sync_path),
+            "comparative": comp_path is not None and os.path.exists(comp_path),
+            "deg": deg_path is not None and os.path.exists(deg_path) and any(f.endswith(".csv") for f in os.listdir(deg_path)),
+            "pathway": pathway_path is not None and os.path.exists(pathway_path) and any(f.endswith(".csv") for f in os.listdir(pathway_path)),
+            "prediction": pred_path is not None and os.path.exists(pred_path) and any(f.endswith(".csv") for f in os.listdir(pred_path)),
         }
 
-    for f in os.listdir(MS_LOGS_DIR):
-        if f.endswith(".txt"):
-            run_id = f[:-4]
-            status = check_ms_status(run_id)
-            
-            # Extract size and repeats for numerical sorting
-            size = 0
-            repeats = 0
-            try:
-                if "NB_Size_" in run_id:
-                    parts = run_id.split("_")
-                    size = int(parts[2])
-                    repeats = int(parts[4])
-                elif "CycleGAN_" in run_id:
-                    parts = run_id.split("_")
+        # Extract size and repeats for numerical sorting
+        size = 0
+        repeats = 0
+        try:
+            if "NB_Size_" in run_id:
+                parts = run_id.split("_")
+                size = int(parts[2])
+                repeats = int(parts[4])
+            elif "CycleGAN_" in run_id:
+                parts = run_id.split("_")
+                size = int(parts[1])
+                repeats = int(parts[2])
+            else:
+                parts = run_id.split("_")
+                if len(parts) >= 3:
                     size = int(parts[1])
                     repeats = int(parts[2])
-                else:
-                    parts = run_id.split("_")
-                    if len(parts) >= 3:
-                        size = int(parts[1])
-                        repeats = int(parts[2])
-            except:
-                pass
+        except:
+            pass
 
-            tasks.append({
-                "run_id": run_id,
-                "project": status["project"],
-                "major_group": 0 if status["project"] in ["NB", "CycleGAN"] else 1,
-                "size": size,
-                "repeats": repeats,
-                "status": status,
-                "mtime": os.path.getmtime(os.path.join(MS_LOGS_DIR, f))
-            })
+        tasks.append({
+            "run_id": run_id,
+            "dataset": status["dataset"],
+            "major_group": 0 if status["dataset"] in ["NB", "CycleGAN"] else 1,
+            "size": size,
+            "repeats": repeats,
+            "status": status,
+            "mtime": os.path.getmtime(experiment.training_logs)
+        })
             
-    return sorted(tasks, key=lambda x: (x['major_group'], x['project'], x['size'], x['repeats'], x['run_id']))
+    return sorted(tasks, key=lambda x: (x['major_group'], x['dataset'], x['size'], x['repeats'], x['run_id']))
 
 @app.get("/api/manuscript/download/{run_id}/{step}/{filename}")
 async def download_ms_file(run_id: str, step: str, filename: str):
