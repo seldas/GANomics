@@ -9,9 +9,26 @@ export type Project = {
   has_label: boolean;
 };
 
+export type Dataset = {
+  dataset_name: string;
+  folder: string;
+  config_file: string;
+};
+
+export type ExperimentInfo = {
+  exp_name: string;
+  dataset_name: string;
+  result_category: string;
+  training_checkpoints_folder: string;
+  training_logs: string;
+  sync_data_files: any;
+  comparative_analysis_results: string;
+  deg_analysis_result_folder: string;
+  modeling_result_folder: string;
+};
+
 export type LogResponse = {
   run_id: string;
-  summary: any;
   structured: any[];
   total_lines: number;
 };
@@ -38,7 +55,6 @@ export type RunStatus = {
 };
 
 export type ResultsStatus = {
-  checkpoints: string[];
   logs: string[];
   run_statuses?: Record<string, RunStatus>;
 };

@@ -6,7 +6,7 @@ import time
 import sys
 import signal
 from typing import List, Optional, Dict
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Form, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -14,6 +14,9 @@ import pandas as pd
 import psutil
 import json
 import numpy as np
+from sqlalchemy.orm import Session
+
+from database.database import SessionLocal
 
 app = FastAPI(title="GANomics API")
 
@@ -80,6 +83,11 @@ class ExperimentInfo(BaseModel):
     comparative_analysis_results: str
     deg_analysis_result_folder: str
     modeling_result_folder: str
+
+class DatasetInfo(BaseModel):
+    dataset_name: str
+    folder: str
+    config_file: str
 
 class TrainRequest(BaseModel):
     config_path: str

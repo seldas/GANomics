@@ -13,6 +13,7 @@ services:
     environment:
       HOST: 0.0.0.0
     volumes:
+      - ./dashboard/backend/database:/app/database
       - ./dashboard/backend/dataset:/app/dataset
       - ./dashboard/backend/results:/app/results
       - ./dashboard/backend/results_ms:/app/results_ms

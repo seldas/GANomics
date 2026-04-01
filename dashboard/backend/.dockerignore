@@ -20,6 +20,7 @@ database/*.db
 # OS
 
 .DS_Store
+database/
 dataset/
 results/
 results_ms/

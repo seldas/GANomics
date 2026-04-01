@@ -4,12 +4,12 @@ import {
   LayoutDashboard, Activity, FlaskConical, Database, FileText
 } from 'lucide-react';
 
-import type { Project, ResultsStatus, LogResponse } from './types';
+import type { Dataset, ExperimentInfo, ResultsStatus, LogResponse } from './types';
 import { API_BASE } from './constants';
 import { StepItem } from './components/common/UIComponents';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { SyncExternalModal } from './components/modals/SyncExternalModal';
-import { ProjectDashboard } from './components/dashboard/ProjectDashboard';
+import { ExperimentDashboard } from './components/dashboard/ExperimentDashboard';
 import { TaskDashboard } from './components/dashboard/TaskDashboard';
 import { NewSessionPanel } from './components/dashboard/NewSessionPanel';
 import { ManuscriptRecords } from './components/dashboard/ManuscriptRecords';
@@ -19,8 +19,10 @@ import './App.css';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'train' | 'analysis' | 'new-session' | 'manuscript'>('train');
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>('');
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [experiments, setExperiments] = useState<ExperimentInfo[]>([]);
+  const [selectedDataset, setSelectedDataset] = useState<string>('');
+  const [selectedExperiment, setSelectedExperiment] = useState<string>('');
   const [selectedSizes, setSelectedSizes] = useState<number[]>([50]);
   const [selectedBetas, setSelectedBetas] = useState<number[]>([10.0]);
   const [selectedLambdas, setSelectedLambdas] = useState<number[]>([10.0]);
@@ -33,14 +35,13 @@ const App: React.FC = () => {
   const [selectedExtId, setSelectedExtId] = useState<string | null>(null);
   const [taskView, setTaskView] = useState<'overview' | 'training' | 'sync' | 'comparative' | 'deg' | 'pathway' | 'prediction'>('overview');
   
-  const [resultsStatus, setResultsStatus] = useState<ResultsStatus>({ checkpoints: [], logs: [] });
+  const [resultsStatus, setResultsStatus] = useState<ResultsStatus>({});
   const [runComparativeData, setRunComparativeData] = useState<any[] | null>(null);
   const [, setRunSyncData] = useState<any | null>(null);
   const [runDegData, setRunDegData] = useState<any | null>(null);
   const [runPredictionData, setRunPredictionData] = useState<any | null>(null);
   const [runPathwayData, setRunPathwayData] = useState<any | null>(null);
   const [runTsneData, setRunTsneData] = useState<any[] | null>(null);
-  const [, setAblationData] = useState<any[]>([]);
   const [sensitivityType, setSensitivityType] = useState<'beta' | 'lambda'>('beta');
 
   // Modals
@@ -57,13 +58,13 @@ const App: React.FC = () => {
   const [isRunningExtSync, setIsRunningExtSync] = useState(false);
   const [extSyncResult, setExtSyncResult] = useState<any>(null);
 
-  // Project creation state
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectDescription, setNewProjectDescription] = useState('');
+  // Dataset creation state
+  const [newDatasetName, setNewDatasetName] = useState('');
+  const [newDatasetDescription, setNewDatasetDescription] = useState('');
   const [agFile, setAgFile] = useState<File | null>(null);
   const [rsFile, setRsFile] = useState<File | null>(null);
   const [labelFile, setLabelFile] = useState<File | null>(null);
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [isCreatingDataset, setIsCreatingDataset] = useState(false);
 
   // Log viewer state
   const [logData, setLogData] = useState<LogResponse | null>(null);
@@ -71,16 +72,24 @@ const App: React.FC = () => {
   // Helper: extCustomId derived from suffix
   const extCustomId = `ext_${extCustomSuffix}`;
 
-  // Fetch Projects
+  // Fetch Datasets and Experiments
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchDatasets = async () => {
       try {
-        const projRes = await axios.get(`${API_BASE}/projects`);
-        setProjects(projRes.data);
-        if (projRes.data.length > 0) setSelectedProject(projRes.data[0].id);
+        const datasetRes = await axios.get(`${API_BASE}/datasets`);
+        setDatasets(datasetRes.data);
+        if (datasetRes.data.length > 0) setSelectedDataset(datasetRes.data[0].dataset_name);
       } catch (err) { console.error(err); }
     };
-    fetchProjects();
+    const fetchExperiments = async () => {
+      try {
+        const expRes = await axios.get(`${API_BASE}/experiments`);
+        setExperiments(expRes.data);
+        if (expRes.data.length > 0) setSelectedExperiment(expRes.data[0].exp_name);
+      } catch (err) { console.error(err); }
+    };
+    fetchDatasets();
+    fetchExperiments();
   }, []);
 
   // Fetch Results Status
@@ -97,21 +106,14 @@ const fetchStatus = async () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch Ablation Data
-  useEffect(() => {
-    if (selectedProject) {
-      axios.get(`${API_BASE}/projects/${selectedProject}/ablation`)
-        .then(res => setAblationData(res.data))
-        .catch(err => console.error(err));
-    }
-  }, [selectedProject, resultsStatus]);
-
   // Handlers
   const handleStartSession = async () => {
-    const project = projects.find(p => p.id === selectedProject);
-    if (!project) return;
+    const dataset = datasets.find(d => d.dataset_name === selectedDataset);
+    const experiment = experiments.find(e => e.exp_name === selectedExperiment);
+    if (!dataset || !experiment) return;
     const payload = {
-      config_path: project.config_path,
+      dataset_name: dataset.dataset_name,
+      exp_name: experiment.exp_name,
       sizes: ablationType === 'size' ? selectedSizes : [],
       betas: ablationType === 'beta' ? selectedBetas : [],
       lambdas: ablationType === 'lambda' ? selectedLambdas : [],
@@ -128,10 +130,10 @@ const fetchStatus = async () => {
 
   const handleRunStep = async (step: number, params?: any) => {
     if (!selectedRunId) return;
-    const project = projects.find(p => selectedRunId.startsWith(p.id));
+    const experiment = experiments.find(e => selectedRunId.startsWith(e.exp_name));
     try {
       await axios.post(`${API_BASE}/runs/${selectedRunId}/run_step`, null, {
-        params: { step, config_path: project?.config_path, ext_id: selectedExtId, ...params }
+        params: { step, exp_name: experiment?.exp_name, ext_id: selectedExtId, ...params }
       });
       alert(`Step ${step} started.`);
     } catch (err) { alert("Failed to start step"); }
@@ -151,23 +153,23 @@ const fetchStatus = async () => {
     } catch (err) { alert("Failed to restart task"); }
   };
 
-  const handleCreateProject = async () => {
-    if (!newProjectName || !agFile || !rsFile) { alert("Required fields missing."); return; }
+  const handleCreateDataset = async () => {
+    if (!newDatasetName || !agFile || !rsFile) { alert("Required fields missing."); return; }
     const formData = new FormData();
-    formData.append('project_name', newProjectName);
-    formData.append('description', newProjectDescription);
+    formData.append('dataset_name', newDatasetName);
+    formData.append('description', newDatasetDescription);
     formData.append('df_ag', agFile);
     formData.append('df_rs', rsFile);
     if (labelFile) formData.append('label', labelFile);
-    setIsCreatingProject(true);
+    setIsCreatingDataset(true);
     try {
-      await axios.post(`${API_BASE}/projects/create`, formData);
-      alert("Project created!");
+      await axios.post(`${API_BASE}/datasets/create`, formData);
+      alert("Dataset created!");
       setShowSettingsModal(false);
-      const projRes = await axios.get(`${API_BASE}/projects`);
-      setProjects(projRes.data);
-    } catch (err) { alert("Failed to create project"); }
-    finally { setIsCreatingProject(false); }
+      const datasetRes = await axios.get(`${API_BASE}/datasets`);
+      setDatasets(datasetRes.data);
+    } catch (err) { alert("Failed to create dataset"); }
+    finally { setIsCreatingDataset(false); }
   };
 
   const handleRunExtSync = async () => {
@@ -186,9 +188,9 @@ const fetchStatus = async () => {
     finally { setIsRunningExtSync(false); }
   };
 
-  const handleDownloadGenelist = () => {
-    if (!selectedProject) return;
-    window.open(`${API_BASE}/projects/${selectedProject}/genelist/download`);
+  const handleDownloadSamples = () => {
+    if (!selectedDataset) return;
+    window.open(`${API_BASE}/datasets/${selectedDataset}/sample/download`);
   };
 
   const fetchLogs = (runId: string) => {
@@ -238,7 +240,7 @@ const fetchStatus = async () => {
   const fetchAblationLogs = (category: string) => {
     setViewingAblationCategory(category);
     setAblationLogs(null);
-    axios.get(`${API_BASE}/projects/${selectedProject}/ablation_logs`, { params: { category } })
+    axios.get(`${API_BASE}/experiments/${selectedExperiment}/ablation_logs`, { params: { category } })
       .then(res => setAblationLogs(res.data))
       .catch(err => console.error(err));
   };
@@ -254,7 +256,7 @@ const fetchStatus = async () => {
     ? { ...runStatus, ...runStatus.ext_statuses[selectedExtId] }
     : runStatus;
   // const isSizeTask = selectedRunId ? (selectedRunId.includes("Size") && !selectedRunId.includes("Architecture")) : false;
-  const currentProj = projects.find(p => p.id === selectedProject);
+  const currentExp = experiments.find(e => e.exp_name === selectedExperiment);
 
   return (
     <div className="dashboard-container">
@@ -282,28 +284,29 @@ const fetchStatus = async () => {
       <main className="main-content">
         <SettingsModal 
           show={showSettingsModal} onClose={() => setShowSettingsModal(false)}
-          newProjectName={newProjectName} setNewProjectName={setNewProjectName}
-          newProjectDescription={newProjectDescription} setNewProjectDescription={setNewProjectDescription}
+          newDatasetName={newDatasetName} setNewDatasetName={setNewDatasetName}
+          newDatasetDescription={newDatasetDescription} setNewDatasetDescription={setNewDatasetDescription}
           agFile={agFile} setAgFile={setAgFile} rsFile={rsFile} setRsFile={setRsFile}
-          labelFile={labelFile} setLabelFile={setLabelFile} isCreating={isCreatingProject} onCreateProject={handleCreateProject}
+          labelFile={labelFile} setLabelFile={setLabelFile} isCreating={isCreatingDataset} onCreate={handleCreateDataset}
         />
         <SyncExternalModal 
           show={showSyncExternalModal} onClose={() => setShowSyncExternalModal(false)}
           extAgFile={extAgFile} setExtAgFile={setExtAgFile} extRsFile={extRsFile} setExtRsFile={setExtRsFile}
           extDescription={extDescription} setExtDescription={setExtDescription}
           extCustomSuffix={extCustomSuffix} setExtCustomSuffix={setExtCustomSuffix}
-          isRunning={isRunningExtSync} result={extSyncResult} onRunSync={handleRunExtSync}
-          onDownloadGenelist={handleDownloadGenelist} onSwitchBranch={(id) => { setSelectedExtId(id); setShowSyncExternalModal(false); }}
+          isRunning={isRunningExtSync} result={extSyncResult} onRun={handleRunExtSync}
+          onDownload={handleDownloadSamples} onSwitch={(id) => { setSelectedExtId(id); setShowSyncExternalModal(false); }}
         />
         <AblationAnalyticsModal 
           category={viewingAblationCategory} onClose={() => setViewingAblationCategory(null)}
-          projectName={currentProj?.name || ''} ablationLogs={ablationLogs}
+          name={currentExp?.exp_name || ''} logs={ablationLogs}
           sensitivityType={sensitivityType} onSetSensitivityType={setSensitivityType}
         />
 
         {activeTab === 'new-session' ? (
           <NewSessionPanel 
-            projects={projects} selectedProject={selectedProject} onSelectProject={setSelectedProject}
+            datasets={datasets} selectedDataset={selectedDataset} onSelectDataset={setSelectedDataset}
+            experiments={experiments} selectedExperiment={selectedExperiment} onSelectExperiment={setSelectedExperiment}
             ablationType={ablationType} onSetAblationType={setAblationType}
             selectedSizes={selectedSizes} setSelectedSizes={setSelectedSizes}
             selectedBetas={selectedBetas} setSelectedBetas={setSelectedBetas}
@@ -329,8 +332,8 @@ const fetchStatus = async () => {
             runTsneData={runTsneData}
           />
         ) : (
-          <ProjectDashboard 
-            projects={projects} selectedProject={selectedProject} onSelectProject={setSelectedProject}
+          <ExperimentDashboard 
+            experiments={experiments} selectedExperiment={selectedExperiment} onSelectExperiment={setSelectedExperiment}
             resultsStatus={resultsStatus} onSelectRun={(id) => setSelectedRunId(id)}
             onFetchAblationLogs={fetchAblationLogs}
             onStopTask={handleStopTask} onRestartTask={handleRestartTask} onFetchLogs={fetchLogs}
