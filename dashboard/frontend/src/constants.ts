@@ -1,4 +1,4 @@
-export const API_BASE = `/ganomics_api/api`;
+export const API_BASE = __API_BASE__;
 
 export const LOSS_METRICS = [
   { key: 'G_A', color: '#007bff', label: 'Gen A' },

@@ -5,8 +5,9 @@ import re
 import time
 import sys
 import signal
-from typing import List, Optional, Dict
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Form, UploadFile, File
+from typing import List, Optional, Dict, Any
+
+from fastapi import FastAPI, HTTPException, Depends, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -16,15 +17,15 @@ import json
 import numpy as np
 from sqlalchemy.orm import Session
 
-from database.database import SessionLocal
+from database.database import SessionLocal, Experiment, Dataset
 
 app = FastAPI(title="GANomics API")
 
 # Global process tracker: { run_id: { pid: int, command: List[str], type: 'training' | 'step', step?: int } }
 running_processes: Dict[str, dict] = {}
 
-def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True,
-                   timeout=None, on_terminate=None):
+
+def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True, timeout=None, on_terminate=None):
     """Kill a process tree (including children) with psutil."""
     try:
         parent = psutil.Process(pid)
@@ -33,11 +34,15 @@ def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True,
             child.send_signal(sig)
         if include_parent:
             parent.send_signal(sig)
-        gone, alive = psutil.wait_procs(children + ([parent] if include_parent else []),
-                                        timeout=timeout, on_terminate=on_terminate)
+        gone, alive = psutil.wait_procs(
+            children + ([parent] if include_parent else []),
+            timeout=timeout,
+            on_terminate=on_terminate
+        )
         return gone, alive
     except psutil.NoSuchProcess:
         return [], []
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,21 +78,24 @@ MS_SYNC_DIR = os.path.join(RESULTS_MS_DIR, "2_SyncData")
 MS_COMPARATIVE_DIR = os.path.join(RESULTS_MS_DIR, "3_ComparativeAnalysis")
 MS_BIOMARKERS_DIR = os.path.join(RESULTS_MS_DIR, "4_Biomarkers")
 
+
 class ExperimentInfo(BaseModel):
     exp_name: str
     dataset_name: str
-    result_category: str
-    training_checkpoints_folder: str
-    training_logs: str
-    sync_data_files: dict
-    comparative_analysis_results: str
-    deg_analysis_result_folder: str
-    modeling_result_folder: str
+    result_category: Optional[str] = None
+    training_checkpoints_folder: Optional[str] = None
+    training_logs: Optional[str] = None
+    sync_data_files: Optional[dict] = None
+    comparative_analysis_results: Optional[str] = None
+    deg_analysis_result_folder: Optional[str] = None
+    modeling_result_folder: Optional[str] = None
+
 
 class DatasetInfo(BaseModel):
     dataset_name: str
     folder: str
     config_file: str
+
 
 class TrainRequest(BaseModel):
     config_path: str
@@ -99,6 +107,7 @@ class TrainRequest(BaseModel):
     lr: Optional[float] = 0.0002
     use_gpu: bool = True
 
+
 def get_db():
     db = SessionLocal()
     try:
@@ -106,170 +115,373 @@ def get_db():
     finally:
         db.close()
 
+
 def get_available_gpus():
     try:
         import torch
         if torch.cuda.is_available():
             return ",".join([str(i) for i in range(torch.cuda.device_count())])
-    except: pass
+    except Exception:
+        pass
     return None
+
 
 def get_project_stats(config_path):
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             cfg = yaml.safe_load(f)
-        
+
         # Priority 1: Check if already in metadata
-        meta = cfg.get('metadata', {})
-        if meta.get('genes') and meta.get('samples'):
-            return meta['genes'], meta['samples']
+        meta = cfg.get("metadata", {})
+        if meta.get("genes") and meta.get("samples"):
+            return meta["genes"], meta["samples"]
 
         # Priority 2: High-speed peek (no pandas)
-        path_a = cfg['dataset']['path_A']
+        path_a = cfg["dataset"]["path_A"]
         actual_path = path_a if os.path.isabs(path_a) else os.path.abspath(os.path.join(BACKEND_DIR, path_a))
-        
+
         if os.path.exists(actual_path):
-            with open(actual_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(actual_path, "r", encoding="utf-8", errors="ignore") as f:
                 header = f.readline()
-                # Deduce separator (tab or comma)
-                sep = '\t' if '\t' in header else ','
+                sep = "\t" if "\t" in header else ","
                 genes_count = len(header.split(sep)) - 1
-                
-                # Fast sample count (don't load content)
+
                 samples_count = 0
-                for _ in f: samples_count += 1
+                for _ in f:
+                    samples_count += 1
             return genes_count, samples_count
-    except: pass
+    except Exception:
+        pass
     return 0, 0
+
 
 def parse_log_line(line: str):
     line = line.strip()
-    if not line.startswith("("): return None
+    if not line.startswith("("):
+        return None
+
     header_match = re.search(r"\((.*?)\)", line)
-    if not header_match: return None
+    if not header_match:
+        return None
+
     header = header_match.group(1)
     metrics_str = line[header_match.end():].strip()
     data = {}
+
     for part in header.split(","):
         if ":" in part:
             k, v = part.split(":", 1)
-            try: data[k.strip()] = float(v.strip())
-            except: data[k.strip()] = v.strip()
+            try:
+                data[k.strip()] = float(v.strip())
+            except Exception:
+                data[k.strip()] = v.strip()
+
     metric_pairs = re.findall(r"(\w+):\s*([\d\.\-]+)", metrics_str)
     for k, v in metric_pairs:
         data[k] = float(v)
-    
+
     # Hardcode mapping for Chart compatibility (Manuscript naming vs Dashboard naming)
-    if 'G_A' in data and 'G_B' in data and 'G_loss' not in data:
-        data['G_loss'] = (data['G_A'] + data['G_B']) / 2
-    if 'D_A' in data and 'D_B' in data and 'D_loss' not in data:
-        data['D_loss'] = (data['D_A'] + data['D_B']) / 2
-    if 'cycle_A' in data and 'cycle_B' in data and 'cycle_loss' not in data:
-        data['cycle_loss'] = (data['cycle_A'] + data['cycle_B']) / 2
-        
+    if "G_A" in data and "G_B" in data and "G_loss" not in data:
+        data["G_loss"] = (data["G_A"] + data["G_B"]) / 2
+    if "D_A" in data and "D_B" in data and "D_loss" not in data:
+        data["D_loss"] = (data["D_A"] + data["D_B"]) / 2
+    if "cycle_A" in data and "cycle_B" in data and "cycle_loss" not in data:
+        data["cycle_loss"] = (data["cycle_A"] + data["cycle_B"]) / 2
+
     return data
+
+
+def path_exists(path: Optional[str]) -> bool:
+    return bool(path and isinstance(path, str) and os.path.exists(path))
+
+
+def ensure_dict(value: Any) -> dict:
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
+def has_sync_outputs(sync_data_files: Optional[dict]) -> bool:
+    sync_map = ensure_dict(sync_data_files)
+    return len(sync_map) > 0
+
+
+def parse_run_size_and_repeats(run_id: str) -> tuple[int, int]:
+    size = 0
+    repeats = 0
+    try:
+        if "NB_Size_" in run_id:
+            parts = run_id.split("_")
+            size = int(parts[2])
+            repeats = int(parts[4])
+        elif "CycleGAN_" in run_id:
+            parts = run_id.split("_")
+            size = int(parts[1])
+            repeats = int(parts[2])
+        else:
+            parts = run_id.split("_")
+            if len(parts) >= 3:
+                size = int(parts[1])
+                repeats = int(parts[2])
+    except Exception:
+        pass
+    return size, repeats
+
+
+def classify_major_group(dataset_name: str, exp_name: str, result_category: Optional[str]) -> int:
+    dataset_lower = (dataset_name or "").lower()
+    exp_lower = (exp_name or "").lower()
+    category_lower = (result_category or "").lower()
+
+    if (
+        dataset_name in ["NB", "CycleGAN"]
+        or "neuroblastoma" in dataset_lower
+        or "nb" in dataset_lower
+        or "cyclegan" in dataset_lower
+        or "nb" in exp_lower
+        or "cyclegan" in exp_lower
+        or "nb" in category_lower
+        or "cyclegan" in category_lower
+    ):
+        return 0
+    return 1
+
+
+def get_experiment_or_404(db: Session, run_id: str) -> Experiment:
+    experiment = db.query(Experiment).filter(Experiment.exp_name == run_id).first()
+    if not experiment:
+        raise HTTPException(status_code=404, detail=f"Experiment '{run_id}' not found")
+    return experiment
+
+
+def get_step_base_dir(experiment: Experiment, step: str) -> str:
+    """
+    Resolve manuscript step folder from DB fields rather than fixed results_ms filesystem layout.
+    """
+    if step == "sync":
+        sync_map = ensure_dict(experiment.sync_data_files)
+        if not sync_map:
+            raise HTTPException(status_code=404, detail="No sync outputs recorded for this experiment")
+
+        # Prefer a parent directory derived from any stored sync file path
+        any_sync_path = next(iter(sync_map.values()), None)
+        if not any_sync_path:
+            raise HTTPException(status_code=404, detail="No sync file path recorded for this experiment")
+
+        if os.path.isdir(any_sync_path):
+            return any_sync_path
+        return os.path.dirname(any_sync_path)
+
+    if step == "comparative":
+        if not experiment.comparative_analysis_results:
+            raise HTTPException(status_code=404, detail="No comparative analysis recorded for this experiment")
+        if os.path.isdir(experiment.comparative_analysis_results):
+            return experiment.comparative_analysis_results
+        return os.path.dirname(experiment.comparative_analysis_results)
+
+    if step == "deg":
+        if not experiment.deg_analysis_result_folder:
+            raise HTTPException(status_code=404, detail="No DEG analysis recorded for this experiment")
+        return experiment.deg_analysis_result_folder
+
+    if step == "prediction":
+        if not experiment.modeling_result_folder:
+            raise HTTPException(status_code=404, detail="No prediction/modeling output recorded for this experiment")
+        if os.path.isdir(experiment.modeling_result_folder):
+            return experiment.modeling_result_folder
+        return os.path.dirname(experiment.modeling_result_folder)
+
+    if step == "pathway":
+        # Prefer sibling of DEG folder if present
+        if experiment.deg_analysis_result_folder:
+            deg_dir = experiment.deg_analysis_result_folder
+            deg_parent = os.path.dirname(deg_dir.rstrip(os.sep))
+            candidate = os.path.join(deg_parent, "Pathway", experiment.exp_name)
+            if os.path.exists(candidate):
+                return candidate
+
+            # Alternative sibling layout: .../4_Biomarkers/DEG/<run> -> .../4_Biomarkers/Pathway/<run>
+            deg_root = os.path.dirname(deg_parent)
+            candidate2 = os.path.join(deg_root, "Pathway", experiment.exp_name)
+            if os.path.exists(candidate2):
+                return candidate2
+
+        # Fallback using modeling folder parent if available
+        if experiment.modeling_result_folder:
+            model_dir = (
+                experiment.modeling_result_folder
+                if os.path.isdir(experiment.modeling_result_folder)
+                else os.path.dirname(experiment.modeling_result_folder)
+            )
+            model_parent = os.path.dirname(model_dir.rstrip(os.sep))
+            candidate = os.path.join(model_parent, "Pathway", experiment.exp_name)
+            if os.path.exists(candidate):
+                return candidate
+
+        raise HTTPException(status_code=404, detail="No pathway output recorded for this experiment")
+
+    raise HTTPException(status_code=400, detail="Invalid step")
+
+
+def get_pathway_status(experiment: Experiment) -> bool:
+    try:
+        pathway_dir = get_step_base_dir(experiment, "pathway")
+        return os.path.isdir(pathway_dir) and any(f.endswith(".csv") for f in os.listdir(pathway_dir))
+    except HTTPException:
+        return False
+
 
 @app.get("/api/experiments", response_model=List[ExperimentInfo])
 async def list_experiments(db: Session = Depends(get_db)):
     experiments = []
     db_experiments = db.query(Experiment).all()
     for experiment in db_experiments:
-        experiments.append(ExperimentInfo(
-            exp_name=experiment.exp_name,
-            dataset_name=experiment.dataset_name,
-            result_category=experiment.result_category,
-            training_checkpoints_folder=experiment.training_checkpoints_folder,
-            training_logs=experiment.training_logs,
-            sync_data_files=experiment.sync_data_files,
-            comparative_analysis_results=experiment.comparative_analysis_results,
-            deg_analysis_result_folder=experiment.deg_analysis_result_folder,
-            modeling_result_folder=experiment.modeling_result_folder
-        ))
+        experiments.append(
+            ExperimentInfo(
+                exp_name=experiment.exp_name,
+                dataset_name=experiment.dataset_name,
+                result_category=experiment.result_category,
+                training_checkpoints_folder=experiment.training_checkpoints_folder,
+                training_logs=experiment.training_logs,
+                sync_data_files=experiment.sync_data_files,
+                comparative_analysis_results=experiment.comparative_analysis_results,
+                deg_analysis_result_folder=experiment.deg_analysis_result_folder,
+                modeling_result_folder=experiment.modeling_result_folder,
+            )
+        )
     return experiments
+
 
 @app.get("/api/datasets", response_model=List[DatasetInfo])
 async def list_datasets(db: Session = Depends(get_db)):
     datasets = []
     db_datasets = db.query(Dataset).all()
     for dataset in db_datasets:
-        datasets.append(DatasetInfo(
-            dataset_name=dataset.dataset_name,
-            folder=dataset.folder,
-            config_file=dataset.config_file
-        ))
+        datasets.append(
+            DatasetInfo(
+                dataset_name=dataset.dataset_name,
+                folder=dataset.folder,
+                config_file=dataset.config_file,
+            )
+        )
     return datasets
+
 
 @app.get("/api/datasets/{dataset_name}/samples/download")
 async def download_samples(dataset_name: str, db: Session = Depends(get_db)):
     db_dataset = db.query(Dataset).filter(Dataset.dataset_name == dataset_name).first()
-    if not db_dataset: raise HTTPException(status_code=404, detail="Dataset not found")
-    
+    if not db_dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
     samples_path = os.path.join(db_dataset.folder, "samples.tsv")
-    if not os.path.exists(samples_path): raise HTTPException(status_code=404)
+    if not os.path.exists(samples_path):
+        raise HTTPException(status_code=404, detail="samples.tsv not found")
     return FileResponse(samples_path, filename=f"{dataset_name}_samples.tsv")
+
 
 @app.post("/api/datasets/{dataset_name}/labels/upload")
 async def upload_labels(dataset_name: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
     db_dataset = db.query(Dataset).filter(Dataset.dataset_name == dataset_name).first()
-    if not db_dataset: raise HTTPException(status_code=404, detail="Dataset not found")
-    
+    if not db_dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
     final_path = os.path.join(db_dataset.folder, "label.txt")
-    with open(final_path, "wb") as f: f.write(await file.read())
-    
-    # Update experiment has_label status in database
-    db_experiments = db.query(Experiment).filter(Experiment.dataset_name == dataset_name).all()
-    for experiment in db_experiments:
-        experiment.has_label = True
-    db.commit()
-    
+    with open(final_path, "wb") as f:
+        f.write(await file.read())
+
     return {"message": "label.txt uploaded successfully"}
+
 
 @app.post("/api/datasets/create")
 async def create_dataset(
-    dataset_name: str = Form(...), description: str = Form(""),
-    df_ag: UploadFile = File(...), df_rs: UploadFile = File(...),
+    dataset_name: str = Form(...),
+    description: str = Form(""),
+    df_ag: UploadFile = File(...),
+    df_rs: UploadFile = File(...),
     label: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+    dataset_folder = os.path.join(DATASET_DIR, dataset_name)
     try:
         # Save files
-        dataset_folder = os.path.join(DATASET_DIR, dataset_name)
         os.makedirs(dataset_folder, exist_ok=True)
         ag_path = os.path.join(dataset_folder, "df_ag.tsv")
         rs_path = os.path.join(dataset_folder, "df_rs.tsv")
-        with open(ag_path, "wb") as f: f.write(await df_ag.read())
-        with open(rs_path, "wb") as f: f.write(await df_rs.read())
+
+        with open(ag_path, "wb") as f:
+            f.write(await df_ag.read())
+        with open(rs_path, "wb") as f:
+            f.write(await df_rs.read())
+
         if label:
-            with open(os.path.join(dataset_folder, "label.txt"), "wb") as f: f.write(await label.read())
-        
+            with open(os.path.join(dataset_folder, "label.txt"), "wb") as f:
+                f.write(await label.read())
+
         # Count genes and samples
-        df_peek = pd.read_csv(ag_path, sep='\t', index_col=0, nrows=0)
+        df_peek = pd.read_csv(ag_path, sep="\t", index_col=0, nrows=0)
         genes_count = len(df_peek.columns)
-        with open(ag_path, 'r') as f: samples_count = sum(1 for _ in f) - 1
-            
+        with open(ag_path, "r") as f:
+            samples_count = sum(1 for _ in f) - 1
+
         # Create config
         config = {
-            'metadata': {'name': dataset_name, 'description': description, 'genes': genes_count, 'samples': samples_count},
-            'model': {'input_nc': genes_count, 'output_nc': genes_count, 'lambda_A': 10.0, 'lambda_B': 10.0, 'lambda_feedback': 10.0, 'lambda_idt': 0.5, 'gan_mode': 'lsgan'},
-            'optimizer': {'lr': 0.0002, 'beta1': 0.5, 'beta2': 0.999},
-            'train': {'n_epochs': 500, 'n_epochs_decay': 50, 'batch_size': 1, 'device': 'cuda:0', 'seed': 42, 'print_freq': 10, 'save_epoch_freq': 10, 'explosion_factor': 3.0},
-            'dataset': {'path_A': f'dataset/{dataset_name}/df_ag.tsv', 'path_B': f'dataset/{dataset_name}/df_rs.tsv', 'max_samples': samples_count, 'force_index_mapping': True},
-            'output': {'checkpoints_dir': 'results/1_Training/checkpoints', 'name': f'{dataset_name}_GANomics', 'logs_dir': 'results/1_Training/logs'},
-            'default_ablation': {'size': 50, 'beta': 10.0, 'lambda': 10.0}
+            "metadata": {
+                "name": dataset_name,
+                "description": description,
+                "genes": genes_count,
+                "samples": samples_count,
+            },
+            "model": {
+                "input_nc": genes_count,
+                "output_nc": genes_count,
+                "lambda_A": 10.0,
+                "lambda_B": 10.0,
+                "lambda_feedback": 10.0,
+                "lambda_idt": 0.5,
+                "gan_mode": "lsgan",
+            },
+            "optimizer": {"lr": 0.0002, "beta1": 0.5, "beta2": 0.999},
+            "train": {
+                "n_epochs": 500,
+                "n_epochs_decay": 50,
+                "batch_size": 1,
+                "device": "cuda:0",
+                "seed": 42,
+                "print_freq": 10,
+                "save_epoch_freq": 10,
+                "explosion_factor": 3.0,
+            },
+            "dataset": {
+                "path_A": f"dataset/{dataset_name}/df_ag.tsv",
+                "path_B": f"dataset/{dataset_name}/df_rs.tsv",
+                "max_samples": samples_count,
+                "force_index_mapping": True,
+            },
+            "output": {
+                "checkpoints_dir": "results/1_Training/checkpoints",
+                "name": f"{dataset_name}_GANomics",
+                "logs_dir": "results/1_Training/logs",
+            },
+            "default_ablation": {"size": 50, "beta": 10.0, "lambda": 10.0},
         }
         config_path = os.path.join(dataset_folder, f"{dataset_name.lower()}_config.yaml")
-        with open(config_path, 'w') as f: yaml.dump(config, f)
-        
+        with open(config_path, "w") as f:
+            yaml.dump(config, f)
+
         # Create samples.tsv and genelist.tsv
-        df_ag_full = pd.read_csv(ag_path, sep='\t', index_col=0)
-        pd.DataFrame({'sample_id': df_ag_full.index.tolist()}).to_csv(os.path.join(dataset_folder, "samples.tsv"), sep='\t', index=False)
-        pd.DataFrame({'gene_id': df_ag_full.columns.tolist()}).to_csv(os.path.join(dataset_folder, "genelist.tsv"), sep='\t', index=False)
+        df_ag_full = pd.read_csv(ag_path, sep="\t", index_col=0)
+        pd.DataFrame({"sample_id": df_ag_full.index.tolist()}).to_csv(
+            os.path.join(dataset_folder, "samples.tsv"), sep="\t", index=False
+        )
+        pd.DataFrame({"gene_id": df_ag_full.columns.tolist()}).to_csv(
+            os.path.join(dataset_folder, "genelist.tsv"), sep="\t", index=False
+        )
 
         # Add to database
         db_dataset = Dataset(
             dataset_name=dataset_name,
             folder=dataset_folder,
-            config_file=config_path
+            config_file=config_path,
         )
         db.add(db_dataset)
         db.commit()
@@ -277,78 +489,135 @@ async def create_dataset(
         return {"message": "Dataset created successfully"}
     except Exception as e:
         db.rollback()
-        if os.path.exists(dataset_folder): import shutil; shutil.rmtree(dataset_folder)
+        if os.path.exists(dataset_folder):
+            import shutil
+            shutil.rmtree(dataset_folder)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/runs/{run_id}/inference")
 async def run_external_inference(
-    run_id: str, direction: str = Form(...), ext_id: str = Form(...),
-    description: str = Form("External Testing dataset"), file: UploadFile = File(...)
+    run_id: str,
+    direction: str = Form(...),
+    ext_id: str = Form(...),
+    description: str = Form("External Testing dataset"),
+    file: UploadFile = File(...),
 ):
-    project_id = run_id.split('_')[0]
+    project_id = run_id.split("_")[0]
     ext_dir = os.path.join(DATASET_DIR, project_id, ext_id)
     os.makedirs(ext_dir, exist_ok=True)
-    abs_input_path = os.path.join(ext_dir, "test_ag.tsv" if direction == 'AtoB' else "test_rs.tsv")
-    with open(abs_input_path, "wb") as f: f.write(await file.read())
+    abs_input_path = os.path.join(ext_dir, "test_ag.tsv" if direction == "AtoB" else "test_rs.tsv")
+    with open(abs_input_path, "wb") as f:
+        f.write(await file.read())
     try:
-        df_peek = pd.read_csv(abs_input_path, sep='\t', index_col=0)
+        df_peek = pd.read_csv(abs_input_path, sep="\t", index_col=0)
         with open(os.path.join(ext_dir, "metadata.json"), "w") as f:
-            json.dump({"id": ext_id, "description": description, "samples": len(df_peek), "genes": len(df_peek.columns)}, f)
-    except: pass
+            json.dump(
+                {
+                    "id": ext_id,
+                    "description": description,
+                    "samples": len(df_peek),
+                    "genes": len(df_peek.columns),
+                },
+                f,
+            )
+    except Exception:
+        pass
     output_dir = os.path.join(RESULTS_DIR, "2_SyncData", run_id, ext_id)
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "translated_rs.tsv" if direction == 'AtoB' else "translated_ag.tsv")
-    cmd = [sys.executable, os.path.join(BACKEND_DIR, "scripts", "inference.py"), "--run_id", run_id, "--input", abs_input_path, "--direction", direction, "--output", output_path, "--device", "cpu"]
+    output_path = os.path.join(output_dir, "translated_rs.tsv" if direction == "AtoB" else "translated_ag.tsv")
+    cmd = [
+        sys.executable,
+        os.path.join(BACKEND_DIR, "scripts", "inference.py"),
+        "--run_id",
+        run_id,
+        "--input",
+        abs_input_path,
+        "--direction",
+        direction,
+        "--output",
+        output_path,
+        "--device",
+        "cpu",
+    ]
     subprocess.run(cmd, check=True)
     return {"message": "Inference completed", "ext_id": ext_id}
 
+
 @app.post("/api/runs/{run_id}/sync_external")
 async def sync_external(
-    run_id: str, test_ag: Optional[UploadFile] = File(None), test_rs: Optional[UploadFile] = File(None),
-    ext_id: str = Form(...), description: str = Form("External Testing dataset")
+    run_id: str,
+    test_ag: Optional[UploadFile] = File(None),
+    test_rs: Optional[UploadFile] = File(None),
+    ext_id: str = Form(...),
+    description: str = Form("External Testing dataset"),
 ):
-    project_id = run_id.split('_')[0]
+    project_id = run_id.split("_")[0]
     ext_dir = os.path.join(DATASET_DIR, project_id, ext_id)
     os.makedirs(ext_dir, exist_ok=True)
     samples_count, genes_count = 0, 0
+
     async def save_file(file: UploadFile, filename: str):
         nonlocal samples_count, genes_count
         abs_path = os.path.join(ext_dir, filename)
         content = await file.read()
-        with open(abs_path, "wb") as f: f.write(content)
+        with open(abs_path, "wb") as f:
+            f.write(content)
         if samples_count == 0:
             try:
-                df = pd.read_csv(abs_path, sep='\t', index_col=0); samples_count, genes_count = len(df), len(df.columns)
-            except: pass
-    if test_ag: await save_file(test_ag, "test_ag.tsv")
-    if test_rs: await save_file(test_rs, "test_rs.tsv")
+                df = pd.read_csv(abs_path, sep="\t", index_col=0)
+                samples_count, genes_count = len(df), len(df.columns)
+            except Exception:
+                pass
+
+    if test_ag:
+        await save_file(test_ag, "test_ag.tsv")
+    if test_rs:
+        await save_file(test_rs, "test_rs.tsv")
+
     with open(os.path.join(ext_dir, "metadata.json"), "w") as f:
-        json.dump({"id": ext_id, "description": description, "samples": samples_count, "genes": genes_count}, f)
+        json.dump(
+            {
+                "id": ext_id,
+                "description": description,
+                "samples": samples_count,
+                "genes": genes_count,
+            },
+            f,
+        )
     return {"message": "Files uploaded successfully", "ext_id": ext_id}
+
 
 @app.get("/api/results")
 async def get_results_status(db: Session = Depends(get_db)):
     db_experiments = db.query(Experiment).filter(Experiment.result_category == "results").all()
     run_statuses = {}
     now = time.time()
-    
-    algos = ['GANomics', 'COMBAT', 'YUGENE', 'CUBLOCK', 'TDM', 'QN']
+
+    algos = ["GANomics", "COMBAT", "YUGENE", "CUBLOCK", "TDM", "QN"]
 
     for experiment in db_experiments:
         run_id = experiment.exp_name
-        sync_path = experiment.sync_data_files.get('test_microarray_fake', None)
+        sync_map = ensure_dict(experiment.sync_data_files)
+        sync_path = sync_map.get("test_microarray_fake", None)
         log_path = experiment.training_logs
-        checkpoint_latest = os.path.join(experiment.training_checkpoints_folder, "net_latest.pth")
-        is_running = os.path.exists(log_path) and (now - os.path.getmtime(log_path) < 60)
+        checkpoint_latest = (
+            os.path.join(experiment.training_checkpoints_folder, "net_latest.pth")
+            if experiment.training_checkpoints_folder
+            else None
+        )
+        is_running = path_exists(log_path) and (now - os.path.getmtime(log_path) < 60)
 
-        # Helper to check algorithm-specific files
         def get_algo_status(folder, pattern, run_id_sub=None):
             status_map = {}
             base_dir = os.path.join(BIOMARKERS_DIR, folder, run_id if not run_id_sub else run_id_sub)
-            if not os.path.exists(base_dir): return {a: False for a in algos}
+            if not os.path.exists(base_dir):
+                return {a: False for a in algos}
             for a in algos:
-                # Check for various naming patterns (e.g. Jaccard_Curve_GANomics.csv or Pathway_Details_GANomics_KEGG...)
-                exists = any(f.lower().startswith(pattern.lower()) and a.lower() in f.lower() for f in os.listdir(base_dir))
+                exists = any(
+                    f.lower().startswith(pattern.lower()) and a.lower() in f.lower()
+                    for f in os.listdir(base_dir)
+                )
                 status_map[a] = exists
             return status_map
 
@@ -357,138 +626,206 @@ async def get_results_status(db: Session = Depends(get_db)):
         if db_dataset:
             proj_ds_root = db_dataset.folder
             if os.path.exists(proj_ds_root):
-                ext_ids = [d for d in os.listdir(proj_ds_root) if d.startswith("ext_") and os.path.isdir(os.path.join(proj_ds_root, d))]
+                ext_ids = [
+                    d
+                    for d in os.listdir(proj_ds_root)
+                    if d.startswith("ext_") and os.path.isdir(os.path.join(proj_ds_root, d))
+                ]
                 for eid in ext_ids:
                     e_sync_dir = os.path.join(SYNC_DATA_DIR, run_id, eid)
                     meta = {"description": "External Testing dataset", "samples": 0, "genes": 0}
                     try:
-                        with open(os.path.join(proj_ds_root, eid, "metadata.json"), 'r') as f: meta = json.load(f)
-                    except: pass
-                    
-                    # For external, comparative is in e_sync_dir
+                        with open(os.path.join(proj_ds_root, eid, "metadata.json"), "r") as f:
+                            meta = json.load(f)
+                    except Exception:
+                        pass
+
                     comp_exists = os.path.exists(os.path.join(e_sync_dir, "Test_performance.csv"))
-                    
+
                     ext_statuses[eid] = {
-                        "metadata": meta, 
-                        "sync": os.path.exists(os.path.join(e_sync_dir, "microarray_fake.csv")) or os.path.exists(os.path.join(e_sync_dir, "translated_ag.tsv")),
+                        "metadata": meta,
+                        "sync": os.path.exists(os.path.join(e_sync_dir, "microarray_fake.csv"))
+                        or os.path.exists(os.path.join(e_sync_dir, "translated_ag.tsv")),
                         "comparative": comp_exists,
                         "deg": os.path.exists(os.path.join(e_sync_dir, "DEG", "Jaccard_Curve_GANomics.csv")),
-                        "pathway": any(f.startswith("Pathway_Concordance_") for f in os.listdir(os.path.join(e_sync_dir, "Pathway"))) if os.path.exists(os.path.join(e_sync_dir, "Pathway")) else False,
+                        "pathway": any(f.startswith("Pathway_Concordance_") for f in os.listdir(os.path.join(e_sync_dir, "Pathway")))
+                        if os.path.exists(os.path.join(e_sync_dir, "Pathway"))
+                        else False,
                         "pred_model": os.path.exists(os.path.join(e_sync_dir, "Prediction", "Classifier_Performance_GANomics.csv")),
                     }
 
-        # Determine Global Step Status (Main branch)
         deg_algo_status = get_algo_status("DEG", "Jaccard_Curve_")
         pathway_algo_status = get_algo_status("Pathway", "Pathway_Concordance_")
         pred_algo_status = get_algo_status("Prediction", "Classifier_Performance_")
-        
-        # Comparative: Check if file exists and parse algorithm names robustly (handle MA/RS suffixes)
+
         comp_path = experiment.comparative_analysis_results
-        comp_exists = os.path.exists(comp_path)
+        comp_exists = path_exists(comp_path)
         comp_algo_status = {a: False for a in algos}
         if comp_exists:
             try:
                 comp_df = pd.read_csv(comp_path)
-                found_algos = comp_df['Algorithm'].astype(str).str.upper().values.tolist()
+                found_algos = comp_df["Algorithm"].astype(str).str.upper().values.tolist()
                 for a in algos:
-                    # Specific rule: QN maps to 'QUANTILE' in the result CSV
-                    search_term = 'QUANTILE' if a == 'QN' else a.upper()
+                    search_term = "QUANTILE" if a == "QN" else a.upper()
                     comp_algo_status[a] = any(search_term in val for val in found_algos)
-            except: pass
+            except Exception:
+                pass
 
-        internal_meta = {"description": "Standard Internal Test Set", "note": "Original Test Set from Unseen data points", "samples": 0, "genes": 0}
+        internal_meta = {
+            "description": "Standard Internal Test Set",
+            "note": "Original Test Set from Unseen data points",
+            "samples": 0,
+            "genes": 0,
+        }
         if sync_path and os.path.exists(sync_path):
             try:
-                df = pd.read_csv(sync_path, index_col=0, nrows=0); internal_meta["genes"] = len(df.columns)
-                with open(os.path.join(SYNC_DATA_DIR, run_id, "test", "microarray_real.csv"), 'rb') as f: internal_meta["samples"] = sum(1 for _ in f) - 1
-            except: pass
+                df = pd.read_csv(sync_path, index_col=0, nrows=0)
+                internal_meta["genes"] = len(df.columns)
+                with open(os.path.join(SYNC_DATA_DIR, run_id, "test", "microarray_real.csv"), "rb") as f:
+                    internal_meta["samples"] = sum(1 for _ in f) - 1
+            except Exception:
+                pass
 
         run_statuses[run_id] = {
-            "training": "running" if is_running else ("completed" if os.path.exists(checkpoint_latest) else "idle"),
-            "sync": sync_path is not None and os.path.exists(sync_path), 
+            "training": "running" if is_running else ("completed" if path_exists(checkpoint_latest) else "idle"),
+            "sync": sync_path is not None and os.path.exists(sync_path),
             "comparative": comp_exists,
             "deg": any(deg_algo_status.values()),
             "pathway": any(pathway_algo_status.values()),
             "pred_model": any(pred_algo_status.values()),
             "algo_details": {
                 "comparative": comp_algo_status,
-                "pred_model": pred_algo_status
+                "pred_model": pred_algo_status,
             },
             "metadata": internal_meta,
             "ext_ids": ext_ids,
-            "ext_statuses": ext_statuses
+            "ext_statuses": ext_statuses,
         }
     return {"logs": [e.exp_name for e in db_experiments], "run_statuses": run_statuses}
 
+
 @app.post("/api/train")
 async def start_training(req: TrainRequest):
-    cmd = [sys.executable, os.path.join(SCRIPTS_DIR, "run_ablation.py"), "--config", req.config_path, "--repeats", str(req.repeats)]
-    if req.sizes: cmd += ["--sizes"] + [str(s) for s in req.sizes]
-    if req.betas: cmd += ["--betas"] + [str(b) for b in req.betas]
-    if req.lambdas: cmd += ["--lambdas"] + [str(l) for l in req.lambdas]
-    if req.epochs: cmd += ["--epochs", str(req.epochs)]
+    cmd = [
+        sys.executable,
+        os.path.join(SCRIPTS_DIR, "run_ablation.py"),
+        "--config",
+        req.config_path,
+        "--repeats",
+        str(req.repeats),
+    ]
+    if req.sizes:
+        cmd += ["--sizes"] + [str(s) for s in req.sizes]
+    if req.betas:
+        cmd += ["--betas"] + [str(b) for b in req.betas]
+    if req.lambdas:
+        cmd += ["--lambdas"] + [str(l) for l in req.lambdas]
+    if req.epochs:
+        cmd += ["--epochs", str(req.epochs)]
     gpu_ids = get_available_gpus()
-    if req.use_gpu and gpu_ids: cmd += ["--gpu_ids", gpu_ids]
-    env = os.environ.copy(); env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
-    process = subprocess.Popen(cmd, cwd=BACKEND_DIR, env=env, creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0)
-    running_processes['training_session'] = {"pid": process.pid, "cmd": cmd, "env": env, "cwd": BACKEND_DIR, "type": "training"}
+    if req.use_gpu and gpu_ids:
+        cmd += ["--gpu_ids", gpu_ids]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    process = subprocess.Popen(
+        cmd,
+        cwd=BACKEND_DIR,
+        env=env,
+        creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0,
+    )
+    running_processes["training_session"] = {
+        "pid": process.pid,
+        "cmd": cmd,
+        "env": env,
+        "cwd": BACKEND_DIR,
+        "type": "training",
+    }
     return {"message": "Training started", "pid": process.pid}
+
 
 @app.post("/api/runs/{run_id}/stop")
 async def stop_task(run_id: str):
-    for proc in psutil.process_iter(['pid', 'cmdline']):
-        if run_id in str(proc.info['cmdline']): kill_proc_tree(proc.info['pid'])
+    for proc in psutil.process_iter(["pid", "cmdline"]):
+        if run_id in str(proc.info["cmdline"]):
+            kill_proc_tree(proc.info["pid"])
     return {"message": "Stopped"}
+
 
 @app.post("/api/runs/{run_id}/restart")
 async def restart_task(run_id: str):
     raise HTTPException(status_code=501)
 
+
 @app.post("/api/runs/{run_id}/run_step")
 async def run_analysis_step(
-    run_id: str, step: int, config_path: Optional[str] = None, ext_id: Optional[str] = None,
-    filter_pathways: bool = True, libraries: Optional[List[str]] = None,
-    algorithms: Optional[List[str]] = None
+    run_id: str,
+    step: int,
+    config_path: Optional[str] = None,
+    ext_id: Optional[str] = None,
+    filter_pathways: bool = True,
+    libraries: Optional[List[str]] = None,
+    algorithms: Optional[List[str]] = None,
 ):
     scripts = {
-        2: "test_sync.py", 
-        3: "comparative_analysis.py", 
+        2: "test_sync.py",
+        3: "comparative_analysis.py",
         4: "deg_analysis.py",
         5: "pathway_analysis.py",
-        6: "prediction_analysis.py"
+        6: "prediction_analysis.py",
     }
     script_path = os.path.join(SCRIPTS_DIR, scripts[step])
     cmd = [sys.executable, script_path, "--run_id", run_id]
-    if ext_id: cmd += ["--ext_id", ext_id]
-    if step == 2: cmd += ["--config", config_path]
-    if step == 3 and algorithms: cmd += ["--algorithms"] + algorithms
+    if ext_id:
+        cmd += ["--ext_id", ext_id]
+    if step == 2:
+        cmd += ["--config", config_path]
+    if step == 3 and algorithms:
+        cmd += ["--algorithms"] + algorithms
     if step in [4, 5, 6]:
-        label_path = os.path.join(DATASET_DIR, run_id.split('_')[0], "label.txt")
-        if os.path.exists(label_path): cmd += ["--labels", label_path]
+        label_path = os.path.join(DATASET_DIR, run_id.split("_")[0], "label.txt")
+        if os.path.exists(label_path):
+            cmd += ["--labels", label_path]
     if step == 5:
-        if not filter_pathways: cmd += ["--no_filter"]
-        if libraries: cmd += ["--libraries"] + libraries
-        # Add bootstrap_b parameter for speed optimization
+        if not filter_pathways:
+            cmd += ["--no_filter"]
+        if libraries:
+            cmd += ["--libraries"] + libraries
         cmd += ["--bootstrap_b", "50"]
 
-    env = os.environ.copy(); env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
-    process = subprocess.Popen(cmd, cwd=BACKEND_DIR, env=env, creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{BACKEND_DIR}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    process = subprocess.Popen(
+        cmd,
+        cwd=BACKEND_DIR,
+        env=env,
+        creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0,
+    )
     return {"message": "Started", "pid": process.pid}
 
 
 @app.get("/api/runs/{run_id}/logs")
 async def stream_run_logs(run_id: str):
     log_path = os.path.join(LOGS_DIR, f"{run_id}_log.txt")
-    if not os.path.exists(log_path): raise HTTPException(status_code=404)
+    if not os.path.exists(log_path):
+        raise HTTPException(status_code=404)
     with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-        lines = f.readlines(); structured = [p for p in [parse_log_line(l) for l in lines] if p]
+        lines = f.readlines()
+        structured = [p for p in [parse_log_line(l) for l in lines] if p]
     return {"run_id": run_id, "structured": structured, "total_lines": len(lines)}
+
 
 @app.get("/api/runs/{run_id}/comparative")
 async def get_run_comparative_metrics(run_id: str, ext_id: Optional[str] = None):
-    path = os.path.join(SYNC_DATA_DIR if ext_id else COMPARATIVE_DIR, run_id, ext_id if ext_id else "", "Test_performance.csv")
-    if not os.path.exists(path): raise HTTPException(status_code=404)
+    path = os.path.join(
+        SYNC_DATA_DIR if ext_id else COMPARATIVE_DIR,
+        run_id,
+        ext_id if ext_id else "",
+        "Test_performance.csv",
+    )
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404)
     return pd.read_csv(path).replace({np.nan: None}).to_dict(orient="records")
+
 
 @app.get("/api/runs/{run_id}/sync")
 async def get_run_sync_status(run_id: str, ext_id: Optional[str] = None):
@@ -501,66 +838,80 @@ async def get_run_sync_status(run_id: str, ext_id: Optional[str] = None):
         details["test"]["RNA-Seq"]["Fake"] = os.path.exists(os.path.join(sync_dir, "rnaseq_fake.csv"))
     return {"exists": os.path.exists(sync_dir), "details": details}
 
+
 @app.get("/api/runs/{run_id}/sync/download")
 async def download_sync_file(run_id: str, filename: str, ext_id: Optional[str] = None):
     path = os.path.join(SYNC_DATA_DIR, run_id, ext_id if ext_id else "test", filename)
-    if not os.path.exists(path): raise HTTPException(status_code=404)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404)
     return FileResponse(path, filename=f"{run_id}_{filename}")
+
 
 @app.get("/api/runs/{run_id}/tsne")
 async def get_run_tsne_coords(run_id: str, ext_id: Optional[str] = None):
     path = os.path.join(SYNC_DATA_DIR, run_id, ext_id if ext_id else "test", "tsne_coords.csv")
-    if not os.path.exists(path): raise HTTPException(status_code=404)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404)
     return pd.read_csv(path).replace({np.nan: None}).to_dict(orient="records")
+
 
 @app.get("/api/runs/{run_id}/deg")
 async def get_run_deg_metrics(run_id: str, ext_id: Optional[str] = None):
     deg_dir = os.path.join(BIOMARKERS_DIR, "DEG", run_id)
-    if not os.path.exists(deg_dir): raise HTTPException(status_code=404)
+    if not os.path.exists(deg_dir):
+        raise HTTPException(status_code=404)
     res = {}
     for f in os.listdir(deg_dir):
-        if f.startswith("Jaccard_Curve_"): res[f[14:-4]] = pd.read_csv(os.path.join(deg_dir, f)).replace({np.nan: None}).to_dict(orient="records")
+        if f.startswith("Jaccard_Curve_"):
+            res[f[14:-4]] = pd.read_csv(os.path.join(deg_dir, f)).replace({np.nan: None}).to_dict(orient="records")
     return res
+
 
 @app.get("/api/runs/{run_id}/deg/download")
 async def download_deg_file(run_id: str, filename: str, ext_id: Optional[str] = None):
-    # Determine the directory based on ext_id
     if ext_id:
         deg_dir = os.path.join(SYNC_DATA_DIR, run_id, ext_id, "DEG")
     else:
         deg_dir = os.path.join(BIOMARKERS_DIR, "DEG", run_id)
-        
+
     path = os.path.join(deg_dir, filename)
-    if not os.path.exists(path): raise HTTPException(status_code=404)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404)
     return FileResponse(path, filename=filename)
+
 
 @app.get("/api/runs/{run_id}/prediction")
 async def get_run_prediction_metrics(run_id: str, ext_id: Optional[str] = None):
     pred_dir = os.path.join(BIOMARKERS_DIR, "Prediction", run_id)
-    if not os.path.exists(pred_dir): raise HTTPException(status_code=404)
+    if not os.path.exists(pred_dir):
+        raise HTTPException(status_code=404)
     res = {}
     for f in os.listdir(pred_dir):
-        if f.startswith("Classifier_Performance_"): res[f[23:-4]] = pd.read_csv(os.path.join(pred_dir, f)).replace({np.nan: None}).to_dict(orient="records")
+        if f.startswith("Classifier_Performance_"):
+            res[f[23:-4]] = pd.read_csv(os.path.join(pred_dir, f)).replace({np.nan: None}).to_dict(orient="records")
     return res
+
 
 @app.get("/api/runs/{run_id}/pathway")
 async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
     path_dir = os.path.join(BIOMARKERS_DIR, "Pathway", run_id)
-    if not os.path.exists(path_dir): raise HTTPException(status_code=404)
+    if not os.path.exists(path_dir):
+        raise HTTPException(status_code=404)
     results = {}
     for f in os.listdir(path_dir):
-        if not f.endswith(".csv"): continue
-        
-        # New robust naming: Prefix___ALGO___LIB.csv
+        if not f.endswith(".csv"):
+            continue
+
         if "___" in f:
             parts = f[:-4].split("___")
             if len(parts) >= 3:
                 prefix = parts[0]
                 algo = parts[1]
                 lib = parts[2]
-                
-                if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
-                
+
+                if lib not in results:
+                    results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
+
                 if prefix in ["Pathway_Concordance", "Pathway_Summary"]:
                     results[lib]["concordance"][algo] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")[0]
                 elif prefix == "Pathway_Details":
@@ -571,37 +922,46 @@ async def get_run_pathway_metrics(run_id: str, ext_id: Optional[str] = None):
                     results[lib]["distributions"][algo] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
                 continue
 
-        # Legacy fallback
         parts = f[:-4].split("_")
         if f.startswith("Pathway_Concordance_"):
             lib = "_".join(parts[3:])
-            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
+            if lib not in results:
+                results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
             results[lib]["concordance"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")[0]
         elif f.startswith("Pathway_Details_"):
             lib = "_".join(parts[3:])
-            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
+            if lib not in results:
+                results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
             results[lib]["details"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
         elif f.startswith("Pathway_Stats_"):
             lib = "_".join(parts[3:])
-            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
+            if lib not in results:
+                results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
             results[lib]["stats"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
         elif f.startswith("Pathway_Distributions_"):
             lib = "_".join(parts[3:])
-            if lib not in results: results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
+            if lib not in results:
+                results[lib] = {"concordance": {}, "details": {}, "stats": {}, "distributions": {}}
             results[lib]["distributions"][parts[2]] = pd.read_csv(os.path.join(path_dir, f)).replace({np.nan: None}).to_dict(orient="records")
     return results
+
 
 @app.get("/api/projects/{project_id}/ablation")
 async def get_project_ablation_metrics(project_id: str):
     res = []
     if os.path.exists(COMPARATIVE_DIR):
         for rid in os.listdir(COMPARATIVE_DIR):
-            if rid.startswith(project_id) and os.path.exists(os.path.join(COMPARATIVE_DIR, rid, "Test_performance.csv")):
+            comp_csv = os.path.join(COMPARATIVE_DIR, rid, "Test_performance.csv")
+            if rid.startswith(project_id) and os.path.exists(comp_csv):
                 try:
-                    df = pd.read_csv(os.path.join(COMPARATIVE_DIR, rid, "Test_performance.csv"))
-                    row = df[df['Algorithm'] == 'GANomics'].iloc[0].to_dict(); row['run_id'] = rid; res.append(row)
-                except: pass
+                    df = pd.read_csv(comp_csv)
+                    row = df[df["Algorithm"] == "GANomics"].iloc[0].to_dict()
+                    row["run_id"] = rid
+                    res.append(row)
+                except Exception:
+                    pass
     return res
+
 
 @app.get("/api/projects/{project_id}/ablation_logs")
 async def get_project_ablation_logs(project_id: str, category: str):
@@ -610,98 +970,120 @@ async def get_project_ablation_logs(project_id: str, category: str):
         for f in os.listdir(LOGS_DIR):
             if f.startswith(project_id) and f.endswith("_log.txt"):
                 rid = f[:-8]
-                if (category == 'architecture' and "Architecture" in rid) or (category == 'size' and "Size" in rid and "Architecture" not in rid) or (category == 'sensitivity' and "Sensitivity" in rid):
+                if (
+                    (category == "architecture" and "Architecture" in rid)
+                    or (category == "size" and "Size" in rid and "Architecture" not in rid)
+                    or (category == "sensitivity" and "Sensitivity" in rid)
+                ):
                     try:
                         with open(os.path.join(LOGS_DIR, f)) as lf:
                             struct = [p for p in [parse_log_line(l) for l in lf.readlines()] if p]
-                            if len(struct) >= 2: res.append({"run_id": rid, "first": struct[0], "last": struct[-1]})
-                    except: pass
+                            if len(struct) >= 2:
+                                res.append({"run_id": rid, "first": struct[0], "last": struct[-1]})
+                    except Exception:
+                        pass
     return res
+
 
 @app.get("/api/manuscript/tasks")
 async def list_manuscript_tasks(db: Session = Depends(get_db)):
+    """
+    Database-backed manuscript task listing.
+
+    Source of truth:
+    - dataset/project identity from Experiment.dataset_name
+    - task/run identity from Experiment.exp_name
+    - screening/status from Experiment fields in the DB
+    - mtime from training_logs if the path exists, otherwise None
+    """
     db_experiments = db.query(Experiment).filter(Experiment.result_category == "results_ms").all()
     tasks = []
-    
+
     for experiment in db_experiments:
         run_id = experiment.exp_name
         dataset_name = experiment.dataset_name
-        
-        sync_path = experiment.sync_data_files.get('test_microarray_fake', None)
-        comp_path = experiment.comparative_analysis_results
-        deg_path = experiment.deg_analysis_result_folder
-        pathway_path = os.path.join(os.path.dirname(experiment.deg_analysis_result_folder), 'Pathway', run_id)
-        pred_path = os.path.join(os.path.dirname(experiment.deg_analysis_result_folder), 'Prediction', run_id)
-        
+
+        size, repeats = parse_run_size_and_repeats(run_id)
+
         status = {
             "dataset": dataset_name,
-            "sync": sync_path is not None and os.path.exists(sync_path),
-            "comparative": comp_path is not None and os.path.exists(comp_path),
-            "deg": deg_path is not None and os.path.exists(deg_path) and any(f.endswith(".csv") for f in os.listdir(deg_path)),
-            "pathway": pathway_path is not None and os.path.exists(pathway_path) and any(f.endswith(".csv") for f in os.listdir(pathway_path)),
-            "prediction": pred_path is not None and os.path.exists(pred_path) and any(f.endswith(".csv") for f in os.listdir(pred_path)),
+            "sync": has_sync_outputs(experiment.sync_data_files),
+            "comparative": bool(experiment.comparative_analysis_results),
+            "deg": bool(experiment.deg_analysis_result_folder),
+            "pathway": get_pathway_status(experiment),
+            "prediction": bool(experiment.modeling_result_folder),
         }
 
-        # Extract size and repeats for numerical sorting
-        size = 0
-        repeats = 0
-        try:
-            if "NB_Size_" in run_id:
-                parts = run_id.split("_")
-                size = int(parts[2])
-                repeats = int(parts[4])
-            elif "CycleGAN_" in run_id:
-                parts = run_id.split("_")
-                size = int(parts[1])
-                repeats = int(parts[2])
-            else:
-                parts = run_id.split("_")
-                if len(parts) >= 3:
-                    size = int(parts[1])
-                    repeats = int(parts[2])
-        except:
-            pass
+        mtime = None
+        if path_exists(experiment.training_logs):
+            try:
+                mtime = os.path.getmtime(experiment.training_logs)
+            except Exception:
+                mtime = None
 
-        tasks.append({
-            "run_id": run_id,
-            "dataset": status["dataset"],
-            "major_group": 0 if status["dataset"] in ["NB", "CycleGAN"] else 1,
-            "size": size,
-            "repeats": repeats,
-            "status": status,
-            "mtime": os.path.getmtime(experiment.training_logs)
-        })
-            
-    return sorted(tasks, key=lambda x: (x['major_group'], x['dataset'], x['size'], x['repeats'], x['run_id']))
+        tasks.append(
+            {
+                "run_id": run_id,
+                "dataset": dataset_name,
+                "major_group": classify_major_group(dataset_name, run_id, experiment.result_category),
+                "size": size,
+                "repeats": repeats,
+                "status": status,
+                "mtime": mtime,
+            }
+        )
+
+    return sorted(
+        tasks,
+        key=lambda x: (
+            x["major_group"],
+            x["dataset"],
+            x["size"],
+            x["repeats"],
+            x["run_id"],
+        ),
+    )
+
 
 @app.get("/api/manuscript/download/{run_id}/{step}/{filename}")
-async def download_ms_file(run_id: str, step: str, filename: str):
-    # Mapping step to folder
-    folders = {
-        "sync": os.path.join(MS_SYNC_DIR, run_id, "test"),
-        "comparative": os.path.join(MS_COMPARATIVE_DIR, run_id),
-        "deg": os.path.join(MS_BIOMARKERS_DIR, "DEG", run_id),
-        "pathway": os.path.join(MS_BIOMARKERS_DIR, "Pathway", run_id),
-        "prediction": os.path.join(MS_BIOMARKERS_DIR, "Prediction", run_id)
-    }
-    if step not in folders: raise HTTPException(status_code=400, detail="Invalid step")
-    path = os.path.join(folders[step], filename)
-    if not os.path.exists(path): raise HTTPException(status_code=404)
+async def download_ms_file(run_id: str, step: str, filename: str, db: Session = Depends(get_db)):
+    """
+    Resolve manuscript downloads from database-recorded locations rather than fixed results_ms layout.
+    """
+    experiment = get_experiment_or_404(db, run_id)
+    base_dir = get_step_base_dir(experiment, step)
+    path = os.path.join(base_dir, filename)
+
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Requested file not found")
     return FileResponse(path, filename=filename)
+
 
 @app.get("/api/manuscript/download/{filename}")
 async def download_manuscript_record(filename: str):
     path = os.path.join(RESULTS_MS_DIR, filename)
-    if not os.path.exists(path): raise HTTPException(status_code=404)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404)
     return FileResponse(path, filename=filename)
 
+
 @app.get("/api/manuscript/logs/{run_id}")
-async def get_manuscript_logs(run_id: str):
-    log_path = os.path.join(MS_LOGS_DIR, f"{run_id}.txt")
-    if not os.path.exists(log_path): raise HTTPException(status_code=404)
+async def get_manuscript_logs(run_id: str, db: Session = Depends(get_db)):
+    """
+    Read manuscript logs using the experiment.training_logs value stored in the database.
+    """
+    experiment = get_experiment_or_404(db, run_id)
+    log_path = experiment.training_logs
+
+    if not path_exists(log_path):
+        raise HTTPException(status_code=404, detail="Training log not found for this experiment")
+
     with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-        lines = f.readlines(); structured = [p for p in [parse_log_line(l) for l in lines] if p]
+        lines = f.readlines()
+        structured = [p for p in [parse_log_line(l) for l in lines] if p]
+
     return {"run_id": run_id, "structured": structured, "total_lines": len(lines)}
+
 
 if __name__ == "__main__":
     import uvicorn
