@@ -1,0 +1,26 @@
+venv
+**pycache**
+*.pyc
+*.pyo
+*.pyd
+
+# Database
+
+database/*.db
+*.db
+# Git
+
+.git
+.gitignore
+
+# Logs
+
+*.log
+
+# OS
+
+.DS_Store
+dataset/
+results/
+results_ms/
+results_old/

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { 
-  FileText, Loader2, Calendar, CheckCircle2, Clock, LineChart as ChartIcon, X, LayoutGrid, Globe
+  FileText, Loader2, CheckCircle2, Clock, LineChart as ChartIcon, X, LayoutGrid, Globe
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
@@ -110,8 +110,8 @@ const TaskTable = ({ tasks, title, icon: Icon }: { tasks: ManuscriptTask[], titl
 
   const StatusIcon = ({ exists }: { exists: boolean }) => (
     exists 
-      ? <CheckCircle2 size={16} color="#16a34a" title="Completed" /> 
-      : <Clock size={16} color="#94a3b8" title="Not Found" />
+      ? <CheckCircle2 size={16} color="#16a34a" /> 
+      : <Clock size={16} color="#94a3b8" />
   );
 
   return (

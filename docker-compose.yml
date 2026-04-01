@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./dashboard/backend
+      dockerfile: Dockerfile
+    container_name: ganomics-backend
+    expose:
+      - "8832" # Internal-only for services on apps-network
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+    volumes:
+      - ./dashboard/backend/dataset:/app/dataset
+      - ./dashboard/backend/results:/app/results
+      - ./dashboard/backend/results_ms:/app/results_ms
+      - ./dashboard/backend/results_old:/app/results_old
+      
+    networks:
+      - apps-network
+
+  frontend:
+    build:
+      context: ./dashboard/frontend
+      dockerfile: Dockerfile
+    container_name: ganomics-frontend
+    volumes:
+      - ./dashboard/frontend/public:/app/public
+    expose:
+      - "8831" # Internal-only for services on apps-network
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    networks:
+      - apps-network
+
+networks:
+  apps-network:
+    name: apps-network
+    external: true
