@@ -90,6 +90,13 @@ class TrainRequest(BaseModel):
     lr: Optional[float] = 0.0002
     use_gpu: bool = True
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 def get_available_gpus():
     try:
         import torch
@@ -154,70 +161,58 @@ def parse_log_line(line: str):
     return data
 
 @app.get("/api/projects", response_model=List[ProjectInfo])
-async def list_projects():
+async def list_projects(db: Session = Depends(get_db)):
     projects = []
-    if not os.path.exists(DATASET_DIR): return []
-    
-    # Optimization: Shallow listing only
-    for pid in os.listdir(DATASET_DIR):
-        proj_dir = os.path.join(DATASET_DIR, pid)
-        if not os.path.isdir(proj_dir): continue
-        
-        # Look for the config file
-        config_files = [f for f in os.listdir(proj_dir) if f.endswith("_config.yaml")]
-        for config_file in config_files:
-            full_path = os.path.join(proj_dir, config_file)
-            
-            config_data = {}
-            try:
-                with open(full_path, 'r') as f: 
-                    config_data = yaml.safe_load(f)
-            except: continue
-            
-            metadata = config_data.get('metadata', {})
-            # Only call get_project_stats if metadata is incomplete
-            if not metadata.get('genes') or not metadata.get('samples'):
-                f_genes, f_samples = get_project_stats(full_path)
-            else:
-                f_genes, f_samples = metadata['genes'], metadata['samples']
-                
-            projects.append(ProjectInfo(
-                id=pid, name=metadata.get('name', pid), 
-                description=metadata.get('description', ""),
-                genes=f_genes, 
-                samples=f_samples, 
-                config_path=full_path, 
-                has_label=os.path.exists(os.path.join(proj_dir, "label.txt")), 
-                config=config_data
-            ))
-            # Found a project config, move to next folder
-            break
-            
+    db_projects = db.query(Project).all()
+    for project in db_projects:
+        project_config = db.query(ProjectConfig).filter(ProjectConfig.project_id == project.id).first()
+        projects.append(ProjectInfo(
+            id=project.id,
+            name=project.name,
+            description=project.description,
+            genes=project.genes,
+            samples=project.samples,
+            config_path=project.config_path,
+            has_label=project.has_label,
+            config=project_config.config if project_config else None
+        ))
     return projects
 
 @app.get("/api/projects/{project_id}/samples/download")
-async def download_samples(project_id: str):
-    proj_dir = os.path.join(DATASET_DIR, project_id)
-    samples_path = os.path.join(proj_dir, "samples.tsv")
+async def download_samples(project_id: str, db: Session = Depends(get_db)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project: raise HTTPException(status_code=404, detail="Project not found")
+    
+    samples_path = os.path.join(db_project.config_path).replace('_config.yaml', 'samples.tsv')
     if not os.path.exists(samples_path): raise HTTPException(status_code=404)
     return FileResponse(samples_path, filename=f"{project_id}_samples.tsv")
 
 @app.post("/api/projects/{project_id}/labels/upload")
-async def upload_labels(project_id: str, file: UploadFile = File(...)):
-    proj_dir = os.path.join(DATASET_DIR, project_id)
+async def upload_labels(project_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project: raise HTTPException(status_code=404, detail="Project not found")
+    
+    proj_dir = os.path.dirname(db_project.config_path)
     final_path = os.path.join(proj_dir, "label.txt")
     with open(final_path, "wb") as f: f.write(await file.read())
+    
+    # Update has_label status in database
+    db_project.has_label = True
+    db.commit()
+    
     return {"message": "label.txt uploaded successfully"}
 
 @app.post("/api/projects/create")
 async def create_project(
     project_name: str = Form(...), description: str = Form(""),
     df_ag: UploadFile = File(...), df_rs: UploadFile = File(...),
-    label: Optional[UploadFile] = File(None)
+    label: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
 ):
-    proj_dir = os.path.join(DATASET_DIR, project_name)
-    os.makedirs(proj_dir, exist_ok=True)
     try:
+        # Save files
+        proj_dir = os.path.join(DATASET_DIR, project_name)
+        os.makedirs(proj_dir, exist_ok=True)
         ag_path = os.path.join(proj_dir, "df_ag.tsv")
         rs_path = os.path.join(proj_dir, "df_rs.tsv")
         with open(ag_path, "wb") as f: f.write(await df_ag.read())
@@ -225,10 +220,12 @@ async def create_project(
         if label:
             with open(os.path.join(proj_dir, "label.txt"), "wb") as f: f.write(await label.read())
         
+        # Count genes and samples
         df_peek = pd.read_csv(ag_path, sep='\t', index_col=0, nrows=0)
         genes_count = len(df_peek.columns)
         with open(ag_path, 'r') as f: samples_count = sum(1 for _ in f) - 1
             
+        # Create config
         config = {
             'metadata': {'name': project_name, 'description': description, 'genes': genes_count, 'samples': samples_count},
             'model': {'input_nc': genes_count, 'output_nc': genes_count, 'lambda_A': 10.0, 'lambda_B': 10.0, 'lambda_feedback': 10.0, 'lambda_idt': 0.5, 'gan_mode': 'lsgan'},
@@ -238,13 +235,35 @@ async def create_project(
             'output': {'checkpoints_dir': 'results/1_Training/checkpoints', 'name': f'{project_name}_GANomics', 'logs_dir': 'results/1_Training/logs'},
             'default_ablation': {'size': 50, 'beta': 10.0, 'lambda': 10.0}
         }
-        with open(os.path.join(proj_dir, f"{project_name.lower()}_config.yaml"), 'w') as f: yaml.dump(config, f)
+        config_path = os.path.join(proj_dir, f"{project_name.lower()}_config.yaml")
+        with open(config_path, 'w') as f: yaml.dump(config, f)
         
+        # Create samples.tsv and genelist.tsv
         df_ag_full = pd.read_csv(ag_path, sep='\t', index_col=0)
         pd.DataFrame({'sample_id': df_ag_full.index.tolist()}).to_csv(os.path.join(proj_dir, "samples.tsv"), sep='\t', index=False)
         pd.DataFrame({'gene_id': df_ag_full.columns.tolist()}).to_csv(os.path.join(proj_dir, "genelist.tsv"), sep='\t', index=False)
+
+        # Add to database
+        db_project = Project(
+            id=project_name,
+            name=project_name,
+            description=description,
+            genes=genes_count,
+            samples=samples_count,
+            has_label=label is not None,
+            config_path=config_path
+        )
+        db.add(db_project)
+        db_project_config = ProjectConfig(
+            project_id=project_name,
+            config=config
+        )
+        db.add(db_project_config)
+        db.commit()
+
         return {"message": "Project created successfully"}
     except Exception as e:
+        db.rollback()
         if os.path.exists(proj_dir): import shutil; shutil.rmtree(proj_dir)
         raise HTTPException(status_code=500, detail=str(e))
 
