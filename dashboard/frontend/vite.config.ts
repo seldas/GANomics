@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 8831,
-    host: '0.0.0.0',
-    allowedHosts: ['ncshpcgpu01'],
-  },
+    proxy: {
+      '/api': 'http://localhost:8832'
+    },
+      host: '0.0.0.0',
+      allowedHosts: ['ncshpcgpu01', 'ncshpc400','ncshpc400.fda.gov'],
+    },
 })

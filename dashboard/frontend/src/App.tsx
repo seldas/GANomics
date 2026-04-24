@@ -75,7 +75,9 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const projRes = await axios.get(`${API_BASE}/projects`);
+        const projRes = await axios.get(`${API_BASE}/projects`, {
+          headers: { Accept: 'application/json' }
+        });
         setProjects(projRes.data);
         if (projRes.data.length > 0) setSelectedProject(projRes.data[0].id);
       } catch (err) { console.error(err); }
@@ -254,7 +256,7 @@ const fetchStatus = async () => {
     ? { ...runStatus, ...runStatus.ext_statuses[selectedExtId] }
     : runStatus;
   // const isSizeTask = selectedRunId ? (selectedRunId.includes("Size") && !selectedRunId.includes("Architecture")) : false;
-  const currentProj = projects.find(p => p.id === selectedProject);
+  const currentProj = projects?.find(p => p.id === selectedProject);
 
   return (
     <div className="dashboard-container">
